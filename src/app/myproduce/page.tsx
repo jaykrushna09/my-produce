@@ -73,9 +73,9 @@ export default function MyProduceDashboard() {
   const filteredMappings = useMemo(() => {
     if (!customerMappings) return [];
     return customerMappings.filter((m: any) => 
-      m.Customer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.CustomerID?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.SAPC_Code?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+      String(m.Customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(m.CustomerID || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(m.SAPC_Code || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [customerMappings, searchTerm]);
 
@@ -96,19 +96,19 @@ export default function MyProduceDashboard() {
     { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
   ];
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !db) return;
 
     setIsUploading(true);
     const reader = new FileReader();
 
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Robust sheet name search
+        // Find sheet named "Customer Mapping" (case-insensitive)
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
           return normalized === "customermapping";
@@ -120,7 +120,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "Sheet Not Found", 
-            description: 'Please ensure your Excel has a sheet exactly named "Customer Mapping".' 
+            description: 'Please ensure your Excel has a sheet named "Customer Mapping".' 
           });
           setIsUploading(false);
           return;
@@ -177,26 +177,18 @@ export default function MyProduceDashboard() {
           return;
         }
 
-        batch.commit()
-          .then(() => {
-            toast({ 
-              title: "Success", 
-              description: `Successfully imported ${count} customer mappings.` 
-            });
-          })
-          .catch(async (err) => {
-            const permissionError = new FirestorePermissionError({
-              path: 'customerMappings',
-              operation: 'write',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-          });
+        await batch.commit();
+        toast({ 
+          title: "Import Successful", 
+          description: `Successfully uploaded ${count} customer mappings to Firestore.` 
+        });
 
-      } catch (err) {
+      } catch (err: any) {
+        console.error("Upload error:", err);
         toast({ 
           variant: "destructive", 
           title: "Import Failed", 
-          description: "Could not process Excel file. Check format." 
+          description: err.message || "Could not process Excel file. Check format and permissions." 
         });
       } finally {
         setIsUploading(false);
