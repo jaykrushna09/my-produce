@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useRef } from 'react';
@@ -46,7 +45,8 @@ import {
   writeBatch, 
   serverTimestamp,
   query,
-  orderBy
+  orderBy,
+  deleteDoc
 } from 'firebase/firestore';
 import { useFirestore, useCollection } from '@/firebase';
 import * as XLSX from 'xlsx';
@@ -140,15 +140,28 @@ export default function MyProduceDashboard() {
       try {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
+        
+        // Specifically look for "Customer Mapping" sheet
+        const targetSheetName = "Customer Mapping";
+        const ws = wb.Sheets[targetSheetName];
+
+        if (!ws) {
+          toast({
+            variant: "destructive",
+            title: "Sheet Not Found",
+            description: `Could not find a worksheet named "${targetSheetName}".`,
+          });
+          setIsUploading(false);
+          return;
+        }
+
         const data = XLSX.utils.sheet_to_json(ws) as any[];
 
         if (data.length === 0) {
           toast({
             variant: "destructive",
-            title: "Empty File",
-            description: "The uploaded Excel file contains no data.",
+            title: "Empty Sheet",
+            description: `The "${targetSheetName}" sheet contains no data.`,
           });
           setIsUploading(false);
           return;
@@ -158,7 +171,7 @@ export default function MyProduceDashboard() {
         let processedCount = 0;
         
         data.forEach((row) => {
-          // Normalize field names from Excel
+          // Normalize field names from Excel based on user requirements
           const id = row.CustomerID || row['Customer ID'] || row['customerID'];
           const customer = row.Customer || row['Customer'] || row['customer'];
           const sapcCode = row.SAPC_Code || row['SAPC Code'] || row['sapcCode'];
@@ -180,14 +193,14 @@ export default function MyProduceDashboard() {
         await batch.commit();
 
         toast({
-          title: "Upload Successful",
-          description: `Successfully processed ${processedCount} customer records.`,
+          title: "Import Successful",
+          description: `Successfully imported ${processedCount} records from "${targetSheetName}".`,
         });
       } catch (err) {
         console.error(err);
         toast({
           variant: "destructive",
-          title: "Upload Failed",
+          title: "Import Failed",
           description: "There was an error processing the Excel file.",
         });
       } finally {
@@ -197,6 +210,19 @@ export default function MyProduceDashboard() {
     };
 
     reader.readAsBinaryString(file);
+  };
+
+  const handleDeleteMapping = (id: string) => {
+    if (!db) return;
+    const docRef = doc(db, 'customerMappings', id);
+    deleteDoc(docRef).catch(err => {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete mapping."
+      });
+    });
   };
 
   const renderContent = () => {
@@ -284,7 +310,7 @@ export default function MyProduceDashboard() {
                 </Button>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Customer Mapping</h2>
-                  <p className="text-sm text-gray-500">Manage customer IDs and SAPC configurations.</p>
+                  <p className="text-sm text-gray-500">Manage customer IDs and SAPC configurations from "Customer Mapping" sheet.</p>
                 </div>
               </div>
               
@@ -331,13 +357,13 @@ export default function MyProduceDashboard() {
                           <p className="mt-2 text-sm text-gray-400">Loading mappings...</p>
                         </TableCell>
                       </TableRow>
-                    ) : customerMappings.length === 0 ? (
+                    ) : (customerMappings?.length ?? 0) === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="h-64 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
                             <FileSpreadsheet className="h-12 w-12 mb-4 opacity-20" />
                             <p className="font-medium">No customer mappings found.</p>
-                            <p className="text-xs mt-1">Upload an Excel file to get started.</p>
+                            <p className="text-xs mt-1">Upload an Excel with a "Customer Mapping" sheet.</p>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -355,7 +381,12 @@ export default function MyProduceDashboard() {
                           </TableCell>
                           <TableCell className="text-gray-500">{mapping.sapcDesc}</TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" className="text-gray-400 hover:text-red-500">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleDeleteMapping(mapping.id)}
+                              className="text-gray-400 hover:text-red-500"
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </TableCell>
