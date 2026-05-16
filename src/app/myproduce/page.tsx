@@ -85,20 +85,24 @@ export default function MyProduceDashboard() {
     { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
   ];
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !db) return;
 
     setIsUploading(true);
     const reader = new FileReader();
 
-    reader.onload = async (evt) => {
+    reader.onload = (evt) => {
       try {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Find sheet case-insensitively and trim spaces
-        const sheetName = wb.SheetNames.find(name => name.trim().toLowerCase() === "customer mapping");
+        // Find sheet case-insensitively and handle spaces/underscores
+        const sheetName = wb.SheetNames.find(name => {
+          const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
+          return normalized === "customermapping";
+        });
+        
         const ws = sheetName ? wb.Sheets[sheetName] : null;
 
         if (!ws) {
@@ -126,11 +130,18 @@ export default function MyProduceDashboard() {
         let count = 0;
         
         jsonData.forEach((row) => {
-          // Normalize column names to match the user's specific fields, being very flexible with headers
-          const id = row.CustomerID || row['Customer ID'] || row['CustomerID'] || row['customerid'] || row['ID'];
-          const customer = row.Customer || row['Customer Name'] || row['Customer'] || row['customer'];
-          const sapcCode = row.SAPC_Code || row['SAPC Code'] || row['SAPCCode'] || row['sapc_code'];
-          const sapcDesc = row.SAPC_Desc || row['SAPC Description'] || row['SAPCDesc'] || row['sapc_desc'];
+          // Robust header matching logic
+          const getVal = (possibleKeys: string[]) => {
+            const actualKey = Object.keys(row).find(k => 
+              possibleKeys.some(pk => k.trim().toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase())
+            );
+            return actualKey ? row[actualKey] : null;
+          };
+
+          const id = getVal(['customerid', 'id', 'custid']);
+          const customer = getVal(['customer', 'customername', 'name']);
+          const sapcCode = getVal(['sapccode', 'sap_code', 'code']);
+          const sapcDesc = getVal(['sapcdesc', 'sapc_description', 'description']);
 
           if (id) {
             const docRef = doc(db, 'customerMappings', String(id).trim());
@@ -150,7 +161,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "No Valid Data", 
-            description: "Could not find valid CustomerID values in the Excel file. Check your column headers." 
+            description: "Could not find valid CustomerID values. Check your column headers." 
           });
           setIsUploading(false);
           return;
@@ -172,7 +183,6 @@ export default function MyProduceDashboard() {
           });
 
       } catch (err) {
-        console.error("Excel processing error:", err);
         toast({ 
           variant: "destructive", 
           title: "Import Failed", 
