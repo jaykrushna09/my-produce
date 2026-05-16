@@ -98,7 +98,10 @@ export default function MyProduceDashboard() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !db) return;
+    if (!file || !db) {
+      console.warn("Upload aborted: No file or Firestore instance available.");
+      return;
+    }
 
     setIsUploading(true);
     const reader = new FileReader();
@@ -108,7 +111,6 @@ export default function MyProduceDashboard() {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Find sheet named "Customer Mapping" (case-insensitive)
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
           return normalized === "customermapping";
@@ -137,59 +139,69 @@ export default function MyProduceDashboard() {
           return;
         }
 
-        const batch = writeBatch(db);
-        let count = 0;
-        
-        jsonData.forEach((row) => {
-          const getVal = (possibleKeys: string[]) => {
-            const actualKey = Object.keys(row).find(k => 
-              possibleKeys.some(pk => k.trim().toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase())
-            );
-            return actualKey ? row[actualKey] : null;
-          };
+        console.log(`Processing ${jsonData.length} rows from Excel...`);
 
-          const id = getVal(['customerid', 'id', 'custid']);
-          const customer = getVal(['customer', 'customername', 'name']);
-          const sapcCode = getVal(['sapccode', 'sap_code', 'code']);
-          const sapcDesc = getVal(['sapcdesc', 'sapc_description', 'description']);
+        // Firestore batch has a limit of 500 operations. We split the data into chunks.
+        const CHUNK_SIZE = 450;
+        let totalProcessed = 0;
 
-          if (id) {
-            // Use string ID for doc reference
-            const docRef = doc(db, 'customerMappings', String(id).trim());
-            const payload = {
-              CustomerID: String(id).trim(),
-              Customer: String(customer || 'N/A').trim(),
-              SAPC_Code: String(sapcCode || 'N/A').trim(),
-              SAPC_Desc: String(sapcDesc || 'N/A').trim(),
-              updatedAt: serverTimestamp(),
+        for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
+          const chunk = jsonData.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          let chunkCount = 0;
+
+          chunk.forEach((row) => {
+            const getVal = (possibleKeys: string[]) => {
+              const actualKey = Object.keys(row).find(k => 
+                possibleKeys.some(pk => k.trim().toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase())
+              );
+              return actualKey ? row[actualKey] : null;
             };
-            batch.set(docRef, payload);
-            count++;
-          }
-        });
 
-        if (count === 0) {
+            const id = getVal(['customerid', 'id', 'custid']);
+            const customer = getVal(['customer', 'customername', 'name']);
+            const sapcCode = getVal(['sapccode', 'sap_code', 'code']);
+            const sapcDesc = getVal(['sapcdesc', 'sapc_description', 'description']);
+
+            if (id) {
+              const docRef = doc(db, 'customerMappings', String(id).trim());
+              batch.set(docRef, {
+                CustomerID: String(id).trim(),
+                Customer: String(customer || 'N/A').trim(),
+                SAPC_Code: String(sapcCode || 'N/A').trim(),
+                SAPC_Desc: String(sapcDesc || 'N/A').trim(),
+                updatedAt: serverTimestamp(),
+              });
+              chunkCount++;
+            }
+          });
+
+          if (chunkCount > 0) {
+            await batch.commit();
+            totalProcessed += chunkCount;
+            console.log(`Committed batch: ${totalProcessed} total records.`);
+          }
+        }
+
+        if (totalProcessed === 0) {
           toast({ 
             variant: "destructive", 
             title: "Import Error", 
             description: "No valid rows found. Ensure you have a 'CustomerID' column." 
           });
-          setIsUploading(false);
-          return;
+        } else {
+          toast({ 
+            title: "Import Successful", 
+            description: `Successfully uploaded ${totalProcessed} customer mappings to Firestore.` 
+          });
         }
 
-        await batch.commit();
-        toast({ 
-          title: "Import Successful", 
-          description: `Successfully uploaded ${count} customer mappings to Firestore.` 
-        });
-
       } catch (err: any) {
-        console.error("Upload error:", err);
+        console.error("Firestore Upload Error:", err);
         toast({ 
           variant: "destructive", 
           title: "Import Failed", 
-          description: err.message || "Could not process Excel file. Check format and permissions." 
+          description: err.message || "An error occurred while saving data to Firestore." 
         });
       } finally {
         setIsUploading(false);
@@ -197,7 +209,8 @@ export default function MyProduceDashboard() {
       }
     };
 
-    reader.onerror = () => {
+    reader.onerror = (error) => {
+      console.error("FileReader Error:", error);
       toast({ variant: "destructive", title: "File Error", description: "Failed to read file." });
       setIsUploading(false);
     };
@@ -209,6 +222,7 @@ export default function MyProduceDashboard() {
     if (!db) return;
     const docRef = doc(db, 'customerMappings', id);
     deleteDoc(docRef).catch(async (err) => {
+      console.error("Delete Error:", err);
       const permissionError = new FirestorePermissionError({
         path: docRef.path,
         operation: 'delete',
