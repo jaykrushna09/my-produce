@@ -1,0 +1,11 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "vault-hero",
+      "description": "Abstract futuristic vault background with neon lines",
+      "imageUrl": "https://picsum.photos/seed/vantage1/1920/1080",
+      "imageHint": "futuristic security"
+    }
+  ]
+}
