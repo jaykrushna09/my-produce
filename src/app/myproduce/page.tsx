@@ -154,6 +154,7 @@ export default function MyProduceDashboard() {
           const sapcDesc = getVal(['sapcdesc', 'sapc_description', 'description']);
 
           if (id) {
+            // Use string ID for doc reference
             const docRef = doc(db, 'customerMappings', String(id).trim());
             const payload = {
               CustomerID: String(id).trim(),
@@ -266,7 +267,7 @@ export default function MyProduceDashboard() {
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                placeholder="Search..." 
+                placeholder="Search by name, ID..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
