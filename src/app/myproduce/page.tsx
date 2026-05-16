@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef } from 'react';
@@ -19,8 +20,6 @@ import {
   Anchor,
   Navigation,
   Upload,
-  FileSpreadsheet,
-  Plus,
   ArrowLeft,
   Loader2,
   Trash2
@@ -62,10 +61,9 @@ export default function MyProduceDashboard() {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [isUploading, setIsUploading] = useState(false);
 
-  // Stabilize the query to prevent re-renders
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
-    return query(collection(db, 'customerMappings'), orderBy('customer', 'asc'));
+    return query(collection(db, 'customerMappings'), orderBy('Customer', 'asc'));
   }, [db]);
   
   const { data: customerMappings, loading: mappingsLoading } = useCollection(customerMappingsQuery);
@@ -101,24 +99,35 @@ export default function MyProduceDashboard() {
         const ws = wb.Sheets["Customer Mapping"];
 
         if (!ws) {
-          toast({ variant: "destructive", title: "Sheet Not Found", description: 'Missing "Customer Mapping" sheet.' });
+          toast({ variant: "destructive", title: "Sheet Not Found", description: 'Please ensure your Excel has a sheet named "Customer Mapping".' });
           setIsUploading(false);
           return;
         }
 
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
+        const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
+        if (jsonData.length === 0) {
+          toast({ variant: "destructive", title: "Empty Sheet", description: "No data found in the selected sheet." });
+          setIsUploading(false);
+          return;
+        }
+
         const batch = writeBatch(db);
         let count = 0;
         
-        data.forEach((row) => {
-          const id = row.CustomerID || row['Customer ID'] || row['customerID'];
+        jsonData.forEach((row) => {
+          // Normalize column names to match the user's specific fields
+          const id = row.CustomerID || row['Customer ID'] || row['customer_id'];
+          const customer = row.Customer || row['Customer Name'] || row['customer_name'];
+          const sapcCode = row.SAPC_Code || row['SAPC Code'];
+          const sapcDesc = row.SAPC_Desc || row['SAPC Description'];
+
           if (id) {
             const docRef = doc(db, 'customerMappings', String(id));
             const payload = {
-              customerID: String(id),
-              customer: String(row.Customer || 'N/A'),
-              sapcCode: String(row.SAPC_Code || 'N/A'),
-              sapcDesc: String(row.SAPC_Desc || 'N/A'),
+              CustomerID: String(id),
+              Customer: String(customer || 'N/A'),
+              SAPC_Code: String(sapcCode || 'N/A'),
+              SAPC_Desc: String(sapcDesc || 'N/A'),
               updatedAt: serverTimestamp(),
             };
             batch.set(docRef, payload);
@@ -126,10 +135,9 @@ export default function MyProduceDashboard() {
           }
         });
 
-        // Use non-blocking commit
         batch.commit()
           .then(() => {
-            toast({ title: "Import Successful", description: `Imported ${count} records.` });
+            toast({ title: "Import Successful", description: `Updated ${count} records in Firestore.` });
           })
           .catch(async (err) => {
             const permissionError = new FirestorePermissionError({
@@ -140,7 +148,7 @@ export default function MyProduceDashboard() {
           });
 
       } catch (err) {
-        toast({ variant: "destructive", title: "Import Failed", description: "Error processing Excel." });
+        toast({ variant: "destructive", title: "Import Failed", description: "There was an error processing the Excel file." });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -173,7 +181,7 @@ export default function MyProduceDashboard() {
           <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
             <CardContent className="p-12 flex flex-col items-center justify-center text-gray-400">
               <BarChart3 className="h-16 w-16 opacity-10 mb-4" />
-              <p className="text-sm">Production statistics will appear here.</p>
+              <p className="text-sm font-medium">Production statistics will appear here.</p>
             </CardContent>
           </Card>
         </section>
@@ -205,13 +213,14 @@ export default function MyProduceDashboard() {
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
-            <h2 className="text-2xl font-bold">Customer Mapping</h2>
+            <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="h-5 w-5" /></Button>
+            <h2 className="text-2xl font-bold text-gray-900">Customer Mapping</h2>
           </div>
           <div className="flex items-center space-x-2">
             <Input type="file" accept=".xlsx, .xls" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-anflocor-green hover:bg-anflocor-green/90 text-white">
-              {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} Upload Excel
+            <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-semibold">
+              {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} 
+              Import Excel
             </Button>
           </div>
         </div>
@@ -219,25 +228,25 @@ export default function MyProduceDashboard() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead>Customer ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>SAPC Code</TableHead>
-                <TableHead>SAPC Description</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="font-bold text-gray-600">Customer ID</TableHead>
+                <TableHead className="font-bold text-gray-600">Customer</TableHead>
+                <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
+                <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
+                <TableHead className="text-right font-bold text-gray-600">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {mappingsLoading ? (
-                <TableRow><TableCell colSpan={5} className="h-32 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto opacity-20" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : customerMappings.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-32 text-center text-gray-400">No data found.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No customer mappings found. Import an Excel file to get started.</TableCell></TableRow>
               ) : customerMappings.map((m: any) => (
-                <TableRow key={m.id}>
-                  <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.customerID}</TableCell>
-                  <TableCell>{m.customer}</TableCell>
-                  <TableCell><span className="px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">{m.sapcCode}</span></TableCell>
-                  <TableCell className="text-gray-500">{m.sapcDesc}</TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleDeleteMapping(m.id)} className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button></TableCell>
+                <TableRow key={m.id} className="hover:bg-gray-50/50">
+                  <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.CustomerID}</TableCell>
+                  <TableCell className="font-medium">{m.Customer}</TableCell>
+                  <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">{m.SAPC_Code}</span></TableCell>
+                  <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleDeleteMapping(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -249,23 +258,30 @@ export default function MyProduceDashboard() {
 
   return (
     <div className="flex h-screen bg-gray-50/50">
-      <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0">
-        <div className="p-6 flex items-center space-x-3 border-b border-white/10"><Leaf className="h-8 w-8" /><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
+      <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0 shadow-xl">
+        <div className="p-6 flex items-center space-x-3 border-b border-white/10">
+          <div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div>
+          <span className="text-xl font-bold tracking-tighter">myProduce</span>
+        </div>
         <nav className="flex-1 p-4 space-y-1">
-          <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", (activeView === 'configuration' || activeView === 'customer-mapping') && "bg-white/10")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
+          <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
+          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'configuration' || activeView === 'customer-mapping') && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10">
-          <Button onClick={() => router.push('/')} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button>
+          <Button onClick={() => router.push('/')} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto p-8">
-        <header className="mb-8 flex justify-between items-end">
+        <header className="mb-8 flex justify-between items-end border-b pb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+            <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
               {activeView === 'dashboard' ? 'Dashboard' : activeView === 'configuration' ? 'System Configuration' : 'Customer Mapping'}
             </h1>
-            <p className="text-gray-500 font-medium">TADECO Agricultural Production Portal</p>
+            <p className="text-gray-500 font-semibold mt-1">TADECO Agricultural Production Portal</p>
+          </div>
+          <div className="flex items-center space-x-3 text-sm text-gray-400 font-medium">
+            <User className="h-4 w-4" />
+            <span>Angela L. (Administrator)</span>
           </div>
         </header>
         {renderContent()}

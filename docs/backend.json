@@ -18,13 +18,13 @@
       "description": "Mapping of customers to SAP production channels.",
       "type": "object",
       "properties": {
-        "customerID": { "type": "string" },
-        "customer": { "type": "string" },
-        "sapcCode": { "type": "string" },
-        "sapcDesc": { "type": "string" },
+        "CustomerID": { "type": "string" },
+        "Customer": { "type": "string" },
+        "SAPC_Code": { "type": "string" },
+        "SAPC_Desc": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["customerID", "customer"]
+      "required": ["CustomerID", "Customer"]
     }
   },
   "auth": {
@@ -32,11 +32,11 @@
   },
   "firestore": {
     "/users/{userId}": {
-      "schema": { "$ref": "#/entities/UserProfile" },
+      "schema": { "$ref": "#/backend/entities/UserProfile" },
       "description": "User profile document"
     },
     "/customerMappings/{mappingId}": {
-      "schema": { "$ref": "#/entities/CustomerMapping" },
+      "schema": { "$ref": "#/backend/entities/CustomerMapping" },
       "description": "Customer mapping records"
     }
   }
