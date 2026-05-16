@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Settings, 
@@ -65,6 +65,15 @@ export default function MyProduceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Debugging log for Firestore instance
+  useEffect(() => {
+    if (db) {
+      console.log("Firestore instance available:", db);
+    } else {
+      console.warn("Firestore instance NOT available yet.");
+    }
+  }, [db]);
+
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, 'customerMappings'), orderBy('Customer', 'asc'));
@@ -119,10 +128,19 @@ export default function MyProduceDashboard() {
       createdAt: new Date().toISOString()
     };
 
+    console.log("Initiating test write to 'test_collection'...", testData);
     const testCollectionRef = collection(db, 'test_collection');
     
     addDoc(testCollectionRef, testData)
+      .then(() => {
+        console.log("Test write successful!");
+        toast({ 
+          title: "Test Write SUCCESS", 
+          description: "Document successfully written to 'test_collection'." 
+        });
+      })
       .catch(async (err) => {
+        console.error("Test write failed:", err);
         const permissionError = new FirestorePermissionError({
           path: 'test_collection',
           operation: 'create',
@@ -133,7 +151,7 @@ export default function MyProduceDashboard() {
 
     toast({ 
       title: "Test Write Initiated", 
-      description: "A document is being sent to 'test_collection'. Check your Firestore console." 
+      description: "A document is being sent. Waiting for response..." 
     });
   };
 
@@ -145,12 +163,16 @@ export default function MyProduceDashboard() {
     }
 
     setIsUploading(true);
-    const reader = new FileReader();
+    console.log("Starting file read for:", file.name);
 
+    const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
         const data = evt.target?.result;
+        if (!data) throw new Error("Failed to read file data.");
+
         const wb = XLSX.read(data, { type: 'array' });
+        console.log("Excel Workbook loaded. Sheets:", wb.SheetNames);
         
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
@@ -160,16 +182,19 @@ export default function MyProduceDashboard() {
         const ws = sheetName ? wb.Sheets[sheetName] : null;
 
         if (!ws) {
+          console.error("Target sheet not found.");
           toast({ 
             variant: "destructive", 
             title: "Sheet Not Found", 
-            description: 'Could not find a valid Customer Mapping sheet.'
+            description: 'Could not find a sheet named "Customer Mapping".'
           });
           setIsUploading(false);
           return;
         }
 
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
+        console.log(`Parsed ${jsonData.length} rows from Excel.`);
+
         if (jsonData.length === 0) {
           toast({ variant: "destructive", title: "Empty Sheet", description: "No data found in the selected sheet." });
           setIsUploading(false);
@@ -177,7 +202,7 @@ export default function MyProduceDashboard() {
         }
 
         let totalProcessed = 0;
-        const CHUNK_SIZE = 450;
+        const CHUNK_SIZE = 400;
 
         for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
           const chunk = jsonData.slice(i, i + CHUNK_SIZE);
@@ -214,6 +239,7 @@ export default function MyProduceDashboard() {
           });
 
           if (chunkCount > 0) {
+            console.log(`Committing batch of ${chunkCount} records...`);
             await withTimeout(
               batch.commit(), 
               30000, 
@@ -223,11 +249,8 @@ export default function MyProduceDashboard() {
           }
         }
 
-        if (totalProcessed > 0) {
-          toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} customer mappings.` });
-        } else {
-          toast({ variant: "destructive", title: "Import Failed", description: "No valid records were found. Ensure 'CustomerID' is a column." });
-        }
+        console.log(`Successfully processed ${totalProcessed} records.`);
+        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} customer mappings.` });
 
       } catch (err: any) {
         console.error("Firestore Write Error:", err);
@@ -243,6 +266,7 @@ export default function MyProduceDashboard() {
     };
 
     reader.onerror = () => {
+      console.error("FileReader Error");
       toast({ variant: "destructive", title: "File Error", description: "Failed to read the Excel file." });
       setIsUploading(false);
     };

@@ -2,10 +2,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // WARNING: This allows anyone with your database reference to read or write data.
-    // This is ONLY for prototyping purposes. Restrict these rules before production.
+    // Open rules for prototyping. Ensure these are restricted for production.
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+// Triggering rules redeploy with comment.

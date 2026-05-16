@@ -7,3 +7,11 @@ export const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
+
+if (typeof window !== 'undefined') {
+  console.log("Firebase Config Initialized:", {
+    projectId: firebaseConfig.projectId,
+    hasApiKey: !!firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain
+  });
+}
