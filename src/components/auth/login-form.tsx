@@ -6,10 +6,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { useRouter } from 'next/navigation';
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleSSOLogin = async () => {
     setIsLoading(true);
@@ -21,6 +23,8 @@ export function LoginForm() {
         title: "Authenticated",
         description: "Welcome to ANFLOCOR systems.",
       });
+      // Redirect to selection screen after successful login
+      router.push('/selection');
     } catch (error: any) {
       toast({
         variant: "destructive",
