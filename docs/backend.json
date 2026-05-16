@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "UserProfile": {
@@ -12,6 +11,19 @@
         "role": { "type": "string", "enum": ["employee", "manager", "admin"] }
       },
       "required": ["uid", "email"]
+    },
+    "CustomerMapping": {
+      "title": "Customer Mapping",
+      "description": "Mapping of customers to production channels.",
+      "type": "object",
+      "properties": {
+        "customerCode": { "type": "string" },
+        "customerName": { "type": "string" },
+        "productionChannel": { "type": "string" },
+        "region": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerCode", "customerName"]
     }
   },
   "auth": {
@@ -21,6 +33,10 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "User profile document"
+    },
+    "/customerMappings/{mappingId}": {
+      "schema": { "$ref": "#/entities/CustomerMapping" },
+      "description": "Customer mapping records"
     }
   }
 }
