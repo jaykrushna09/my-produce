@@ -11,6 +11,7 @@ export function useUser() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // If auth is not yet initialized, we stay in loading state but don't error out
     if (!auth) {
       setLoading(false);
       return;

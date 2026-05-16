@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -49,7 +50,8 @@ import {
   deleteDoc,
   addDoc
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError, useUser, useAuth } from '@/firebase';
+import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping';
@@ -57,6 +59,8 @@ type ViewState = 'dashboard' | 'configuration' | 'customer-mapping';
 export default function MyProduceDashboard() {
   const router = useRouter();
   const db = useFirestore();
+  const auth = useAuth();
+  const { user, loading: userLoading } = useUser();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -64,7 +68,14 @@ export default function MyProduceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // The new path requested by the user
+  // Protect the route
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.push('/');
+    }
+  }, [user, userLoading, router]);
+
+  // The path structure requested
   const DATA_PATH = 'app_configuration/customer_mapping/records';
   const TEST_PATH = 'app_configuration/customer_mapping/test_writes';
 
@@ -101,6 +112,13 @@ export default function MyProduceDashboard() {
     { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
   ];
 
+  const handleSignOut = async () => {
+    if (auth) {
+      await signOut(auth);
+      router.push('/');
+    }
+  };
+
   const withTimeout = (promise: Promise<any>, timeoutMs: number, errorMessage: string) => {
     return Promise.race([
       promise,
@@ -112,85 +130,55 @@ export default function MyProduceDashboard() {
 
   const handleTestWrite = () => {
     if (!db) {
-      toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized." });
+      toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized. Please connect your project." });
       return;
     }
 
     const testData = {
       message: "Hello World",
       testId: "TEST-" + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      user: user?.email || 'Anonymous'
     };
 
-    console.log(`Initiating test write to ${TEST_PATH}...`, testData);
+    console.log(`Initiating test write to ${TEST_PATH}...`);
     const testCollectionRef = collection(db, TEST_PATH);
     
     addDoc(testCollectionRef, testData)
       .then(() => {
-        console.log("Test write successful!");
         toast({ 
           title: "Test Write SUCCESS", 
           description: `Document successfully written to ${TEST_PATH}.` 
         });
       })
-      .catch(async (err) => {
+      .catch((err) => {
         console.error("Test write failed:", err);
-        const permissionError = new FirestorePermissionError({
-          path: TEST_PATH,
-          operation: 'create',
-          requestResourceData: testData,
+        toast({ 
+          variant: "destructive",
+          title: "Test Write FAILED", 
+          description: err.message
         });
-        errorEmitter.emit('permission-error', permissionError);
       });
-
-    toast({ 
-      title: "Test Write Initiated", 
-      description: "A document is being sent. Waiting for response..." 
-    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !db) {
-      toast({ variant: "destructive", title: "Upload failed", description: "No file selected or database not ready." });
-      return;
-    }
+    if (!file || !db) return;
 
     setIsUploading(true);
-    console.log("Starting file read for:", file.name);
-
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
         const data = evt.target?.result;
-        if (!data) throw new Error("Failed to read file data.");
+        if (!data) throw new Error("Failed to read file.");
 
         const wb = XLSX.read(data, { type: 'array' });
-        console.log("Excel Workbook loaded. Sheets:", wb.SheetNames);
-        
-        const sheetName = wb.SheetNames.find(name => {
-          const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
-          return normalized === "customermapping" || normalized === "customer_mapping" || normalized === "customers";
-        });
-        
-        const ws = sheetName ? wb.Sheets[sheetName] : null;
-
-        if (!ws) {
-          console.error("Target sheet not found.");
-          toast({ 
-            variant: "destructive", 
-            title: "Sheet Not Found", 
-            description: 'Could not find a sheet named "Customer Mapping".'
-          });
-          setIsUploading(false);
-          return;
-        }
-
+        const sheetName = wb.SheetNames[0]; // Take first sheet by default if specific one not found
+        const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
-        console.log(`Parsed ${jsonData.length} rows from Excel.`);
 
         if (jsonData.length === 0) {
-          toast({ variant: "destructive", title: "Empty Sheet", description: "No data found in the selected sheet." });
+          toast({ variant: "destructive", title: "Empty Sheet", description: "No data found." });
           setIsUploading(false);
           return;
         }
@@ -204,79 +192,46 @@ export default function MyProduceDashboard() {
           let chunkCount = 0;
 
           chunk.forEach((row) => {
-            const getVal = (possibleKeys: string[]) => {
-              const actualKey = Object.keys(row).find(k => 
-                possibleKeys.some(pk => k.trim().toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase())
-              );
-              return actualKey ? row[actualKey] : null;
-            };
+            const id = row.CustomerID || row.ID || row.id;
+            const customer = row.Customer || row.Name || row.customer;
+            const sapcCode = row.SAPC_Code || row.Code || row.sapc_code;
+            const sapcDesc = row.SAPC_Desc || row.Description || row.sapc_desc;
 
-            const id = getVal(['customerid', 'id', 'custid', 'sapcustomerid', 'customer_id']);
-            const customer = getVal(['customer', 'customername', 'name', 'custname', 'customer_name']);
-            const sapcCode = getVal(['sapccode', 'sap_code', 'code', 'sapc', 'sap_c_code']);
-            const sapcDesc = getVal(['sapcdesc', 'sap_code_desc', 'description', 'sapcdescription', 'sap_c_desc']);
-
-            if (id !== undefined && id !== null) {
+            if (id) {
               const docId = String(id).trim();
-              if (docId) {
-                const docRef = doc(db, DATA_PATH, docId);
-                batch.set(docRef, {
-                  CustomerID: docId,
-                  Customer: String(customer || 'N/A').trim(),
-                  SAPC_Code: String(sapcCode || 'N/A').trim(),
-                  SAPC_Desc: String(sapcDesc || 'N/A').trim(),
-                  updatedAt: serverTimestamp(),
-                });
-                chunkCount++;
-              }
+              const docRef = doc(db, DATA_PATH, docId);
+              batch.set(docRef, {
+                CustomerID: docId,
+                Customer: String(customer || 'N/A').trim(),
+                SAPC_Code: String(sapcCode || 'N/A').trim(),
+                SAPC_Desc: String(sapcDesc || 'N/A').trim(),
+                updatedAt: serverTimestamp(),
+              });
+              chunkCount++;
             }
           });
 
           if (chunkCount > 0) {
-            console.log(`Committing batch of ${chunkCount} records to ${DATA_PATH}...`);
-            await withTimeout(
-              batch.commit(), 
-              30000, 
-              "Write operation timed out (30s). Check your connection."
-            );
+            await withTimeout(batch.commit(), 30000, "Write operation timed out.");
             totalProcessed += chunkCount;
           }
         }
 
-        console.log(`Successfully processed ${totalProcessed} records.`);
-        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} customer mappings.` });
-
+        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records.` });
       } catch (err: any) {
-        console.error("Firestore Write Error:", err);
-        toast({ 
-          variant: "destructive", 
-          title: "Database Error", 
-          description: err.message || "Failed to write data to Firestore." 
-        });
+        toast({ variant: "destructive", title: "Import Failed", description: err.message });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
-
-    reader.onerror = () => {
-      console.error("FileReader Error");
-      toast({ variant: "destructive", title: "File Error", description: "Failed to read the Excel file." });
-      setIsUploading(false);
-    };
-
     reader.readAsArrayBuffer(file);
   };
 
   const handleDeleteMapping = (id: string) => {
     if (!db) return;
-    const docRef = doc(db, DATA_PATH, id);
-    deleteDoc(docRef).catch(async (err) => {
-      const permissionError = new FirestorePermissionError({
-        path: docRef.path,
-        operation: 'delete',
-      });
-      errorEmitter.emit('permission-error', permissionError);
+    deleteDoc(doc(db, DATA_PATH, id)).catch((err) => {
+      toast({ variant: "destructive", title: "Delete Failed", description: err.message });
     });
   };
 
@@ -383,6 +338,8 @@ export default function MyProduceDashboard() {
     );
   };
 
+  const currentUserLabel = user?.displayName || user?.email?.split('@')[0] || 'User';
+
   return (
     <div className="flex h-screen bg-gray-50/50">
       <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0 shadow-xl">
@@ -395,7 +352,7 @@ export default function MyProduceDashboard() {
           <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'configuration' || activeView === 'customer-mapping') && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10">
-          <Button onClick={() => router.push('/')} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button>
+          <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto p-8">
@@ -408,7 +365,7 @@ export default function MyProduceDashboard() {
           </div>
           <div className="flex items-center space-x-3 text-sm text-gray-400 font-medium">
             <User className="h-4 w-4" />
-            <span>Angela L. (Administrator)</span>
+            <span>{currentUserLabel} (Administrator)</span>
           </div>
         </header>
         {renderContent()}

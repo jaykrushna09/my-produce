@@ -1,11 +1,20 @@
+
 "use client";
 
-import React from 'react';
-import { Leaf, ArrowRight } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Leaf, ArrowRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@/firebase';
 
 export default function SelectionPage() {
   const router = useRouter();
+  const { user, loading } = useUser();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [user, loading, router]);
 
   const options = [
     {
@@ -21,6 +30,16 @@ export default function SelectionPage() {
       action: () => router.push('/myproduce')
     }
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-anflocor-green">
+        <Loader2 className="h-12 w-12 animate-spin text-white opacity-50" />
+      </div>
+    );
+  }
+
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
 
   return (
     <main className="min-h-screen flex flex-col md:flex-row">
@@ -44,7 +63,7 @@ export default function SelectionPage() {
         <div className="w-full max-w-md space-y-8">
           <div className="space-y-4">
             <h2 className="text-4xl font-bold text-gray-900 tracking-tight">
-              Welcome back Angela L!
+              Welcome back, {displayName}!
             </h2>
             <p className="text-gray-600 text-sm leading-relaxed max-w-sm font-medium">
               Select a portal for international logistics or agricultural production workflows.
