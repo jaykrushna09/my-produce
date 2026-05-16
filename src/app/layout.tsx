@@ -1,8 +1,8 @@
-
 import type { Metadata } from 'next';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase';
 import { Toaster } from '@/components/ui/toaster';
+import { FirebaseErrorListener } from '@/components/firebase/firebase-error-listener';
 
 export const metadata: Metadata = {
   title: 'ANFLOCOR | Identity',
@@ -24,6 +24,7 @@ export default function RootLayout({
       <body className="font-sans antialiased selection:bg-primary/30">
         <FirebaseClientProvider>
           {children}
+          <FirebaseErrorListener />
           <Toaster />
         </FirebaseClientProvider>
       </body>
