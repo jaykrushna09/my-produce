@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -25,7 +24,7 @@ export default function SelectionPage() {
 
   return (
     <main className="min-h-screen flex flex-col md:flex-row">
-      {/* Left Side: Brand Identity (Matches Login Page) */}
+      {/* Left Side: Brand Identity */}
       <div className="flex-1 bg-anflocor-green flex flex-col items-center justify-center p-8 text-white">
         <div className="space-y-6 text-center">
           <p className="text-xl font-medium tracking-wide">Welcome!</p>
