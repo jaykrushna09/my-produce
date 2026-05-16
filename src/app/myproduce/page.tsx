@@ -96,7 +96,10 @@ export default function MyProduceDashboard() {
       try {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets["Customer Mapping"];
+        
+        // Find sheet case-insensitively and trim spaces
+        const sheetName = wb.SheetNames.find(name => name.trim().toLowerCase() === "customer mapping");
+        const ws = sheetName ? wb.Sheets[sheetName] : null;
 
         if (!ws) {
           toast({ 
@@ -123,19 +126,19 @@ export default function MyProduceDashboard() {
         let count = 0;
         
         jsonData.forEach((row) => {
-          // Normalize column names to match the user's specific fields exactly
-          const id = row.CustomerID || row['Customer ID'] || row['customer_id'];
-          const customer = row.Customer || row['Customer Name'] || row['customer_name'];
-          const sapcCode = row.SAPC_Code || row['SAPC Code'];
-          const sapcDesc = row.SAPC_Desc || row['SAPC Description'];
+          // Normalize column names to match the user's specific fields, being very flexible with headers
+          const id = row.CustomerID || row['Customer ID'] || row['CustomerID'] || row['customerid'] || row['ID'];
+          const customer = row.Customer || row['Customer Name'] || row['Customer'] || row['customer'];
+          const sapcCode = row.SAPC_Code || row['SAPC Code'] || row['SAPCCode'] || row['sapc_code'];
+          const sapcDesc = row.SAPC_Desc || row['SAPC Description'] || row['SAPCDesc'] || row['sapc_desc'];
 
           if (id) {
-            const docRef = doc(db, 'customerMappings', String(id));
+            const docRef = doc(db, 'customerMappings', String(id).trim());
             const payload = {
-              CustomerID: String(id),
-              Customer: String(customer || 'N/A'),
-              SAPC_Code: String(sapcCode || 'N/A'),
-              SAPC_Desc: String(sapcDesc || 'N/A'),
+              CustomerID: String(id).trim(),
+              Customer: String(customer || 'N/A').trim(),
+              SAPC_Code: String(sapcCode || 'N/A').trim(),
+              SAPC_Desc: String(sapcDesc || 'N/A').trim(),
               updatedAt: serverTimestamp(),
             };
             batch.set(docRef, payload);
@@ -147,7 +150,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "No Valid Data", 
-            description: "Could not find valid CustomerID values in the Excel file." 
+            description: "Could not find valid CustomerID values in the Excel file. Check your column headers." 
           });
           setIsUploading(false);
           return;
@@ -157,7 +160,7 @@ export default function MyProduceDashboard() {
           .then(() => {
             toast({ 
               title: "Import Successful", 
-              description: `Successfully imported ${count} records.` 
+              description: `Successfully imported ${count} records to Firestore.` 
             });
           })
           .catch(async (err) => {
@@ -169,6 +172,7 @@ export default function MyProduceDashboard() {
           });
 
       } catch (err) {
+        console.error("Excel processing error:", err);
         toast({ 
           variant: "destructive", 
           title: "Import Failed", 
@@ -268,7 +272,7 @@ export default function MyProduceDashboard() {
             <TableBody>
               {mappingsLoading ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-              ) : customerMappings.length === 0 ? (
+              ) : !customerMappings || customerMappings.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No customer mappings found. Import an Excel file with a "Customer Mapping" sheet.</TableCell></TableRow>
               ) : customerMappings.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
