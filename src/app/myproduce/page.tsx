@@ -96,6 +96,16 @@ export default function MyProduceDashboard() {
     { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
   ];
 
+  // Helper function to race a promise against a timeout
+  const withTimeout = (promise: Promise<any>, timeoutMs: number, errorMessage: string) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+      )
+    ]);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !db) {
@@ -139,9 +149,8 @@ export default function MyProduceDashboard() {
           return;
         }
 
-        console.log(`Processing ${jsonData.length} rows from Excel...`);
+        console.log(`Processing ${jsonData.length} rows...`);
 
-        // Firestore batch has a limit of 500 operations. We split the data into chunks.
         const CHUNK_SIZE = 450;
         let totalProcessed = 0;
 
@@ -161,7 +170,7 @@ export default function MyProduceDashboard() {
             const id = getVal(['customerid', 'id', 'custid']);
             const customer = getVal(['customer', 'customername', 'name']);
             const sapcCode = getVal(['sapccode', 'sap_code', 'code']);
-            const sapcDesc = getVal(['sapcdesc', 'sapc_description', 'description']);
+            const sapcDesc = getVal(['sapcdesc', 'sap_code_desc', 'description']);
 
             if (id) {
               const docRef = doc(db, 'customerMappings', String(id).trim());
@@ -177,9 +186,13 @@ export default function MyProduceDashboard() {
           });
 
           if (chunkCount > 0) {
-            await batch.commit();
+            // Implement 30s timeout for each batch commit
+            await withTimeout(
+              batch.commit(), 
+              30000, 
+              "Firebase sync timeout: The write operation took more than 30 seconds. Please check your internet connection."
+            );
             totalProcessed += chunkCount;
-            console.log(`Committed batch: ${totalProcessed} total records.`);
           }
         }
 
@@ -192,12 +205,12 @@ export default function MyProduceDashboard() {
         } else {
           toast({ 
             title: "Import Successful", 
-            description: `Successfully uploaded ${totalProcessed} customer mappings to Firestore.` 
+            description: `Successfully uploaded ${totalProcessed} customer mappings.` 
           });
         }
 
       } catch (err: any) {
-        console.error("Firestore Upload Error:", err);
+        console.error("Upload/Firestore Error:", err);
         toast({ 
           variant: "destructive", 
           title: "Import Failed", 
@@ -281,7 +294,7 @@ export default function MyProduceDashboard() {
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                placeholder="Search by name, ID..." 
+                placeholder="Search name, code..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
