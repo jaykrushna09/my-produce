@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "UserProfile": {
@@ -35,9 +34,9 @@
       "schema": { "$ref": "#/backend/entities/UserProfile" },
       "description": "User profile document"
     },
-    "/customerMappings/{mappingId}": {
+    "/app_configuration/customer_mapping/records/{mappingId}": {
       "schema": { "$ref": "#/backend/entities/CustomerMapping" },
-      "description": "Customer mapping records"
+      "description": "Customer mapping records stored in a nested structure"
     }
   }
 }

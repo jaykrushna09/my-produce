@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -65,18 +64,13 @@ export default function MyProduceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Debugging log for Firestore instance
-  useEffect(() => {
-    if (db) {
-      console.log("Firestore instance available:", db);
-    } else {
-      console.warn("Firestore instance NOT available yet.");
-    }
-  }, [db]);
+  // The new path requested by the user
+  const DATA_PATH = 'app_configuration/customer_mapping/records';
+  const TEST_PATH = 'app_configuration/customer_mapping/test_writes';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
-    return query(collection(db, 'customerMappings'), orderBy('Customer', 'asc'));
+    return query(collection(db, DATA_PATH), orderBy('Customer', 'asc'));
   }, [db]);
   
   const { data: customerMappings, loading: mappingsLoading } = useCollection(customerMappingsQuery);
@@ -128,21 +122,21 @@ export default function MyProduceDashboard() {
       createdAt: new Date().toISOString()
     };
 
-    console.log("Initiating test write to 'test_collection'...", testData);
-    const testCollectionRef = collection(db, 'test_collection');
+    console.log(`Initiating test write to ${TEST_PATH}...`, testData);
+    const testCollectionRef = collection(db, TEST_PATH);
     
     addDoc(testCollectionRef, testData)
       .then(() => {
         console.log("Test write successful!");
         toast({ 
           title: "Test Write SUCCESS", 
-          description: "Document successfully written to 'test_collection'." 
+          description: `Document successfully written to ${TEST_PATH}.` 
         });
       })
       .catch(async (err) => {
         console.error("Test write failed:", err);
         const permissionError = new FirestorePermissionError({
-          path: 'test_collection',
+          path: TEST_PATH,
           operation: 'create',
           requestResourceData: testData,
         });
@@ -225,7 +219,7 @@ export default function MyProduceDashboard() {
             if (id !== undefined && id !== null) {
               const docId = String(id).trim();
               if (docId) {
-                const docRef = doc(db, 'customerMappings', docId);
+                const docRef = doc(db, DATA_PATH, docId);
                 batch.set(docRef, {
                   CustomerID: docId,
                   Customer: String(customer || 'N/A').trim(),
@@ -239,7 +233,7 @@ export default function MyProduceDashboard() {
           });
 
           if (chunkCount > 0) {
-            console.log(`Committing batch of ${chunkCount} records...`);
+            console.log(`Committing batch of ${chunkCount} records to ${DATA_PATH}...`);
             await withTimeout(
               batch.commit(), 
               30000, 
@@ -276,7 +270,7 @@ export default function MyProduceDashboard() {
 
   const handleDeleteMapping = (id: string) => {
     if (!db) return;
-    const docRef = doc(db, 'customerMappings', id);
+    const docRef = doc(db, DATA_PATH, id);
     deleteDoc(docRef).catch(async (err) => {
       const permissionError = new FirestorePermissionError({
         path: docRef.path,
