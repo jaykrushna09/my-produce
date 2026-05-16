@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useRef } from 'react';
@@ -42,8 +43,6 @@ import { cn } from '@/lib/utils';
 import { 
   collection, 
   doc, 
-  setDoc, 
-  getDocs, 
   writeBatch, 
   serverTimestamp,
   query,
@@ -66,7 +65,7 @@ export default function MyProduceDashboard() {
   // Fetch customer mappings from Firestore
   const customerMappingsQuery = useMemo(() => {
     if (!db) return null;
-    return query(collection(db, 'customerMappings'), orderBy('customerName', 'asc'));
+    return query(collection(db, 'customerMappings'), orderBy('customer', 'asc'));
   }, [db]);
   
   const { data: customerMappings, loading: mappingsLoading } = useCollection(customerMappingsQuery);
@@ -75,7 +74,7 @@ export default function MyProduceDashboard() {
     {
       id: 'customer-mapping',
       title: "Customer Mapping",
-      description: "Map customers to specific production channels.",
+      description: "Map customers using SAPC codes and IDs.",
       icon: <Users className="h-5 w-5" />,
       color: "bg-blue-600"
     },
@@ -155,23 +154,26 @@ export default function MyProduceDashboard() {
           return;
         }
 
-        // Overwrite logic: We'll use writeBatch for efficiency
-        // Note: For larger datasets, we might need multiple batches (limit 500)
         const batch = writeBatch(db);
+        let processedCount = 0;
         
-        // Optional: Clear existing data first? 
-        // For MVP, we'll just upsert based on customerCode as the ID
         data.forEach((row) => {
-          const code = row.customerCode || row['Customer Code'] || row['Code'];
-          if (code) {
-            const docRef = doc(db, 'customerMappings', String(code));
+          // Normalize field names from Excel
+          const id = row.CustomerID || row['Customer ID'] || row['customerID'];
+          const customer = row.Customer || row['Customer'] || row['customer'];
+          const sapcCode = row.SAPC_Code || row['SAPC Code'] || row['sapcCode'];
+          const sapcDesc = row.SAPC_Desc || row['SAPC Desc'] || row['sapcDesc'];
+
+          if (id) {
+            const docRef = doc(db, 'customerMappings', String(id));
             batch.set(docRef, {
-              customerCode: String(code),
-              customerName: row.customerName || row['Customer Name'] || 'N/A',
-              productionChannel: row.productionChannel || row['Production Channel'] || row['Channel'] || 'N/A',
-              region: row.region || row['Region'] || 'N/A',
+              customerID: String(id),
+              customer: String(customer || 'N/A'),
+              sapcCode: String(sapcCode || 'N/A'),
+              sapcDesc: String(sapcDesc || 'N/A'),
               updatedAt: serverTimestamp(),
             });
+            processedCount++;
           }
         });
 
@@ -179,7 +181,7 @@ export default function MyProduceDashboard() {
 
         toast({
           title: "Upload Successful",
-          description: `Successfully processed ${data.length} customer records.`,
+          description: `Successfully processed ${processedCount} customer records.`,
         });
       } catch (err) {
         console.error(err);
@@ -282,7 +284,7 @@ export default function MyProduceDashboard() {
                 </Button>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Customer Mapping</h2>
-                  <p className="text-sm text-gray-500">Manage customer assignments to production channels.</p>
+                  <p className="text-sm text-gray-500">Manage customer IDs and SAPC configurations.</p>
                 </div>
               </div>
               
@@ -314,10 +316,10 @@ export default function MyProduceDashboard() {
                 <Table>
                   <TableHeader className="bg-gray-50/50">
                     <TableRow>
-                      <TableHead className="font-bold">Customer Code</TableHead>
-                      <TableHead className="font-bold">Customer Name</TableHead>
-                      <TableHead className="font-bold">Production Channel</TableHead>
-                      <TableHead className="font-bold">Region</TableHead>
+                      <TableHead className="font-bold">Customer ID</TableHead>
+                      <TableHead className="font-bold">Customer</TableHead>
+                      <TableHead className="font-bold">SAPC Code</TableHead>
+                      <TableHead className="font-bold">SAPC Description</TableHead>
                       <TableHead className="text-right font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -343,15 +345,15 @@ export default function MyProduceDashboard() {
                       customerMappings.map((mapping: any) => (
                         <TableRow key={mapping.id} className="hover:bg-gray-50/50 transition-colors">
                           <TableCell className="font-mono text-xs font-bold text-anflocor-green bg-anflocor-green/5 w-fit rounded px-2 m-2">
-                            {mapping.customerCode}
+                            {mapping.customerID}
                           </TableCell>
-                          <TableCell className="font-medium text-gray-900">{mapping.customerName}</TableCell>
+                          <TableCell className="font-medium text-gray-900">{mapping.customer}</TableCell>
                           <TableCell>
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                              {mapping.productionChannel}
+                              {mapping.sapcCode}
                             </span>
                           </TableCell>
-                          <TableCell className="text-gray-500">{mapping.region}</TableCell>
+                          <TableCell className="text-gray-500">{mapping.sapcDesc}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="icon" className="text-gray-400 hover:text-red-500">
                               <Trash2 className="h-4 w-4" />

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -14,16 +15,16 @@
     },
     "CustomerMapping": {
       "title": "Customer Mapping",
-      "description": "Mapping of customers to production channels.",
+      "description": "Mapping of customers to SAP production channels.",
       "type": "object",
       "properties": {
-        "customerCode": { "type": "string" },
-        "customerName": { "type": "string" },
-        "productionChannel": { "type": "string" },
-        "region": { "type": "string" },
+        "customerID": { "type": "string" },
+        "customer": { "type": "string" },
+        "sapcCode": { "type": "string" },
+        "sapcDesc": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["customerCode", "customerName"]
+      "required": ["customerID", "customer"]
     }
   },
   "auth": {
