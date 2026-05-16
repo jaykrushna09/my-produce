@@ -94,19 +94,27 @@ export default function MyProduceDashboard() {
 
     reader.onload = async (evt) => {
       try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const data = evt.target?.result;
+        const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets["Customer Mapping"];
 
         if (!ws) {
-          toast({ variant: "destructive", title: "Sheet Not Found", description: 'Please ensure your Excel has a sheet named "Customer Mapping".' });
+          toast({ 
+            variant: "destructive", 
+            title: "Sheet Not Found", 
+            description: 'Please ensure your Excel has a sheet named "Customer Mapping".' 
+          });
           setIsUploading(false);
           return;
         }
 
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
         if (jsonData.length === 0) {
-          toast({ variant: "destructive", title: "Empty Sheet", description: "No data found in the selected sheet." });
+          toast({ 
+            variant: "destructive", 
+            title: "Empty Sheet", 
+            description: "No data found in the 'Customer Mapping' sheet." 
+          });
           setIsUploading(false);
           return;
         }
@@ -115,7 +123,7 @@ export default function MyProduceDashboard() {
         let count = 0;
         
         jsonData.forEach((row) => {
-          // Normalize column names to match the user's specific fields
+          // Normalize column names to match the user's specific fields exactly
           const id = row.CustomerID || row['Customer ID'] || row['customer_id'];
           const customer = row.Customer || row['Customer Name'] || row['customer_name'];
           const sapcCode = row.SAPC_Code || row['SAPC Code'];
@@ -135,9 +143,22 @@ export default function MyProduceDashboard() {
           }
         });
 
+        if (count === 0) {
+          toast({ 
+            variant: "destructive", 
+            title: "No Valid Data", 
+            description: "Could not find valid CustomerID values in the Excel file." 
+          });
+          setIsUploading(false);
+          return;
+        }
+
         batch.commit()
           .then(() => {
-            toast({ title: "Import Successful", description: `Updated ${count} records in Firestore.` });
+            toast({ 
+              title: "Import Successful", 
+              description: `Successfully imported ${count} records.` 
+            });
           })
           .catch(async (err) => {
             const permissionError = new FirestorePermissionError({
@@ -148,14 +169,23 @@ export default function MyProduceDashboard() {
           });
 
       } catch (err) {
-        toast({ variant: "destructive", title: "Import Failed", description: "There was an error processing the Excel file." });
+        toast({ 
+          variant: "destructive", 
+          title: "Import Failed", 
+          description: "An unexpected error occurred while processing the file." 
+        });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
 
-    reader.readAsBinaryString(file);
+    reader.onerror = () => {
+      toast({ variant: "destructive", title: "File Error", description: "Failed to read the file." });
+      setIsUploading(false);
+    };
+
+    reader.readAsArrayBuffer(file);
   };
 
   const handleDeleteMapping = (id: string) => {
@@ -239,7 +269,7 @@ export default function MyProduceDashboard() {
               {mappingsLoading ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : customerMappings.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No customer mappings found. Import an Excel file to get started.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No customer mappings found. Import an Excel file with a "Customer Mapping" sheet.</TableCell></TableRow>
               ) : customerMappings.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
                   <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.CustomerID}</TableCell>
