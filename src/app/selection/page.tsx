@@ -1,39 +1,17 @@
-
 "use client";
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Clock, ShoppingBasket, LogOut, Leaf, Loader2 } from 'lucide-react';
+import { Clock, ShoppingBasket, LogOut, Leaf } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuth, useUser } from '@/firebase';
-import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
 export default function SelectionPage() {
   const router = useRouter();
-  const auth = useAuth();
-  const { user, loading } = useUser();
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/');
-    }
-  }, [user, loading, router]);
-
-  const handleLogout = async () => {
-    await signOut(auth);
+  const handleLogout = () => {
     router.push('/');
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-anflocor-green" />
-      </div>
-    );
-  }
-
-  if (!user) return null;
 
   const options = [
     {
@@ -65,7 +43,7 @@ export default function SelectionPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm hidden sm:inline-block opacity-80">
-              {user.displayName || user.email}
+              Employee Access
             </span>
             <Button 
               variant="ghost" 
