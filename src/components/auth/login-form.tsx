@@ -11,15 +11,14 @@ import { useRouter } from 'next/navigation';
 
 export function LoginForm() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const { auth } = useAuth();
+  const auth = useAuth();
   const { user, loading } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
-  // If user is already logged in, redirect them
   useEffect(() => {
     if (!loading && user) {
-      router.push('/selection');
+      router.replace('/selection');
     }
   }, [user, loading, router]);
 
@@ -29,7 +28,6 @@ export function LoginForm() {
     setIsAuthenticating(true);
     try {
       const provider = new GoogleAuthProvider();
-      // Force account selection for better UX in demo
       provider.setCustomParameters({ prompt: 'select_account' });
       
       const result = await signInWithPopup(auth, provider);
@@ -39,8 +37,6 @@ export function LoginForm() {
           title: "Authenticated Successfully",
           description: `Welcome back, ${result.user.displayName || 'Employee'}.`,
         });
-        // router.push is handled by the useEffect above, 
-        // but we can call it here for immediate feedback
         router.push('/selection');
       }
     } catch (error: any) {

@@ -16,7 +16,7 @@ export default function SelectionPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/');
+      router.replace('/');
     }
   }, [user, loading, router]);
 
@@ -65,7 +65,7 @@ export default function SelectionPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm hidden sm:inline-block opacity-80">
-              {user.email}
+              {user.displayName || user.email}
             </span>
             <Button 
               variant="ghost" 
