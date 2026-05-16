@@ -11,9 +11,13 @@ import {
   LogOut,
   Leaf,
   ChevronRight,
-  Database,
   Users,
-  Shield
+  Box,
+  Tag,
+  DollarSign,
+  Barcode,
+  Anchor,
+  Navigation
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -24,41 +28,65 @@ export default function MyProduceDashboard() {
 
   const configOptions = [
     {
-      title: "Master Data",
-      description: "Manage crops, varieties, and block mappings.",
-      icon: <Database className="h-5 w-5" />,
-      color: "bg-blue-500"
-    },
-    {
-      title: "User Permissions",
-      description: "Configure access roles for production staff.",
+      title: "Customer Mapping",
+      description: "Map customers to specific production channels.",
       icon: <Users className="h-5 w-5" />,
-      color: "bg-purple-500"
+      color: "bg-blue-600"
     },
     {
-      title: "System Settings",
-      description: "General configuration and integration parameters.",
-      icon: <Settings className="h-5 w-5" />,
-      color: "bg-anflocor-green"
+      title: "Material Mapping",
+      description: "Associate raw materials with production units.",
+      icon: <Box className="h-5 w-5" />,
+      color: "bg-emerald-600"
     },
     {
-      title: "Security Protocols",
-      description: "Define field-level security and audit logs.",
-      icon: <Shield className="h-5 w-5" />,
-      color: "bg-orange-500"
+      title: "Brand Mapping",
+      description: "Configure brand labels for various products.",
+      icon: <Tag className="h-5 w-5" />,
+      color: "bg-indigo-600"
+    },
+    {
+      title: "Profit Center Mapping",
+      description: "Assign production blocks to profit centers.",
+      icon: <DollarSign className="h-5 w-5" />,
+      color: "bg-amber-600"
+    },
+    {
+      title: "Pack Type",
+      description: "Define standard packaging specifications.",
+      icon: <Package className="h-5 w-5" />,
+      color: "bg-orange-600"
+    },
+    {
+      title: "SKUs",
+      description: "Manage Stock Keeping Units and product codes.",
+      icon: <Barcode className="h-5 w-5" />,
+      color: "bg-purple-600"
+    },
+    {
+      title: "Port of Loading",
+      description: "Configure origin ports for logistics.",
+      icon: <Anchor className="h-5 w-5" />,
+      color: "bg-sky-600"
+    },
+    {
+      title: "Port of Destination",
+      description: "Manage international delivery destinations.",
+      icon: <Navigation className="h-5 w-5" />,
+      color: "bg-rose-600"
     }
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50/50">
       {/* Sidebar */}
-      <aside className="w-64 bg-anflocor-green text-white flex flex-col">
+      <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0">
         <div className="p-6 flex items-center space-x-3 border-b border-white/10">
           <Leaf className="h-8 w-8 text-white" />
           <span className="text-xl font-bold tracking-tighter">myProduce</span>
         </div>
         
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/10 hover:text-white bg-white/5">
             <LayoutDashboard className="mr-3 h-5 w-5" />
             Dashboard
@@ -84,7 +112,7 @@ export default function MyProduceDashboard() {
         </nav>
 
         <div className="p-4 border-t border-white/10">
-          <div className="flex items-center p-2 mb-4">
+          <div className="flex items-center p-2 mb-4 bg-white/5 rounded-lg">
             <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center mr-3">
               <User className="h-5 w-5" />
             </div>
@@ -108,38 +136,40 @@ export default function MyProduceDashboard() {
       <main className="flex-1 overflow-y-auto p-8">
         <header className="mb-8 flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500">Welcome to TADECO myProduce Portal</p>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
+            <p className="text-gray-500 font-medium">TADECO Agricultural Production Portal</p>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-medium text-gray-400 uppercase tracking-widest">Enterprise Edition</p>
+          <div className="bg-anflocor-green/5 px-4 py-2 rounded-full border border-anflocor-green/10">
+            <p className="text-xs font-bold text-anflocor-green uppercase tracking-widest">Enterprise Edition</p>
           </div>
         </header>
 
         {/* Configuration Section */}
         <section className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="h-8 w-1 bg-anflocor-green rounded-full" />
             <h2 className="text-xl font-bold text-gray-800 flex items-center">
-              <Settings className="mr-2 h-5 w-5 text-anflocor-green" />
-              Configuration Options
+              System Configuration
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {configOptions.map((option, idx) => (
-              <Card key={idx} className="group hover:shadow-lg transition-all border-gray-100 cursor-pointer">
-                <CardHeader className="space-y-4">
-                  <div className={`${option.color} text-white p-3 rounded-lg w-fit shadow-sm group-hover:scale-110 transition-transform`}>
+              <Card key={idx} className="group hover:ring-2 hover:ring-anflocor-green/20 hover:shadow-md transition-all border-gray-200/60 cursor-pointer overflow-hidden">
+                <CardHeader className="p-5">
+                  <div className={`${option.color} text-white p-2.5 rounded-lg w-fit shadow-sm group-hover:scale-105 transition-transform duration-300`}>
                     {option.icon}
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">{option.title}</CardTitle>
-                    <CardDescription className="mt-1">{option.description}</CardDescription>
+                  <div className="pt-4">
+                    <CardTitle className="text-base font-bold text-gray-900">{option.title}</CardTitle>
+                    <CardDescription className="text-xs mt-1.5 leading-relaxed line-clamp-2">
+                      {option.description}
+                    </CardDescription>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <Button variant="link" className="p-0 h-auto text-anflocor-green font-semibold group-hover:translate-x-1 transition-transform">
-                    Configure <ChevronRight className="ml-1 h-4 w-4" />
+                <CardContent className="p-5 pt-0">
+                  <Button variant="link" className="p-0 h-auto text-anflocor-green text-xs font-bold group-hover:translate-x-1 transition-transform">
+                    ACCESS MAPPING <ChevronRight className="ml-1 h-3 w-3" />
                   </Button>
                 </CardContent>
               </Card>
@@ -147,34 +177,21 @@ export default function MyProduceDashboard() {
           </div>
         </section>
 
-        {/* Placeholder for other dashboard content */}
-        <section className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 border-gray-100 shadow-sm bg-white">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Track latest updates in agricultural production.</CardDescription>
-            </CardHeader>
-            <CardContent className="h-64 flex items-center justify-center text-gray-400 bg-gray-50/50 rounded-md mx-6 mb-6">
-              <div className="text-center">
-                <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                <p>Activity stream visualization placeholder</p>
+        {/* Analytics Summary */}
+        <section className="mt-12">
+          <Card className="border-gray-200/60 shadow-sm bg-white overflow-hidden">
+            <div className="bg-gray-50/50 p-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-700">Production Overview</h3>
+              <BarChart3 className="h-4 w-4 text-gray-400" />
+            </div>
+            <CardContent className="p-12 flex flex-col items-center justify-center text-gray-400">
+              <div className="relative mb-4">
+                <div className="absolute inset-0 bg-anflocor-green/5 blur-3xl rounded-full" />
+                <BarChart3 className="h-16 w-16 opacity-10 relative z-10" />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-gray-100 shadow-sm bg-white">
-            <CardHeader>
-              <CardTitle>Quick Links</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-between">
-                Field Audit <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" className="w-full justify-between">
-                Yield Prediction <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" className="w-full justify-between">
-                Resource Allocation <ChevronRight className="h-4 w-4" />
+              <p className="text-sm font-medium">Real-time production data will appear here.</p>
+              <Button variant="outline" className="mt-6 border-anflocor-green/20 text-anflocor-green hover:bg-anflocor-green/5">
+                Generate Report
               </Button>
             </CardContent>
           </Card>
