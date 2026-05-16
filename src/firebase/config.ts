@@ -16,8 +16,9 @@ export const isFirebaseConfigValid = !!(
 );
 
 if (typeof window !== 'undefined') {
-  console.log("Firebase Config Status:", isFirebaseConfigValid ? "Valid" : "Invalid/Missing");
   if (!isFirebaseConfigValid) {
-    console.warn("Firebase configuration is missing. Please ensure your Firebase project is connected in the Firebase Studio console.");
+    console.warn("Firebase configuration is missing or incomplete. Please ensure your project is connected in the Firebase Studio sidebar.");
+  } else {
+    console.log("Firebase initialized for project:", firebaseConfig.projectId);
   }
 }

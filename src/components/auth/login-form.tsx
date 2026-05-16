@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Mail, Lock, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Loader2, Mail, Lock, ShieldCheck, AlertCircle, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { 
   signInWithEmailAndPassword, 
@@ -26,31 +26,22 @@ export function LoginForm() {
   const [isSignUp, setIsSignUp] = useState(false);
   const router = useRouter();
   const auth = useAuth();
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (user) {
+    if (user && !userLoading) {
       router.push('/selection');
     }
-  }, [user, router]);
-
-  if (!auth) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>System Error</AlertTitle>
-        <AlertDescription>
-          Firebase is not correctly configured. Please connect your project in the Firebase Studio console to enable authentication.
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  }, [user, userLoading, router]);
 
   const handleSSOLogin = async () => {
-    if (isAuthenticating) return;
-    setIsAuthenticating(true);
+    if (!auth) {
+      toast({ variant: "destructive", title: "Configuration Error", description: "Firebase Auth is not initialized. Please connect your project." });
+      return;
+    }
     
+    setIsAuthenticating(true);
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
@@ -69,6 +60,11 @@ export function LoginForm() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!auth) {
+      toast({ variant: "destructive", title: "Configuration Error", description: "Firebase Auth is not initialized. Please connect your project." });
+      return;
+    }
+    
     if (isAuthenticating || !email || !password) return;
     
     setIsAuthenticating(true);
@@ -99,6 +95,16 @@ export function LoginForm() {
         <p className="text-sm text-gray-500 font-medium">Access your ANFLOCOR Enterprise Portal</p>
       </div>
 
+      {!auth && (
+        <Alert variant="destructive" className="mb-6">
+          <Terminal className="h-4 w-4" />
+          <AlertTitle>Action Required</AlertTitle>
+          <AlertDescription className="text-xs">
+            Firebase project is not connected. Use the sidebar to connect your Firebase Project to enable authentication features.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="sso" className="w-full">
         <TabsList className="grid w-full grid-cols-2 mb-6">
           <TabsTrigger value="sso">Enterprise SSO</TabsTrigger>
@@ -108,7 +114,7 @@ export function LoginForm() {
         <TabsContent value="sso" className="space-y-4">
           <Button
             onClick={handleSSOLogin}
-            disabled={isAuthenticating}
+            disabled={isAuthenticating || !auth}
             className="w-full bg-anflocor-green hover:bg-anflocor-green/90 text-white h-12 rounded-md font-semibold text-base shadow-sm transition-all"
           >
             {isAuthenticating ? (
@@ -139,6 +145,7 @@ export function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required 
+                  disabled={!auth}
                 />
               </div>
             </div>
@@ -153,6 +160,7 @@ export function LoginForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required 
+                  disabled={!auth}
                 />
               </div>
               {isSignUp && <PasswordStrength password={password} />}
@@ -160,7 +168,7 @@ export function LoginForm() {
 
             <Button
               type="submit"
-              disabled={isAuthenticating}
+              disabled={isAuthenticating || !auth}
               className="w-full bg-anflocor-green hover:bg-anflocor-green/90 text-white h-12 rounded-md font-semibold text-base"
             >
               {isAuthenticating ? (
@@ -178,6 +186,7 @@ export function LoginForm() {
                 type="button"
                 className="text-xs font-bold text-anflocor-green"
                 onClick={() => setIsSignUp(!isSignUp)}
+                disabled={!auth}
               >
                 {isSignUp ? "Already have an account? Sign In" : "Need access? Request Account / Sign Up"}
               </Button>
