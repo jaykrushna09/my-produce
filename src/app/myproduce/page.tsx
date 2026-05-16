@@ -96,7 +96,6 @@ export default function MyProduceDashboard() {
     { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
   ];
 
-  // Helper function to race a promise against a timeout
   const withTimeout = (promise: Promise<any>, timeoutMs: number, errorMessage: string) => {
     return Promise.race([
       promise,
@@ -109,7 +108,7 @@ export default function MyProduceDashboard() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !db) {
-      console.warn("Upload aborted: No file or Firestore instance available.");
+      toast({ variant: "destructive", title: "Upload failed", description: "No file selected or database not ready." });
       return;
     }
 
@@ -121,6 +120,7 @@ export default function MyProduceDashboard() {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
+        // Find the correct sheet
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
           return normalized === "customermapping";
@@ -132,7 +132,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "Sheet Not Found", 
-            description: 'Please ensure your Excel has a sheet named "Customer Mapping".' 
+            description: 'Could not find a sheet named "Customer Mapping". Found: ' + wb.SheetNames.join(', ')
           });
           setIsUploading(false);
           return;
@@ -140,19 +140,15 @@ export default function MyProduceDashboard() {
 
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
         if (jsonData.length === 0) {
-          toast({ 
-            variant: "destructive", 
-            title: "Empty Sheet", 
-            description: "No data found in the 'Customer Mapping' sheet." 
-          });
+          toast({ variant: "destructive", title: "Empty Sheet", description: "No data found in the selected sheet." });
           setIsUploading(false);
           return;
         }
 
-        console.log(`Processing ${jsonData.length} rows...`);
+        console.log("Parsed Excel Rows Sample:", jsonData.slice(0, 3));
 
-        const CHUNK_SIZE = 450;
         let totalProcessed = 0;
+        const CHUNK_SIZE = 450;
 
         for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
           const chunk = jsonData.slice(i, i + CHUNK_SIZE);
@@ -167,54 +163,49 @@ export default function MyProduceDashboard() {
               return actualKey ? row[actualKey] : null;
             };
 
-            const id = getVal(['customerid', 'id', 'custid']);
-            const customer = getVal(['customer', 'customername', 'name']);
-            const sapcCode = getVal(['sapccode', 'sap_code', 'code']);
-            const sapcDesc = getVal(['sapcdesc', 'sap_code_desc', 'description']);
+            const id = getVal(['customerid', 'id', 'custid', 'sapcustomerid']);
+            const customer = getVal(['customer', 'customername', 'name', 'custname']);
+            const sapcCode = getVal(['sapccode', 'sap_code', 'code', 'sapc']);
+            const sapcDesc = getVal(['sapcdesc', 'sap_code_desc', 'description', 'sapcdescription']);
 
-            if (id) {
-              const docRef = doc(db, 'customerMappings', String(id).trim());
-              batch.set(docRef, {
-                CustomerID: String(id).trim(),
-                Customer: String(customer || 'N/A').trim(),
-                SAPC_Code: String(sapcCode || 'N/A').trim(),
-                SAPC_Desc: String(sapcDesc || 'N/A').trim(),
-                updatedAt: serverTimestamp(),
-              });
-              chunkCount++;
+            if (id !== undefined && id !== null) {
+              const docId = String(id).trim();
+              if (docId) {
+                const docRef = doc(db, 'customerMappings', docId);
+                batch.set(docRef, {
+                  CustomerID: docId,
+                  Customer: String(customer || 'N/A').trim(),
+                  SAPC_Code: String(sapcCode || 'N/A').trim(),
+                  SAPC_Desc: String(sapcDesc || 'N/A').trim(),
+                  updatedAt: serverTimestamp(),
+                });
+                chunkCount++;
+              }
             }
           });
 
           if (chunkCount > 0) {
-            // Implement 30s timeout for each batch commit
             await withTimeout(
               batch.commit(), 
               30000, 
-              "Firebase sync timeout: The write operation took more than 30 seconds. Please check your internet connection."
+              "Write operation timed out (30s). Data might be too large or connection is unstable."
             );
             totalProcessed += chunkCount;
           }
         }
 
-        if (totalProcessed === 0) {
-          toast({ 
-            variant: "destructive", 
-            title: "Import Error", 
-            description: "No valid rows found. Ensure you have a 'CustomerID' column." 
-          });
+        if (totalProcessed > 0) {
+          toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} customer mappings.` });
         } else {
-          toast({ 
-            title: "Import Successful", 
-            description: `Successfully uploaded ${totalProcessed} customer mappings.` 
-          });
+          toast({ variant: "destructive", title: "Import Failed", description: "No valid records were found. Ensure your 'CustomerID' column is present." });
         }
 
       } catch (err: any) {
-        console.error("Upload/Firestore Error:", err);
+        console.error("Firestore Write Error:", err);
         toast({ 
           variant: "destructive", 
-          title: "Import Failed", 
-          description: err.message || "An error occurred while saving data to Firestore." 
+          title: "Database Error", 
+          description: err.message || "Failed to write data to Firestore." 
         });
       } finally {
         setIsUploading(false);
@@ -222,9 +213,8 @@ export default function MyProduceDashboard() {
       }
     };
 
-    reader.onerror = (error) => {
-      console.error("FileReader Error:", error);
-      toast({ variant: "destructive", title: "File Error", description: "Failed to read file." });
+    reader.onerror = () => {
+      toast({ variant: "destructive", title: "File Error", description: "Failed to read the Excel file." });
       setIsUploading(false);
     };
 
@@ -235,7 +225,6 @@ export default function MyProduceDashboard() {
     if (!db) return;
     const docRef = doc(db, 'customerMappings', id);
     deleteDoc(docRef).catch(async (err) => {
-      console.error("Delete Error:", err);
       const permissionError = new FirestorePermissionError({
         path: docRef.path,
         operation: 'delete',
