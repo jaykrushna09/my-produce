@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Mail, Lock, ShieldCheck } from 'lucide-react';
+import { Loader2, Mail, Lock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { 
   signInWithEmailAndPassword, 
@@ -17,6 +17,7 @@ import {
 import { useAuth, useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { PasswordStrength } from './password-strength';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function LoginForm() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -33,6 +34,18 @@ export function LoginForm() {
       router.push('/selection');
     }
   }, [user, router]);
+
+  if (!auth) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>System Error</AlertTitle>
+        <AlertDescription>
+          Firebase is not correctly configured. Please connect your project in the Firebase Studio console to enable authentication.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   const handleSSOLogin = async () => {
     if (isAuthenticating) return;
