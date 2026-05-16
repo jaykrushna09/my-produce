@@ -1,7 +1,6 @@
-
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Settings, 
@@ -22,7 +21,8 @@ import {
   Upload,
   ArrowLeft,
   Loader2,
-  Trash2
+  Trash2,
+  Search
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -60,6 +60,7 @@ export default function MyProduceDashboard() {
   
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [isUploading, setIsUploading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
@@ -67,6 +68,15 @@ export default function MyProduceDashboard() {
   }, [db]);
   
   const { data: customerMappings, loading: mappingsLoading } = useCollection(customerMappingsQuery);
+
+  const filteredMappings = useMemo(() => {
+    if (!customerMappings) return [];
+    return customerMappings.filter((m: any) => 
+      m.Customer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.CustomerID?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.SAPC_Code?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [customerMappings, searchTerm]);
 
   const configOptions = [
     {
@@ -97,7 +107,6 @@ export default function MyProduceDashboard() {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Find sheet case-insensitively and handle spaces/underscores
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
           return normalized === "customermapping";
@@ -130,7 +139,6 @@ export default function MyProduceDashboard() {
         let count = 0;
         
         jsonData.forEach((row) => {
-          // Robust header matching logic
           const getVal = (possibleKeys: string[]) => {
             const actualKey = Object.keys(row).find(k => 
               possibleKeys.some(pk => k.trim().toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase())
@@ -255,12 +263,21 @@ export default function MyProduceDashboard() {
 
     return (
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="h-5 w-5" /></Button>
             <h2 className="text-2xl font-bold text-gray-900">Customer Mapping</h2>
           </div>
           <div className="flex items-center space-x-2">
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input 
+                placeholder="Search Customer..." 
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
             <Input type="file" accept=".xlsx, .xls" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-semibold">
               {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} 
@@ -282,9 +299,11 @@ export default function MyProduceDashboard() {
             <TableBody>
               {mappingsLoading ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-              ) : !customerMappings || customerMappings.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No customer mappings found. Import an Excel file with a "Customer Mapping" sheet.</TableCell></TableRow>
-              ) : customerMappings.map((m: any) => (
+              ) : filteredMappings.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">
+                  {searchTerm ? "No customers match your search." : "No customer mappings found. Import an Excel file with a \"Customer Mapping\" sheet."}
+                </TableCell></TableRow>
+              ) : filteredMappings.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
                   <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.CustomerID}</TableCell>
                   <TableCell className="font-medium">{m.Customer}</TableCell>
