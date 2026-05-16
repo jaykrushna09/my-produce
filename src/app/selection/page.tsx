@@ -1,20 +1,39 @@
+
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Clock, ShoppingBasket, LogOut, Leaf } from 'lucide-react';
+import { Clock, ShoppingBasket, LogOut, Leaf, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { auth } from '@/lib/firebase';
+import { useAuth, useUser } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
 export default function SelectionPage() {
   const router = useRouter();
+  const auth = useAuth();
+  const { user, loading } = useUser();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [user, loading, router]);
 
   const handleLogout = async () => {
     await signOut(auth);
     router.push('/');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 animate-spin text-anflocor-green" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const options = [
     {
@@ -44,15 +63,20 @@ export default function SelectionPage() {
             <Leaf className="h-6 w-6" />
             <span className="font-bold text-xl tracking-tight">ANFLOCOR</span>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleLogout}
-            className="text-white hover:bg-white/10"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
+          <div className="flex items-center gap-4">
+            <span className="text-sm hidden sm:inline-block opacity-80">
+              {user.email}
+            </span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleLogout}
+              className="text-white hover:bg-white/10"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
       </header>
 
