@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo } from 'react';
@@ -73,8 +74,8 @@ export default function MyProduceDashboard() {
     if (!customerMappings) return [];
     return customerMappings.filter((m: any) => 
       m.Customer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.CustomerID?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.SAPC_Code?.toLowerCase().includes(searchTerm.toLowerCase())
+      m.CustomerID?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.SAPC_Code?.toString().toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [customerMappings, searchTerm]);
 
@@ -107,6 +108,7 @@ export default function MyProduceDashboard() {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
+        // Robust sheet name search
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
           return normalized === "customermapping";
@@ -118,7 +120,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "Sheet Not Found", 
-            description: 'Please ensure your Excel has a sheet named "Customer Mapping".' 
+            description: 'Please ensure your Excel has a sheet exactly named "Customer Mapping".' 
           });
           setIsUploading(false);
           return;
@@ -168,8 +170,8 @@ export default function MyProduceDashboard() {
         if (count === 0) {
           toast({ 
             variant: "destructive", 
-            title: "No Valid Data", 
-            description: "Could not find valid CustomerID values. Check your column headers." 
+            title: "Import Error", 
+            description: "No valid rows found. Ensure you have a 'CustomerID' column." 
           });
           setIsUploading(false);
           return;
@@ -178,8 +180,8 @@ export default function MyProduceDashboard() {
         batch.commit()
           .then(() => {
             toast({ 
-              title: "Import Successful", 
-              description: `Successfully imported ${count} records to Firestore.` 
+              title: "Success", 
+              description: `Successfully imported ${count} customer mappings.` 
             });
           })
           .catch(async (err) => {
@@ -194,7 +196,7 @@ export default function MyProduceDashboard() {
         toast({ 
           variant: "destructive", 
           title: "Import Failed", 
-          description: "An unexpected error occurred while processing the file." 
+          description: "Could not process Excel file. Check format." 
         });
       } finally {
         setIsUploading(false);
@@ -203,7 +205,7 @@ export default function MyProduceDashboard() {
     };
 
     reader.onerror = () => {
-      toast({ variant: "destructive", title: "File Error", description: "Failed to read the file." });
+      toast({ variant: "destructive", title: "File Error", description: "Failed to read file." });
       setIsUploading(false);
     };
 
@@ -272,7 +274,7 @@ export default function MyProduceDashboard() {
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                placeholder="Search Customer..." 
+                placeholder="Search..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -301,7 +303,7 @@ export default function MyProduceDashboard() {
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : filteredMappings.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">
-                  {searchTerm ? "No customers match your search." : "No customer mappings found. Import an Excel file with a \"Customer Mapping\" sheet."}
+                  {searchTerm ? "No matching records found." : "No customer mappings found. Import Excel to get started."}
                 </TableCell></TableRow>
               ) : filteredMappings.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
