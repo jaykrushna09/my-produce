@@ -4,6 +4,9 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigValid } from './config';
 
+/**
+ * Initializes Firebase services safely.
+ */
 export function initializeFirebase(): {
   firebaseApp: FirebaseApp | null;
   firestore: Firestore | null;
@@ -20,7 +23,7 @@ export function initializeFirebase(): {
 
     return { firebaseApp, firestore, auth };
   } catch (error) {
-    console.error("Error initializing Firebase:", error);
+    console.error("Firebase Studio: Initialization Error", error);
     return { firebaseApp: null, firestore: null, auth: null };
   }
 }

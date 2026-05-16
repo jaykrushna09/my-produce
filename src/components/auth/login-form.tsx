@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Mail, Lock, ShieldCheck, AlertCircle, Terminal } from 'lucide-react';
+import { Loader2, Mail, Lock, ShieldCheck, Terminal, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { 
   signInWithEmailAndPassword, 
@@ -36,10 +36,7 @@ export function LoginForm() {
   }, [user, userLoading, router]);
 
   const handleSSOLogin = async () => {
-    if (!auth) {
-      toast({ variant: "destructive", title: "Configuration Error", description: "Firebase Auth is not initialized. Please connect your project." });
-      return;
-    }
+    if (!auth) return;
     
     setIsAuthenticating(true);
     try {
@@ -47,7 +44,6 @@ export function LoginForm() {
       await signInWithPopup(auth, provider);
       toast({ title: "Welcome back!", description: "Successfully signed in with SSO." });
     } catch (error: any) {
-      console.error("SSO Error:", error);
       toast({ 
         variant: "destructive", 
         title: "Authentication Failed", 
@@ -60,12 +56,7 @@ export function LoginForm() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth) {
-      toast({ variant: "destructive", title: "Configuration Error", description: "Firebase Auth is not initialized. Please connect your project." });
-      return;
-    }
-    
-    if (isAuthenticating || !email || !password) return;
+    if (!auth || isAuthenticating || !email || !password) return;
     
     setIsAuthenticating(true);
     try {
@@ -77,7 +68,6 @@ export function LoginForm() {
         toast({ title: "Welcome back!", description: "Successfully signed in." });
       }
     } catch (error: any) {
-      console.error("Email Auth Error:", error);
       toast({ 
         variant: "destructive", 
         title: "Authentication Failed", 
@@ -96,11 +86,15 @@ export function LoginForm() {
       </div>
 
       {!auth && (
-        <Alert variant="destructive" className="mb-6">
+        <Alert variant="destructive" className="border-red-200 bg-red-50">
           <Terminal className="h-4 w-4" />
-          <AlertTitle>Action Required</AlertTitle>
-          <AlertDescription className="text-xs">
-            Firebase project is not connected. Use the sidebar to connect your Firebase Project to enable authentication features.
+          <AlertTitle className="font-bold">Project Connection Required</AlertTitle>
+          <AlertDescription className="text-xs mt-1">
+            <p className="mb-2">Firebase keys are missing from your environment. You must connect your project to continue.</p>
+            <div className="flex items-center font-bold text-red-600">
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Use the sidebar "Connect" button
+            </div>
           </AlertDescription>
         </Alert>
       )}

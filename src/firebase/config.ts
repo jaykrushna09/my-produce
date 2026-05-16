@@ -8,20 +8,21 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
+/**
+ * Checks if the Firebase configuration is valid and not using placeholder strings.
+ */
 export const isFirebaseConfigValid = !!(
   firebaseConfig.apiKey && 
   firebaseConfig.apiKey !== 'undefined' &&
+  firebaseConfig.apiKey.length > 10 &&
   firebaseConfig.projectId &&
   firebaseConfig.projectId !== 'undefined'
 );
 
 if (typeof window !== 'undefined') {
   if (!isFirebaseConfigValid) {
-    console.warn("Firebase configuration is missing or incomplete. Please ensure your project is connected in the Firebase Studio sidebar. Current config:", {
-      apiKey: firebaseConfig.apiKey ? 'PRESENT' : 'MISSING',
-      projectId: firebaseConfig.projectId ? 'PRESENT' : 'MISSING'
-    });
+    console.warn("Firebase Studio: Project not connected. Please use the sidebar to connect your Firebase Project. This will provide the necessary NEXT_PUBLIC_FIREBASE_* environment variables.");
   } else {
-    console.log("Firebase config detected for project:", firebaseConfig.projectId);
+    console.log("Firebase Studio: Connected to project:", firebaseConfig.projectId);
   }
 }
