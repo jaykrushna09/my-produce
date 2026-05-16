@@ -119,15 +119,6 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const withTimeout = (promise: Promise<any>, timeoutMs: number, errorMessage: string) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-      )
-    ]);
-  };
-
   const handleTestWrite = () => {
     if (!db) {
       toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized. Please connect your project." });
@@ -141,7 +132,6 @@ export default function MyProduceDashboard() {
       user: user?.email || 'Anonymous'
     };
 
-    console.log(`Initiating test write to ${TEST_PATH}...`);
     const testCollectionRef = collection(db, TEST_PATH);
     
     addDoc(testCollectionRef, testData)
@@ -151,13 +141,13 @@ export default function MyProduceDashboard() {
           description: `Document successfully written to ${TEST_PATH}.` 
         });
       })
-      .catch((err) => {
-        console.error("Test write failed:", err);
-        toast({ 
-          variant: "destructive",
-          title: "Test Write FAILED", 
-          description: err.message
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path: testCollectionRef.path,
+          operation: 'create',
+          requestResourceData: testData,
         });
+        errorEmitter.emit('permission-error', permissionError);
       });
   };
 
@@ -173,7 +163,7 @@ export default function MyProduceDashboard() {
         if (!data) throw new Error("Failed to read file.");
 
         const wb = XLSX.read(data, { type: 'array' });
-        const sheetName = wb.SheetNames[0]; // Take first sheet by default if specific one not found
+        const sheetName = wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
 
@@ -212,14 +202,21 @@ export default function MyProduceDashboard() {
           });
 
           if (chunkCount > 0) {
-            await withTimeout(batch.commit(), 30000, "Write operation timed out.");
+            await batch.commit().catch(async (err) => {
+              const permissionError = new FirestorePermissionError({
+                path: DATA_PATH,
+                operation: 'write',
+              });
+              errorEmitter.emit('permission-error', permissionError);
+              throw err;
+            });
             totalProcessed += chunkCount;
           }
         }
 
         toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records.` });
       } catch (err: any) {
-        toast({ variant: "destructive", title: "Import Failed", description: err.message });
+        // Errors are already handled or emitted
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -230,8 +227,13 @@ export default function MyProduceDashboard() {
 
   const handleDeleteMapping = (id: string) => {
     if (!db) return;
-    deleteDoc(doc(db, DATA_PATH, id)).catch((err) => {
-      toast({ variant: "destructive", title: "Delete Failed", description: err.message });
+    const docRef = doc(db, DATA_PATH, id);
+    deleteDoc(docRef).catch(async (err) => {
+      const permissionError = new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'delete',
+      });
+      errorEmitter.emit('permission-error', permissionError);
     });
   };
 
