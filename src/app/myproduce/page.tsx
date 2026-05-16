@@ -23,7 +23,8 @@ import {
   ArrowLeft,
   Loader2,
   Trash2,
-  Search
+  Search,
+  FlaskConical
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -46,7 +47,8 @@ import {
   serverTimestamp,
   query,
   orderBy,
-  deleteDoc
+  deleteDoc,
+  addDoc
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import * as XLSX from 'xlsx';
@@ -105,6 +107,36 @@ export default function MyProduceDashboard() {
     ]);
   };
 
+  const handleTestWrite = () => {
+    if (!db) {
+      toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized." });
+      return;
+    }
+
+    const testData = {
+      message: "Hello World",
+      testId: "TEST-" + Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString()
+    };
+
+    const testCollectionRef = collection(db, 'test_collection');
+    
+    addDoc(testCollectionRef, testData)
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path: 'test_collection',
+          operation: 'create',
+          requestResourceData: testData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+
+    toast({ 
+      title: "Test Write Initiated", 
+      description: "A document is being sent to 'test_collection'. Check your Firestore console." 
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !db) {
@@ -120,10 +152,9 @@ export default function MyProduceDashboard() {
         const data = evt.target?.result;
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Find the correct sheet
         const sheetName = wb.SheetNames.find(name => {
           const normalized = name.trim().toLowerCase().replace(/[\s_]/g, '');
-          return normalized === "customermapping";
+          return normalized === "customermapping" || normalized === "customer_mapping" || normalized === "customers";
         });
         
         const ws = sheetName ? wb.Sheets[sheetName] : null;
@@ -132,7 +163,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "Sheet Not Found", 
-            description: 'Could not find a sheet named "Customer Mapping". Found: ' + wb.SheetNames.join(', ')
+            description: 'Could not find a valid Customer Mapping sheet.'
           });
           setIsUploading(false);
           return;
@@ -144,8 +175,6 @@ export default function MyProduceDashboard() {
           setIsUploading(false);
           return;
         }
-
-        console.log("Parsed Excel Rows Sample:", jsonData.slice(0, 3));
 
         let totalProcessed = 0;
         const CHUNK_SIZE = 450;
@@ -163,10 +192,10 @@ export default function MyProduceDashboard() {
               return actualKey ? row[actualKey] : null;
             };
 
-            const id = getVal(['customerid', 'id', 'custid', 'sapcustomerid']);
-            const customer = getVal(['customer', 'customername', 'name', 'custname']);
-            const sapcCode = getVal(['sapccode', 'sap_code', 'code', 'sapc']);
-            const sapcDesc = getVal(['sapcdesc', 'sap_code_desc', 'description', 'sapcdescription']);
+            const id = getVal(['customerid', 'id', 'custid', 'sapcustomerid', 'customer_id']);
+            const customer = getVal(['customer', 'customername', 'name', 'custname', 'customer_name']);
+            const sapcCode = getVal(['sapccode', 'sap_code', 'code', 'sapc', 'sap_c_code']);
+            const sapcDesc = getVal(['sapcdesc', 'sap_code_desc', 'description', 'sapcdescription', 'sap_c_desc']);
 
             if (id !== undefined && id !== null) {
               const docId = String(id).trim();
@@ -188,7 +217,7 @@ export default function MyProduceDashboard() {
             await withTimeout(
               batch.commit(), 
               30000, 
-              "Write operation timed out (30s). Data might be too large or connection is unstable."
+              "Write operation timed out (30s). Check your connection."
             );
             totalProcessed += chunkCount;
           }
@@ -197,7 +226,7 @@ export default function MyProduceDashboard() {
         if (totalProcessed > 0) {
           toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} customer mappings.` });
         } else {
-          toast({ variant: "destructive", title: "Import Failed", description: "No valid records were found. Ensure your 'CustomerID' column is present." });
+          toast({ variant: "destructive", title: "Import Failed", description: "No valid records were found. Ensure 'CustomerID' is a column." });
         }
 
       } catch (err: any) {
@@ -280,15 +309,21 @@ export default function MyProduceDashboard() {
             <h2 className="text-2xl font-bold text-gray-900">Customer Mapping</h2>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="relative w-64">
+            <div className="relative w-48 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                placeholder="Search name, code..." 
+                placeholder="Search customers..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            
+            <Button variant="outline" size="sm" onClick={handleTestWrite} className="hidden lg:flex border-dashed border-gray-300 text-gray-500 hover:text-anflocor-green hover:border-anflocor-green">
+              <FlaskConical className="mr-2 h-4 w-4" />
+              Test Write
+            </Button>
+
             <Input type="file" accept=".xlsx, .xls" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-semibold">
               {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} 
