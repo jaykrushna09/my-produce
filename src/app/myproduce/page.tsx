@@ -85,7 +85,7 @@ import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
 
-type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'contracts' | 'contract-details';
+type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'contracts' | 'contract-details';
 
 export default function MyProduceDashboard() {
   const router = useRouter();
@@ -122,7 +122,9 @@ export default function MyProduceDashboard() {
 
   const CUSTOMER_PATH = 'app_configuration/customer_mapping/customer_saving';
   const MATERIAL_PATH = 'app_configuration/material_mapping/material_saving';
-  const CONTRACT_PATH = 'app_configuration/contracts/contract_saving';
+  const POL_PATH = 'app_configuration/pol_mapping/pol_saving';
+  const POD_PATH = 'app_configuration/pod_mapping/pod_saving';
+  const CONTRACT_PATH = 'app_data/contracts/contract_saving';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
@@ -132,6 +134,16 @@ export default function MyProduceDashboard() {
   const materialMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, MATERIAL_PATH), orderBy('SAPC_Code', 'asc'));
+  }, [db]);
+
+  const polMappingsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, POL_PATH), orderBy('portName', 'asc'));
+  }, [db]);
+
+  const podMappingsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, POD_PATH), orderBy('portName', 'asc'));
   }, [db]);
 
   const contractsQuery = useMemoFirebase(() => {
@@ -146,31 +158,41 @@ export default function MyProduceDashboard() {
   
   const { data: customerMappings, loading: customerLoading } = useCollection(customerMappingsQuery);
   const { data: materialMappings, loading: materialLoading } = useCollection(materialMappingsQuery);
+  const { data: polMappings, loading: polLoading } = useCollection(polMappingsQuery);
+  const { data: podMappings, loading: podLoading } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
   const { data: contractItems, loading: itemsLoading } = useCollection(contractItemsQuery);
 
   const filteredData = useMemo(() => {
+    const term = searchTerm.toLowerCase();
     if (activeView === 'material-mapping') {
       return materialMappings.filter(m => 
-        String(m.SAPC_Code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(m.SAPC_Desc || '').toLowerCase().includes(searchTerm.toLowerCase())
+        String(m.SAPC_Code || '').toLowerCase().includes(term) ||
+        String(m.SAPC_Desc || '').toLowerCase().includes(term) ||
+        String(m.KindOfPack || '').toLowerCase().includes(term)
       );
     }
     if (activeView === 'customer-mapping') {
       return customerMappings.filter(m => 
-        String(m.Customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(m.CustomerID || '').toLowerCase().includes(searchTerm.toLowerCase())
+        String(m.Customer || '').toLowerCase().includes(term) ||
+        String(m.CustomerID || '').toLowerCase().includes(term)
       );
+    }
+    if (activeView === 'port-of-loading') {
+      return polMappings.filter(m => String(m.portName || '').toLowerCase().includes(term));
+    }
+    if (activeView === 'port-of-destination') {
+      return podMappings.filter(m => String(m.portName || '').toLowerCase().includes(term));
     }
     if (activeView === 'contracts') {
       return contracts.filter(c => 
-        String(c.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(c.contractRef || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(c.weekNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
+        String(c.customerName || '').toLowerCase().includes(term) ||
+        String(c.contractRef || '').toLowerCase().includes(term) ||
+        String(c.weekNumber || '').toLowerCase().includes(term)
       );
     }
     return [];
-  }, [customerMappings, materialMappings, contracts, activeView, searchTerm]);
+  }, [customerMappings, materialMappings, polMappings, podMappings, contracts, activeView, searchTerm]);
 
   const handleSignOut = async () => {
     if (auth) {
@@ -239,47 +261,95 @@ export default function MyProduceDashboard() {
         if (!data) throw new Error("Failed to read file.");
 
         const wb = XLSX.read(data, { type: 'array' });
-        const isMaterial = activeView === 'material-mapping';
-        const targetTabName = isMaterial ? 'Material Mapping' : 'Customer Mapping';
-        const targetPath = isMaterial ? MATERIAL_PATH : CUSTOMER_PATH;
         
+        // Configuration mapping
+        let targetTabName = "";
+        let targetPath = "";
+        
+        if (activeView === 'material-mapping') {
+          targetTabName = "Material Mapping";
+          targetPath = MATERIAL_PATH;
+        } else if (activeView === 'customer-mapping') {
+          targetTabName = "Customer Mapping";
+          targetPath = CUSTOMER_PATH;
+        } else if (activeView === 'port-of-loading' || activeView === 'port-of-destination') {
+          targetTabName = "Pack type"; // Specialized requirement
+          targetPath = activeView === 'port-of-loading' ? POL_PATH : POD_PATH;
+        }
+
         const sheetName = wb.SheetNames.find(name => 
           name.toLowerCase().replace(/\s/g, '') === targetTabName.toLowerCase().replace(/\s/g, '')
-        ) || wb.SheetNames[0];
+        );
+
+        if (!sheetName) {
+          throw new Error(`Sheet "${targetTabName}" not found in Excel file.`);
+        }
         
         const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
 
         const batch = writeBatch(db);
         jsonData.forEach((row: any) => {
-          const sapcCode = row.SAPC_Code || row.Code || row['SAPC Code'];
-          const docId = isMaterial ? String(sapcCode || Math.random()) : String(row.CustomerID || row.Customer || Math.random());
-          const docRef = doc(db, targetPath, docId);
-          
-          if (isMaterial) {
-            batch.set(docRef, {
-              SAPC_Code: String(sapcCode || 'N/A'),
-              KindOfPack: String(row.KindOfPack || row['Kind of Pack'] || 'N/A'),
-              SAPC_Type: String(row.SAPC_Type || 'N/A'),
-              SAPC_Desc: String(row.SAPC_Desc || 'N/A'),
-              updatedAt: serverTimestamp()
-            });
-          } else {
-            batch.set(docRef, {
-              CustomerID: String(row.CustomerID || docId),
-              Customer: String(row.Customer || 'N/A'),
-              SAPC_Code: String(sapcCode || 'N/A'),
-              SAPC_Desc: String(row.SAPC_Desc || 'N/A'),
-              updatedAt: serverTimestamp()
-            });
+          // Robust key search
+          const findKey = (keys: string[]) => {
+            const rowKeys = Object.keys(row);
+            for (const k of keys) {
+              const match = rowKeys.find(rk => rk.toLowerCase().replace(/[\s_]/g, '') === k.toLowerCase().replace(/[\s_]/g, ''));
+              if (match) return row[match];
+            }
+            return null;
+          };
+
+          if (activeView === 'material-mapping') {
+            const sapcCode = findKey(['SAPC_Code', 'Code', 'SAPC Code']);
+            if (sapcCode) {
+              batch.set(doc(db, targetPath, String(sapcCode)), {
+                SAPC_Code: String(sapcCode),
+                KindOfPack: String(findKey(['KindOfPack', 'Kind of Pack', 'Kind']) || 'N/A'),
+                SAPC_Type: String(findKey(['SAPC_Type', 'Type']) || 'N/A'),
+                SAPC_Desc: String(findKey(['SAPC_Desc', 'Description', 'Desc']) || 'N/A'),
+                updatedAt: serverTimestamp()
+              });
+            }
+          } else if (activeView === 'customer-mapping') {
+            const customerId = findKey(['CustomerID', 'ID', 'Customer ID']);
+            const customerName = findKey(['Customer', 'Customer Name', 'Name']);
+            if (customerId || customerName) {
+              const docId = String(customerId || customerName);
+              batch.set(doc(db, targetPath, docId), {
+                CustomerID: String(customerId || docId),
+                Customer: String(customerName || 'N/A'),
+                SAPC_Code: String(findKey(['SAPC_Code', 'Code', 'SAPC Code']) || 'N/A'),
+                SAPC_Desc: String(findKey(['SAPC_Desc', 'Description', 'Desc']) || 'N/A'),
+                updatedAt: serverTimestamp()
+              });
+            }
+          } else if (activeView === 'port-of-loading') {
+            const pol = findKey(['PORT_OF_LOADING', 'PORT OF LOADING', 'POL']);
+            if (pol) {
+              batch.set(doc(db, targetPath, String(pol)), {
+                portName: String(pol),
+                updatedAt: serverTimestamp()
+              });
+            }
+          } else if (activeView === 'port-of-destination') {
+            const pod = findKey(['PORT_OF_DESTINATION', 'PORT OF DESTINATION', 'POD']);
+            if (pod) {
+              batch.set(doc(db, targetPath, String(pod)), {
+                portName: String(pod),
+                updatedAt: serverTimestamp()
+              });
+            }
           }
         });
+
         await batch.commit();
-        toast({ title: "Import Successful", description: `Uploaded ${jsonData.length} records.` });
+        toast({ title: "Import Successful", description: `Uploaded records to ${activeView}.` });
       } catch (err: any) {
         toast({ variant: "destructive", title: "Import Failed", description: err.message });
       } finally {
         setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
     reader.readAsArrayBuffer(file);
@@ -555,11 +625,11 @@ export default function MyProduceDashboard() {
     { id: 'contracts', title: "Contract Management", description: "Manage customer contracts and loading advice from emails.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
     { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes and IDs.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
     { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes and Pack Types.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
+    { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
+    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" },
     { id: 'brand-mapping', title: "Brand Mapping", description: "Configure brand labels.", icon: <Tag className="h-5 w-5" />, color: "bg-slate-600" },
     { id: 'profit-center-mapping', title: "Profit Center Mapping", description: "Assign production blocks.", icon: <DollarSign className="h-5 w-5" />, color: "bg-amber-600" },
-    { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" },
-    { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
-    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
+    { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" }
   ];
 
   const renderContent = () => {
@@ -619,19 +689,30 @@ export default function MyProduceDashboard() {
     if (activeView === 'contract-details') return renderContractDetails();
 
     const isMaterialView = activeView === 'material-mapping';
-    const loading = isMaterialView ? materialLoading : customerLoading;
+    const isPolView = activeView === 'port-of-loading';
+    const isPodView = activeView === 'port-of-destination';
+    
+    let loading = false;
+    if (isMaterialView) loading = materialLoading;
+    else if (isPolView) loading = polLoading;
+    else if (isPodView) loading = podLoading;
+    else loading = customerLoading;
 
     return (
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="h-5 w-5" /></Button>
-            <h2 className="text-2xl font-bold text-gray-900">{isMaterialView ? 'Material Mapping' : 'Customer Mapping'}</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              {isMaterialView ? 'Material Mapping' : 
+               isPolView ? 'Port of Loading' : 
+               isPodView ? 'Port of Destination' : 'Customer Mapping'}
+            </h2>
           </div>
           <div className="flex items-center space-x-2">
             <div className="relative w-48 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input placeholder={`Search ${isMaterialView ? 'materials' : 'customers'}...`} className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <Input placeholder="Search records..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             
             <Input type="file" accept=".xlsx, .xls" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
@@ -651,6 +732,11 @@ export default function MyProduceDashboard() {
                     <TableHead className="font-bold text-gray-600">Kind of Pack</TableHead>
                     <TableHead className="font-bold text-gray-600">SAPC Type</TableHead>
                     <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
+                  </>
+                ) : (isPolView || isPodView) ? (
+                  <>
+                    <TableHead className="font-bold text-gray-600">Port Name</TableHead>
+                    <TableHead className="font-bold text-gray-600">Last Updated</TableHead>
                   </>
                 ) : (
                   <>
@@ -677,6 +763,11 @@ export default function MyProduceDashboard() {
                       <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700">{m.SAPC_Type}</span></TableCell>
                       <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
                     </>
+                  ) : (isPolView || isPodView) ? (
+                    <>
+                      <TableCell className="font-bold text-gray-900">{m.portName}</TableCell>
+                      <TableCell className="text-gray-400 text-xs">{m.updatedAt?.toDate()?.toLocaleString() || 'N/A'}</TableCell>
+                    </>
                   ) : (
                     <>
                       <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.CustomerID}</TableCell>
@@ -685,7 +776,14 @@ export default function MyProduceDashboard() {
                       <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
                     </>
                   )}
-                  <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, isMaterialView ? MATERIAL_PATH : CUSTOMER_PATH, m.id))} className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button></TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, 
+                      isMaterialView ? MATERIAL_PATH : 
+                      isPolView ? POL_PATH : 
+                      isPodView ? POD_PATH : CUSTOMER_PATH, m.id))} className="text-gray-400 hover:text-red-500">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -721,6 +819,8 @@ export default function MyProduceDashboard() {
                activeView === 'configuration' ? 'System Configuration' : 
                activeView === 'contracts' ? 'Contract Management' :
                activeView === 'contract-details' ? 'Contract Details' :
+               activeView === 'port-of-loading' ? 'Port of Loading' :
+               activeView === 'port-of-destination' ? 'Port of Destination' :
                activeView === 'material-mapping' ? 'Material Mapping' : 'Customer Mapping'}
             </h1>
             <p className="text-gray-500 font-semibold mt-1">TADECO Agricultural Production Portal</p>

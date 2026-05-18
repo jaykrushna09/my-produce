@@ -31,15 +31,33 @@
       "description": "Mapping of materials to SAP codes with pack type details.",
       "type": "object",
       "properties": {
-        "MaterialID": { "type": "string" },
-        "Material": { "type": "string" },
-        "KindOfPack": { "type": "string" },
         "SAPC_Code": { "type": "string" },
+        "KindOfPack": { "type": "string" },
         "SAPC_Type": { "type": "string" },
         "SAPC_Desc": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["MaterialID", "Material"]
+      "required": ["SAPC_Code"]
+    },
+    "PortOfLoading": {
+      "title": "Port of Loading",
+      "description": "Mapping of origin ports.",
+      "type": "object",
+      "properties": {
+        "portName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["portName"]
+    },
+    "PortOfDestination": {
+      "title": "Port of Destination",
+      "description": "Mapping of destination ports.",
+      "type": "object",
+      "properties": {
+        "portName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["portName"]
     },
     "Contract": {
       "title": "Production Contract",
@@ -94,7 +112,15 @@
       "schema": { "$ref": "#/backend/entities/MaterialMapping" },
       "description": "Material mapping records"
     },
-    "/app_configuration/contracts/contract_saving/{contractId}": {
+    "/app_configuration/pol_mapping/pol_saving/{portId}": {
+      "schema": { "$ref": "#/backend/entities/PortOfLoading" },
+      "description": "Port of Loading records"
+    },
+    "/app_configuration/pod_mapping/pod_saving/{portId}": {
+      "schema": { "$ref": "#/backend/entities/PortOfDestination" },
+      "description": "Port of Destination records"
+    },
+    "/app_data/contracts/contract_saving/{contractId}": {
       "schema": { "$ref": "#/backend/entities/Contract" },
       "description": "Root contract records"
     },
