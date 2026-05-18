@@ -36,7 +36,8 @@ import {
   Ship,
   FileSignature,
   Mail,
-  Scale
+  Scale,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -86,6 +87,9 @@ import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'contracts' | 'contract-details';
 
@@ -114,8 +118,13 @@ export default function MyProduceDashboard() {
     farm: 'TADECO',
     pol: '',
     totalVolume: '',
-    notes: '' 
+    notes: '',
+    etd: '',
+    shippingLine: '',
+    palletizedType: 'Palletized' as 'Palletized' | 'Non Palletized'
   });
+
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   // Protect the route
   useEffect(() => {
@@ -145,6 +154,8 @@ export default function MyProduceDashboard() {
     return query(collection(db, POL_PATH), orderBy('portName', 'asc'));
   }, [db]);
 
+  const polMappings = useCollection(polMappingsQuery).data;
+
   const podMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, POD_PATH), orderBy('portName', 'asc'));
@@ -162,7 +173,6 @@ export default function MyProduceDashboard() {
   
   const { data: customerMappings, loading: customerLoading } = useCollection(customerMappingsQuery);
   const { data: materialMappings, loading: materialLoading } = useCollection(materialMappingsQuery);
-  const { data: polMappings, loading: polLoading } = useCollection(polMappingsQuery);
   const { data: podMappings, loading: podLoading } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
   const { data: contractItems, loading: itemsLoading } = useCollection(contractItemsQuery);
@@ -215,44 +225,29 @@ export default function MyProduceDashboard() {
       await setDoc(doc(db, CONTRACT_PATH, contractId), {
         contractId,
         ...newContract,
+        etd: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '',
         status: 'pending',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       setIsNewContractOpen(false);
-      setNewContract({ customerName: '', contractRef: '', senderEmail: '', weekNumber: '', farm: 'TADECO', pol: '', totalVolume: '', notes: '' });
+      setNewContract({ 
+        customerName: '', 
+        contractRef: '', 
+        senderEmail: '', 
+        weekNumber: '', 
+        farm: 'TADECO', 
+        pol: '', 
+        totalVolume: '', 
+        notes: '',
+        etd: '',
+        shippingLine: '',
+        palletizedType: 'Palletized'
+      });
+      setSelectedDate(undefined);
       toast({ title: "Contract Created", description: "New contract has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
-    }
-  };
-
-  const handleAiExtraction = async () => {
-    if (!newContract.notes) {
-      toast({ variant: "destructive", title: "Input Required", description: "No context provided for extraction." });
-      return;
-    }
-
-    setIsExtracting(true);
-    try {
-      const result = await extractContractData({ text: newContract.notes });
-      if (result.header) {
-        setNewContract(prev => ({
-          ...prev,
-          weekNumber: result.header.weekNumber || prev.weekNumber,
-          farm: result.header.farm || prev.farm,
-          pol: result.header.pol || prev.pol,
-          customerName: result.header.customerName || prev.customerName,
-          senderEmail: result.header.senderEmail || prev.senderEmail,
-          contractRef: result.header.subject || prev.contractRef,
-          totalVolume: result.header.totalVolume || prev.totalVolume
-        }));
-        toast({ title: "AI Extraction Successful", description: "Contract details have been pre-filled." });
-      }
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "AI Failed", description: "Could not extract details." });
-    } finally {
-      setIsExtracting(false);
     }
   };
 
@@ -396,11 +391,11 @@ export default function MyProduceDashboard() {
             <DialogTrigger asChild>
               <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white"><Plus className="mr-2 h-4 w-4" /> New Contract</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl overflow-y-auto max-h-[90vh]">
+            <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
               <DialogHeader>
                 <DialogTitle>Create New Production Contract</DialogTitle>
               </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
+              <div className="grid grid-cols-2 gap-6 py-4">
                 <div className="space-y-2">
                   <Label>Customer Name</Label>
                   <Select 
@@ -462,6 +457,54 @@ export default function MyProduceDashboard() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label>ETD (Estimated Time of Departure)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !selectedDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Shipping Line</Label>
+                  <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select 
+                    onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
+                    value={newContract.palletizedType}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Palletized">Palletized</SelectItem>
+                      <SelectItem value="Non Palletized">Non Palletized</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label>Total Volume (Vans/Boxes)</Label>
                   <Input value={newContract.totalVolume} onChange={(e) => setNewContract({...newContract, totalVolume: e.target.value})} placeholder="92vans ARH/CP18" />
@@ -604,6 +647,18 @@ export default function MyProduceDashboard() {
                 <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
                 <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
               </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
+                <p className="text-xs font-bold text-gray-700">{contract.etd || 'Not Set'}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-gray-400 uppercase">SHIPPING LINE</Label>
+                <p className="text-xs font-bold text-gray-700">{contract.shippingLine || 'Not Set'}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-gray-400 uppercase">TYPE</Label>
+                <p className="text-xs font-bold text-gray-700">{contract.palletizedType || 'Not Set'}</p>
+              </div>
             </CardContent>
           </Card>
 
@@ -619,9 +674,9 @@ export default function MyProduceDashboard() {
                   total: 0,
                   specs: 'A456',
                   limitation: '',
-                  palletized: 'Breakbulk',
-                  shippingLines: '',
-                  etd: '',
+                  palletized: contract.palletizedType || 'Breakbulk',
+                  shippingLines: contract.shippingLine || '',
+                  etd: contract.etd || '',
                   customerContractNumber: '',
                   updatedAt: serverTimestamp()
                 });
@@ -742,7 +797,7 @@ export default function MyProduceDashboard() {
     
     let loading = false;
     if (isMaterialView) loading = materialLoading;
-    else if (isPolView) loading = polLoading;
+    else if (isPolView) loading = false; 
     else if (isPodView) loading = podLoading;
     else loading = customerLoading;
 
