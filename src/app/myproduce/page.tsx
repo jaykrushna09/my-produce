@@ -271,12 +271,9 @@ export default function MyProduceDashboard() {
         } else if (activeView === 'customer-mapping') {
           targetTabName = "Customer Mapping";
           targetPath = CUSTOMER_PATH;
-        } else if (activeView === 'port-of-loading') {
+        } else if (activeView === 'port-of-loading' || activeView === 'port-of-destination') {
           targetTabName = "Pack Type";
-          targetPath = POL_PATH;
-        } else if (activeView === 'port-of-destination') {
-          targetTabName = "Pack Type";
-          targetPath = POD_PATH;
+          targetPath = activeView === 'port-of-loading' ? POL_PATH : POD_PATH;
         }
 
         const sheetName = wb.SheetNames.find(name => 
@@ -310,8 +307,8 @@ export default function MyProduceDashboard() {
           if (activeView === 'material-mapping') {
             const sapcCode = findKey(['SAPC_Code', 'SAPC Code', 'Code']);
             if (sapcCode) {
-              batch.set(doc(db, targetPath, String(sapcCode)), {
-                SAPC_Code: String(sapcCode),
+              batch.set(doc(db, targetPath, String(sapcCode).trim()), {
+                SAPC_Code: String(sapcCode).trim(),
                 KindOfPack: String(findKey(['KindOfPack', 'Kind of Pack', 'Pack']) || 'N/A'),
                 SAPC_Type: String(findKey(['SAPC_Type', 'SAPC Type', 'Type']) || 'N/A'),
                 SAPC_Desc: String(findKey(['SAPC_Desc', 'SAPC Description', 'Description']) || 'N/A'),
@@ -323,10 +320,10 @@ export default function MyProduceDashboard() {
             const customerId = findKey(['CustomerID', 'Customer ID', 'ID']);
             const customerName = findKey(['Customer', 'Customer Name', 'Name']);
             if (customerId || customerName) {
-              const docId = String(customerId || customerName);
+              const docId = String(customerId || customerName).trim();
               batch.set(doc(db, targetPath, docId), {
-                CustomerID: String(customerId || docId),
-                Customer: String(customerName || 'N/A'),
+                CustomerID: String(customerId || docId).trim(),
+                Customer: String(customerName || 'N/A').trim(),
                 SAPC_Code: String(findKey(['SAPC_Code', 'SAPC Code', 'Code']) || 'N/A'),
                 SAPC_Desc: String(findKey(['SAPC_Desc', 'SAPC Description', 'Description']) || 'N/A'),
                 updatedAt: serverTimestamp()
@@ -336,27 +333,33 @@ export default function MyProduceDashboard() {
           } else if (activeView === 'port-of-loading') {
             const pol = findKey(['PORT_OF_LOADING', 'PORT OF LOADING', 'POL']);
             if (pol) {
-              batch.set(doc(db, targetPath, String(pol)), {
-                portName: String(pol),
-                updatedAt: serverTimestamp()
-              });
-              count++;
+              const portName = String(pol).trim();
+              if (portName) {
+                batch.set(doc(db, targetPath, portName), {
+                  portName: portName,
+                  updatedAt: serverTimestamp()
+                });
+                count++;
+              }
             }
           } else if (activeView === 'port-of-destination') {
             const pod = findKey(['PORT_OF_DESTINATION', 'PORT OF DESTINATION', 'POD']);
             if (pod) {
-              batch.set(doc(db, targetPath, String(pod)), {
-                portName: String(pod),
-                updatedAt: serverTimestamp()
-              });
-              count++;
+              const portName = String(pod).trim();
+              if (portName) {
+                batch.set(doc(db, targetPath, portName), {
+                  portName: portName,
+                  updatedAt: serverTimestamp()
+                });
+                count++;
+              }
             }
           }
         });
 
         if (count > 0) {
           await batch.commit();
-          toast({ title: "Import Successful", description: `Uploaded ${count} records to ${activeView}.` });
+          toast({ title: "Import Successful", description: `Uploaded ${count} unique records to ${activeView}.` });
         } else {
           toast({ variant: "destructive", title: "Import Failed", description: "No valid records were identified. Check your column headers." });
         }
