@@ -114,7 +114,7 @@ export default function MyProduceDashboard() {
     farm: 'TADECO',
     pol: 'DAVAO',
     totalVolume: '',
-    notes: ''
+    notes: '' // Keeping notes in state for AI logic if needed later, but removing UI
   });
 
   // Protect the route
@@ -229,7 +229,7 @@ export default function MyProduceDashboard() {
 
   const handleAiExtraction = async () => {
     if (!newContract.notes) {
-      toast({ variant: "destructive", title: "Input Required", description: "Please paste the email content into the notes field first." });
+      toast({ variant: "destructive", title: "Input Required", description: "Email content is missing." });
       return;
     }
 
@@ -401,27 +401,6 @@ export default function MyProduceDashboard() {
                 <DialogTitle>Create New Production Contract</DialogTitle>
               </DialogHeader>
               <div className="grid grid-cols-2 gap-4 py-4">
-                <div className="col-span-2 space-y-2">
-                  <Label>Email Content / Loading Advice Text</Label>
-                  <div className="flex gap-2">
-                    <Textarea 
-                      value={newContract.notes} 
-                      onChange={(e) => setNewContract({...newContract, notes: e.target.value})} 
-                      placeholder="Paste the full email here to auto-fill..." 
-                      className="h-24 flex-1" 
-                    />
-                    <Button 
-                      variant="outline" 
-                      onClick={handleAiExtraction} 
-                      disabled={isExtracting} 
-                      className="h-auto border-anflocor-green text-anflocor-green"
-                    >
-                      {isExtracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      <span className="sr-only">AI Fill</span>
-                    </Button>
-                  </div>
-                </div>
-
                 <div className="space-y-2">
                   <Label>Customer Name</Label>
                   <Select 
@@ -539,7 +518,7 @@ export default function MyProduceDashboard() {
 
     const handleBulkAiFill = async () => {
       if (!contract.notes) {
-        toast({ variant: "destructive", title: "Error", description: "No notes/email text found for this contract to parse items." });
+        toast({ variant: "destructive", title: "Error", description: "No email context found for this contract to parse items." });
         return;
       }
       setIsExtracting(true);
@@ -601,12 +580,6 @@ export default function MyProduceDashboard() {
               <div className="space-y-1">
                 <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
                 <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
-              </div>
-              <div className="pt-4 border-t">
-                <Label className="text-[10px] text-gray-400 uppercase">EMAIL SOURCE</Label>
-                <div className="mt-2 p-3 bg-white rounded border text-[10px] text-gray-500 leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
-                  {contract.notes}
-                </div>
               </div>
             </CardContent>
           </Card>
