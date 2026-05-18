@@ -23,7 +23,8 @@ import {
   ArrowLeft,
   Loader2,
   Trash2,
-  Search
+  Search,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -168,12 +169,13 @@ export default function MyProduceDashboard() {
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
 
         if (jsonData.length === 0) {
-          toast({ variant: "destructive", title: "Empty Sheet", description: `No data found in sheet: ${sheetName}` });
+          toast({ variant: "destructive", title: "Empty Sheet", description: `No records found in sheet: ${sheetName}` });
           setIsUploading(false);
           return;
         }
 
         let totalProcessed = 0;
+        let skippedCount = 0;
         const CHUNK_SIZE = 400;
 
         for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
@@ -190,20 +192,20 @@ export default function MyProduceDashboard() {
               return key ? row[key] : null;
             };
 
+            // Enhanced key matching for IDs and names
             const id = isMaterial 
-              ? getVal(['MaterialID', 'Material_ID', 'ID', 'id', 'Code', 'MaterialCode']) 
-              : getVal(['CustomerID', 'ID', 'id', 'Customer_ID', 'CustomerCode']);
+              ? getVal(['MaterialID', 'Material_ID', 'ID', 'id', 'Code', 'MaterialCode', 'Material']) 
+              : getVal(['CustomerID', 'ID', 'id', 'Customer_ID', 'CustomerCode', 'Customer']);
             
             const name = isMaterial
               ? getVal(['Material', 'MaterialName', 'Material Name', 'Name'])
-              : getVal(['Customer', 'CustomerName', 'Customer Name', 'Name']);
+              : getVal(['Customer', 'CustomerName', 'Customer Name', 'Name', 'CustomerMapping']);
               
-            const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code']);
-            const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc']);
+            const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code', 'SAPCCode']);
+            const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc', 'SAPCDesc']);
             
-            // New fields for Material Mapping
-            const kindOfPack = isMaterial ? getVal(['KindOfPack', 'Kind Of Pack', 'kind_of_pack', 'PackKind']) : null;
-            const sapcType = isMaterial ? getVal(['SAPC_Type', 'SAPC Type', 'sapc_type', 'Type']) : null;
+            const kindOfPack = isMaterial ? getVal(['KindOfPack', 'Kind Of Pack', 'kind_of_pack', 'PackKind', 'Pack_Kind']) : null;
+            const sapcType = isMaterial ? getVal(['SAPC_Type', 'SAPC Type', 'sapc_type', 'Type', 'SAPCType']) : null;
 
             if (id) {
               const docId = String(id).trim();
@@ -211,7 +213,7 @@ export default function MyProduceDashboard() {
               
               const dataToSet: any = isMaterial ? {
                 MaterialID: docId,
-                Material: String(name || 'N/A').trim(),
+                Material: String(name || docId).trim(),
                 KindOfPack: String(kindOfPack || 'N/A').trim(),
                 SAPC_Code: String(sapcCode || 'N/A').trim(),
                 SAPC_Type: String(sapcType || 'N/A').trim(),
@@ -219,7 +221,7 @@ export default function MyProduceDashboard() {
                 updatedAt: serverTimestamp(),
               } : {
                 CustomerID: docId,
-                Customer: String(name || 'N/A').trim(),
+                Customer: String(name || docId).trim(),
                 SAPC_Code: String(sapcCode || 'N/A').trim(),
                 SAPC_Desc: String(sapcDesc || 'N/A').trim(),
                 updatedAt: serverTimestamp(),
@@ -227,6 +229,8 @@ export default function MyProduceDashboard() {
               
               batch.set(docRef, dataToSet);
               chunkCount++;
+            } else {
+              skippedCount++;
             }
           });
 
@@ -236,7 +240,18 @@ export default function MyProduceDashboard() {
           }
         }
 
-        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records to ${targetTabName}.` });
+        if (totalProcessed === 0) {
+          toast({ 
+            variant: "destructive", 
+            title: "No Valid Records", 
+            description: `Sheet found, but no rows had a valid ID column. Checked for headers like: ${isMaterial ? 'MaterialID, ID, Material' : 'CustomerID, ID, Customer'}` 
+          });
+        } else {
+          toast({ 
+            title: "Import Complete", 
+            description: `Successfully imported ${totalProcessed} records. ${skippedCount > 0 ? `(${skippedCount} invalid rows skipped)` : ''}` 
+          });
+        }
       } catch (err: any) {
         console.error("Excel import error:", err);
         toast({ variant: "destructive", title: "Import Failed", description: err.message });
