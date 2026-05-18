@@ -35,9 +35,9 @@
       "schema": { "$ref": "#/backend/entities/UserProfile" },
       "description": "User profile document"
     },
-    "/app_configuration/customer_mapping/records/{mappingId}": {
+    "/app_configuration/customer_mapping/customer_saving/{mappingId}": {
       "schema": { "$ref": "#/backend/entities/CustomerMapping" },
-      "description": "Customer mapping records stored in a nested structure"
+      "description": "Customer mapping records stored in the customer_saving path"
     }
   }
 }

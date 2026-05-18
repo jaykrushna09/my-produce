@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -74,8 +75,8 @@ export default function MyProduceDashboard() {
     }
   }, [user, userLoading, router]);
 
-  // The path structure requested
-  const DATA_PATH = 'app_configuration/customer_mapping/records';
+  // Updated path structure as requested
+  const DATA_PATH = 'app_configuration/customer_mapping/customer_saving';
   const TEST_PATH = 'app_configuration/customer_mapping/test_writes';
 
   const customerMappingsQuery = useMemoFirebase(() => {
@@ -183,7 +184,6 @@ export default function MyProduceDashboard() {
           let chunkCount = 0;
 
           chunk.forEach((row) => {
-            // Helper to get value from row with multiple possible keys (case insensitive)
             const getVal = (possibleKeys: string[]) => {
               const keys = Object.keys(row);
               const key = keys.find(k => possibleKeys.some(pk => k.toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase().replace(/[\s_]/g, '')));
@@ -222,7 +222,7 @@ export default function MyProduceDashboard() {
           }
         }
 
-        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records from '${targetSheetName}'.` });
+        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records to '${DATA_PATH}'.` });
       } catch (err: any) {
         console.error("Excel import error:", err);
       } finally {
