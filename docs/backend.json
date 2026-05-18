@@ -49,27 +49,33 @@
         "contractId": { "type": "string" },
         "contractRef": { "type": "string", "description": "Customer reference number" },
         "customerName": { "type": "string" },
+        "weekNumber": { "type": "string" },
+        "farm": { "type": "string" },
+        "pol": { "type": "string", "description": "Port of Loading" },
         "receivedAt": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["pending", "active", "completed", "cancelled"] },
-        "totalQuantity": { "type": "number" },
-        "notes": { "type": "string" }
+        "notes": { "type": "string" },
+        "attachmentUrl": { "type": "string" }
       },
       "required": ["contractId", "customerName", "status"]
     },
     "ContractLineItem": {
       "title": "Contract Line Item",
-      "description": "Specific material and order details within a contract.",
+      "description": "Specific loading advice row from the customer.",
       "type": "object",
       "properties": {
         "itemId": { "type": "string" },
-        "materialCode": { "type": "string" },
-        "quantity": { "type": "number" },
-        "uom": { "type": "string", "description": "Unit of measure" },
-        "packType": { "type": "string" },
-        "specifications": { "type": "string", "description": "Specific line item orders/specs" },
-        "status": { "type": "string" }
+        "pod": { "type": "string", "description": "Port of Destination" },
+        "total": { "type": "number" },
+        "specs": { "type": "string" },
+        "limitation": { "type": "string" },
+        "palletized": { "type": "string", "enum": ["Palletized", "Breakbulk", "Non-Palletized"] },
+        "shippingLines": { "type": "string" },
+        "etd": { "type": "string" },
+        "customerContractNumber": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["itemId", "materialCode", "quantity"]
+      "required": ["itemId", "pod", "total"]
     }
   },
   "auth": {

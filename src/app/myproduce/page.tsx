@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -27,7 +28,13 @@ import {
   Plus,
   Edit,
   FileCheck,
-  ClipboardList
+  ClipboardList,
+  Sparkles,
+  Paperclip,
+  CalendarDays,
+  MapPin,
+  Ship,
+  FileSignature
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -58,6 +65,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { 
@@ -69,11 +77,13 @@ import {
   query,
   orderBy,
   deleteDoc,
-  addDoc
+  addDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
+import { extractContractData } from '@/ai/flows/extract-contract-flow';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'contracts' | 'contract-details';
 
@@ -84,10 +94,12 @@ export default function MyProduceDashboard() {
   const { user, loading: userLoading } = useUser();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentRef = useRef<HTMLInputElement>(null);
   
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Contract Modal State
@@ -95,6 +107,9 @@ export default function MyProduceDashboard() {
   const [newContract, setNewContract] = useState({
     customerName: '',
     contractRef: '',
+    weekNumber: '',
+    farm: 'TADECO',
+    pol: 'DAVAO',
     notes: ''
   });
 
@@ -138,8 +153,7 @@ export default function MyProduceDashboard() {
     if (activeView === 'material-mapping') {
       return materialMappings.filter(m => 
         String(m.SAPC_Code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(m.SAPC_Desc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(m.KindOfPack || '').toLowerCase().includes(searchTerm.toLowerCase())
+        String(m.SAPC_Desc || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
     if (activeView === 'customer-mapping') {
@@ -151,22 +165,12 @@ export default function MyProduceDashboard() {
     if (activeView === 'contracts') {
       return contracts.filter(c => 
         String(c.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(c.contractRef || '').toLowerCase().includes(searchTerm.toLowerCase())
+        String(c.contractRef || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(c.weekNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
     return [];
   }, [customerMappings, materialMappings, contracts, activeView, searchTerm]);
-
-  const configOptions = [
-    { id: 'contracts', title: "Contract Management", description: "Manage customer contracts and orders from emails.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
-    { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes and IDs.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
-    { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes and Pack Types.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
-    { id: 'brand-mapping', title: "Brand Mapping", description: "Configure brand labels.", icon: <Tag className="h-5 w-5" />, color: "bg-slate-600" },
-    { id: 'profit-center-mapping', title: "Profit Center Mapping", description: "Assign production blocks.", icon: <DollarSign className="h-5 w-5" />, color: "bg-amber-600" },
-    { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" },
-    { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
-    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
-  ];
 
   const handleSignOut = async () => {
     if (auth) {
@@ -184,18 +188,42 @@ export default function MyProduceDashboard() {
       const contractId = `CTR-${Date.now()}`;
       await setDoc(doc(db, CONTRACT_PATH, contractId), {
         contractId,
-        customerName: newContract.customerName,
-        contractRef: newContract.contractRef || 'N/A',
-        notes: newContract.notes,
+        ...newContract,
         status: 'pending',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       setIsNewContractOpen(false);
-      setNewContract({ customerName: '', contractRef: '', notes: '' });
+      setNewContract({ customerName: '', contractRef: '', weekNumber: '', farm: 'TADECO', pol: 'DAVAO', notes: '' });
       toast({ title: "Contract Created", description: "New contract has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
+    }
+  };
+
+  const handleAiExtraction = async () => {
+    if (!newContract.notes) {
+      toast({ variant: "destructive", title: "Input Required", description: "Please paste the email content into the notes field first." });
+      return;
+    }
+
+    setIsExtracting(true);
+    try {
+      const result = await extractContractData({ text: newContract.notes });
+      if (result.header) {
+        setNewContract(prev => ({
+          ...prev,
+          weekNumber: result.header.weekNumber || prev.weekNumber,
+          farm: result.header.farm || prev.farm,
+          pol: result.header.pol || prev.pol,
+          customerName: result.header.customerName || prev.customerName
+        }));
+        toast({ title: "AI Extraction Successful", description: "Contract header details have been filled." });
+      }
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "AI Failed", description: "Could not extract details from text." });
+    } finally {
+      setIsExtracting(false);
     }
   };
 
@@ -224,37 +252,30 @@ export default function MyProduceDashboard() {
 
         const batch = writeBatch(db);
         jsonData.forEach((row: any) => {
-          // Robust header matching
-          const sapcCode = row.SAPC_Code || row.Code || row['SAPC Code'] || row['SAPC_Code'];
-          const kindOfPack = row.KindOfPack || row['Kind of Pack'] || row.PackType || row['Pack Type'];
-          const sapcType = row.SAPC_Type || row['SAPC Type'] || row.Type;
-          const sapcDesc = row.SAPC_Desc || row['SAPC Description'] || row.Description || row.Desc;
-          const customerName = row.Customer || row['Customer Name'] || row.Name;
-          const customerId = row.CustomerID || row['Customer ID'] || row.ID;
-
-          const docId = isMaterial ? String(sapcCode || Math.random()) : String(customerId || customerName || Math.random());
+          const sapcCode = row.SAPC_Code || row.Code || row['SAPC Code'];
+          const docId = isMaterial ? String(sapcCode || Math.random()) : String(row.CustomerID || row.Customer || Math.random());
           const docRef = doc(db, targetPath, docId);
           
           if (isMaterial) {
             batch.set(docRef, {
               SAPC_Code: String(sapcCode || 'N/A'),
-              KindOfPack: String(kindOfPack || 'N/A'),
-              SAPC_Type: String(sapcType || 'N/A'),
-              SAPC_Desc: String(sapcDesc || 'N/A'),
+              KindOfPack: String(row.KindOfPack || row['Kind of Pack'] || 'N/A'),
+              SAPC_Type: String(row.SAPC_Type || 'N/A'),
+              SAPC_Desc: String(row.SAPC_Desc || 'N/A'),
               updatedAt: serverTimestamp()
             });
           } else {
             batch.set(docRef, {
-              CustomerID: String(customerId || docId),
-              Customer: String(customerName || 'N/A'),
+              CustomerID: String(row.CustomerID || docId),
+              Customer: String(row.Customer || 'N/A'),
               SAPC_Code: String(sapcCode || 'N/A'),
-              SAPC_Desc: String(sapcDesc || 'N/A'),
+              SAPC_Desc: String(row.SAPC_Desc || 'N/A'),
               updatedAt: serverTimestamp()
             });
           }
         });
         await batch.commit();
-        toast({ title: "Import Successful", description: `Uploaded ${jsonData.length} records to ${targetTabName}.` });
+        toast({ title: "Import Successful", description: `Uploaded ${jsonData.length} records.` });
       } catch (err: any) {
         toast({ variant: "destructive", title: "Import Failed", description: err.message });
       } finally {
@@ -280,12 +301,12 @@ export default function MyProduceDashboard() {
             <DialogTrigger asChild>
               <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white"><Plus className="mr-2 h-4 w-4" /> New Contract</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create New Production Contract</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="col-span-2 space-y-2">
                   <Label>Customer Name</Label>
                   <Select 
                     onValueChange={(value) => setNewContract({...newContract, customerName: value})}
@@ -295,23 +316,45 @@ export default function MyProduceDashboard() {
                       <SelectValue placeholder="Select a mapped customer" />
                     </SelectTrigger>
                     <SelectContent>
-                      {customerMappings.length === 0 ? (
-                        <div className="p-2 text-xs text-muted-foreground">No customers mapped. Please import customers first.</div>
-                      ) : (
-                        customerMappings.map((c: any) => (
-                          <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-                        ))
-                      )}
+                      {customerMappings.map((c: any) => (
+                        <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Customer Reference / Email Subject</Label>
-                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="e.g. Order #2024-001" />
+                  <Label>Week Number</Label>
+                  <Input value={newContract.weekNumber} onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} placeholder="e.g. WK16" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Contract Notes</Label>
-                  <Textarea value={newContract.notes} onChange={(e) => setNewContract({...newContract, notes: e.target.value})} placeholder="Paste email content or additional notes here..." />
+                  <Label>Contract Reference</Label>
+                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Order #2024-001" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Farm</Label>
+                  <Input value={newContract.farm} onChange={(e) => setNewContract({...newContract, farm: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>POL (Port of Loading)</Label>
+                  <Input value={newContract.pol} onChange={(e) => setNewContract({...newContract, pol: e.target.value})} />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label>Email Content / Loading Advice Text</Label>
+                    <Button variant="outline" size="sm" onClick={handleAiExtraction} disabled={isExtracting} className="h-7 text-xs border-anflocor-green text-anflocor-green hover:bg-anflocor-green/5">
+                      {isExtracting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                      Fill Header with AI
+                    </Button>
+                  </div>
+                  <Textarea value={newContract.notes} onChange={(e) => setNewContract({...newContract, notes: e.target.value})} placeholder="Paste email content here..." className="h-32" />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label>Attach PDF (Optional)</Label>
+                  <div className="flex items-center gap-2 border-2 border-dashed rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => attachmentRef.current?.click()}>
+                    <Paperclip className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-500 font-medium">Click to select PDF Loading Advice</span>
+                    <input type="file" className="hidden" ref={attachmentRef} accept=".pdf" />
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -327,25 +370,28 @@ export default function MyProduceDashboard() {
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead className="font-bold">Date Received</TableHead>
+              <TableHead className="font-bold">WK NO</TableHead>
               <TableHead className="font-bold">Customer</TableHead>
               <TableHead className="font-bold">Reference</TableHead>
+              <TableHead className="font-bold">Farm / POL</TableHead>
               <TableHead className="font-bold">Status</TableHead>
               <TableHead className="text-right font-bold">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contractsLoading ? (
-              <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
             ) : filteredData.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No contracts found. Create one to begin.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="h-48 text-center text-gray-400 font-medium">No contracts found.</TableCell></TableRow>
             ) : filteredData.map((c: any) => (
               <TableRow key={c.id} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
-                <TableCell className="text-gray-600 text-sm">
-                  {c.receivedAt?.toDate().toLocaleDateString() || 'Pending'}
-                </TableCell>
+                <TableCell><Badge variant="outline" className="font-bold text-anflocor-green">{c.weekNumber || 'N/A'}</Badge></TableCell>
                 <TableCell className="font-bold text-gray-900">{c.customerName}</TableCell>
                 <TableCell className="text-gray-500 text-sm">{c.contractRef}</TableCell>
+                <TableCell className="text-xs font-medium text-gray-600">
+                  <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {c.farm}</div>
+                  <div className="flex items-center gap-1 text-gray-400"><Ship className="h-3 w-3" /> {c.pol}</div>
+                </TableCell>
                 <TableCell>
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
@@ -354,8 +400,8 @@ export default function MyProduceDashboard() {
                     {c.status}
                   </span>
                 </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db!, CONTRACT_PATH, c.id)); }}><Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" /></Button>
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, CONTRACT_PATH, c.id))}><Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" /></Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -369,75 +415,131 @@ export default function MyProduceDashboard() {
     const contract = contracts.find(c => c.id === selectedContractId);
     if (!contract) return null;
 
+    const handleBulkAiFill = async () => {
+      if (!contract.notes) {
+        toast({ variant: "destructive", title: "Error", description: "No notes/email text found for this contract to parse items." });
+        return;
+      }
+      setIsExtracting(true);
+      try {
+        const result = await extractContractData({ text: contract.notes });
+        if (result.items && result.items.length > 0) {
+          const batch = writeBatch(db!);
+          result.items.forEach(item => {
+            const itemRef = doc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`));
+            batch.set(itemRef, {
+              ...item,
+              updatedAt: serverTimestamp()
+            });
+          });
+          await batch.commit();
+          toast({ title: "Items Extracted", description: `Successfully added ${result.items.length} line items.` });
+        }
+      } catch (err) {
+        toast({ variant: "destructive", title: "AI Error", description: "Could not parse items from text." });
+      } finally {
+        setIsExtracting(false);
+      }
+    };
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={() => setActiveView('contracts')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
-            <p className="text-sm text-gray-500">Contract Reference: {contract.contractRef}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="icon" onClick={() => setActiveView('contracts')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
+                <Badge className="bg-anflocor-green">{contract.weekNumber}</Badge>
+              </div>
+              <p className="text-sm text-gray-500">REF: {contract.contractRef} | POL: {contract.pol}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green">
+              {isExtracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              Extract Items from Notes
+            </Button>
+            <Button className="bg-anflocor-green"><FileSignature className="h-4 w-4 mr-2" /> Finalise Advice</Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-1 h-fit">
-            <CardHeader><CardTitle className="text-lg">Contract Overview</CardTitle></CardHeader>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <Card className="lg:col-span-1 h-fit bg-gray-50/50">
+            <CardHeader className="pb-2"><CardTitle className="text-sm uppercase tracking-wider text-gray-400">Logistics Info</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center text-sm border-b pb-2">
-                <span className="text-gray-500">Status</span>
-                <span className="font-bold uppercase text-anflocor-green">{contract.status}</span>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-gray-400">FARM</Label>
+                <p className="font-bold text-gray-700">{contract.farm}</p>
               </div>
-              <div className="flex justify-between items-center text-sm border-b pb-2">
-                <span className="text-gray-500">Received</span>
-                <span className="font-medium">{contract.receivedAt?.toDate().toLocaleString()}</span>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-gray-400">ORIGIN PORT (POL)</Label>
+                <p className="font-bold text-gray-700">{contract.pol}</p>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-gray-500 uppercase tracking-wider">Internal Notes</Label>
-                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md whitespace-pre-wrap">{contract.notes || 'No notes provided.'}</p>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-gray-400">ATTACHMENT</Label>
+                <div className="p-2 bg-white rounded border flex items-center gap-2 text-xs font-medium text-gray-500">
+                  <FileText className="h-3 w-3" /> loading_advice.pdf
+                </div>
+              </div>
+              <div className="pt-4 border-t">
+                <Label className="text-[10px] text-gray-400">RAW EMAIL NOTES</Label>
+                <p className="text-[10px] text-gray-500 leading-relaxed mt-2 line-clamp-10 whitespace-pre-wrap">{contract.notes}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-3">
             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
               <div>
                 <CardTitle className="text-lg">Specification Line Items</CardTitle>
-                <CardDescription>Manage production orders for this contract.</CardDescription>
+                <CardDescription>Detailed loading breakdown for this week.</CardDescription>
               </div>
-              <Button size="sm" className="bg-anflocor-green" onClick={() => {
-                const materialCode = prompt("Enter Material Code:");
-                if (materialCode) {
-                  addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
-                    materialCode,
-                    quantity: 0,
-                    specifications: 'Default specs...',
-                    updatedAt: serverTimestamp()
-                  });
-                }
-              }}><Plus className="h-4 w-4 mr-1" /> Add Item</Button>
+              <Button size="sm" variant="outline" onClick={() => {
+                 addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
+                  pod: 'NEW PORT',
+                  total: 0,
+                  specs: 'A456',
+                  limitation: '',
+                  palletized: 'Breakbulk',
+                  shippingLines: '',
+                  etd: '',
+                  customerContractNumber: '',
+                  updatedAt: serverTimestamp()
+                });
+              }}><Plus className="h-4 w-4 mr-1" /> Add Manual Row</Button>
             </CardHeader>
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-gray-50/50">
                 <TableRow>
-                  <TableHead>Material</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Specifications</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-[10px] font-bold">POD</TableHead>
+                  <TableHead className="text-[10px] font-bold">TOTAL</TableHead>
+                  <TableHead className="text-[10px] font-bold">SPECS</TableHead>
+                  <TableHead className="text-[10px] font-bold">LIMITATION</TableHead>
+                  <TableHead className="text-[10px] font-bold">PALLETISED</TableHead>
+                  <TableHead className="text-[10px] font-bold">LINE</TableHead>
+                  <TableHead className="text-[10px] font-bold">ETD</TableHead>
+                  <TableHead className="text-[10px] font-bold">CONTRACT #</TableHead>
+                  <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {itemsLoading ? (
-                  <TableRow><TableCell colSpan={4} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                 ) : contractItems.length === 0 ? (
-                  <TableRow><TableCell colSpan={4} className="h-32 text-center text-gray-400">No items added to this contract yet.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">Use "Extract Items" to automatically fill this table.</TableCell></TableRow>
                 ) : contractItems.map((item: any) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-mono text-xs font-bold">{item.materialCode}</TableCell>
-                    <TableCell className="font-medium">{item.quantity}</TableCell>
-                    <TableCell className="text-xs text-gray-500 italic max-w-xs truncate">{item.specifications}</TableCell>
+                  <TableRow key={item.id} className="text-xs">
+                    <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
+                    <TableCell className="font-mono">{item.total}</TableCell>
+                    <TableCell className="bg-gray-50/50">{item.specs}</TableCell>
+                    <TableCell className="max-w-[120px] truncate" title={item.limitation}>{item.limitation}</TableCell>
+                    <TableCell>{item.palletized}</TableCell>
+                    <TableCell className="font-bold">{item.shippingLines}</TableCell>
+                    <TableCell className="text-orange-600 font-medium">{item.etd}</TableCell>
+                    <TableCell className="font-mono text-[9px] text-gray-400">{item.customerContractNumber}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}><Trash2 className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}><Trash2 className="h-3 w-3" /></Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -448,6 +550,17 @@ export default function MyProduceDashboard() {
       </div>
     );
   };
+
+  const configOptions = [
+    { id: 'contracts', title: "Contract Management", description: "Manage customer contracts and loading advice from emails.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
+    { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes and IDs.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
+    { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes and Pack Types.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
+    { id: 'brand-mapping', title: "Brand Mapping", description: "Configure brand labels.", icon: <Tag className="h-5 w-5" />, color: "bg-slate-600" },
+    { id: 'profit-center-mapping', title: "Profit Center Mapping", description: "Assign production blocks.", icon: <DollarSign className="h-5 w-5" />, color: "bg-amber-600" },
+    { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" },
+    { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
+    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
+  ];
 
   const renderContent = () => {
     if (activeView === 'dashboard') {
