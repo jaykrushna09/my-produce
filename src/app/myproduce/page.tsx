@@ -46,8 +46,7 @@ import {
   serverTimestamp,
   query,
   orderBy,
-  deleteDoc,
-  addDoc
+  deleteDoc
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -74,7 +73,7 @@ export default function MyProduceDashboard() {
     }
   }, [user, userLoading, router]);
 
-  // Derived state for the current context
+  // View mode flags
   const isMaterial = activeView === 'material-mapping';
   const isMappingView = activeView === 'customer-mapping' || activeView === 'material-mapping';
 
@@ -126,7 +125,7 @@ export default function MyProduceDashboard() {
     { 
       id: 'material-mapping', 
       title: "Material Mapping", 
-      description: "Associate raw materials with SAP codes.", 
+      description: "Associate raw materials with SAP codes, KindOfPack, and Type.", 
       icon: <Box className="h-5 w-5" />, 
       color: "bg-emerald-600" 
     },
@@ -160,7 +159,11 @@ export default function MyProduceDashboard() {
         const targetTabName = isMaterial ? 'Material Mapping' : 'Customer Mapping';
         const targetPath = isMaterial ? MATERIAL_PATH : CUSTOMER_PATH;
         
-        const sheetName = wb.SheetNames.find(name => name.toLowerCase().replace(/\s/g, '') === targetTabName.toLowerCase().replace(/\s/g, '')) || wb.SheetNames[0];
+        // Find sheet matching the name (case-insensitive, ignore spaces)
+        const sheetName = wb.SheetNames.find(name => 
+          name.toLowerCase().replace(/\s/g, '') === targetTabName.toLowerCase().replace(/\s/g, '')
+        ) || wb.SheetNames[0];
+        
         const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
 
@@ -181,13 +184,15 @@ export default function MyProduceDashboard() {
           chunk.forEach((row) => {
             const getVal = (possibleKeys: string[]) => {
               const keys = Object.keys(row);
-              const key = keys.find(k => possibleKeys.some(pk => k.toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase().replace(/[\s_]/g, '')));
+              const key = keys.find(k => 
+                possibleKeys.some(pk => k.toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase().replace(/[\s_]/g, ''))
+              );
               return key ? row[key] : null;
             };
 
             const id = isMaterial 
-              ? getVal(['MaterialID', 'Material_ID', 'ID', 'id', 'Code']) 
-              : getVal(['CustomerID', 'ID', 'id', 'Customer_ID']);
+              ? getVal(['MaterialID', 'Material_ID', 'ID', 'id', 'Code', 'MaterialCode']) 
+              : getVal(['CustomerID', 'ID', 'id', 'Customer_ID', 'CustomerCode']);
             
             const name = isMaterial
               ? getVal(['Material', 'MaterialName', 'Material Name', 'Name'])
@@ -195,14 +200,21 @@ export default function MyProduceDashboard() {
               
             const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code']);
             const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc']);
+            
+            // New fields for Material Mapping
+            const kindOfPack = isMaterial ? getVal(['KindOfPack', 'Kind Of Pack', 'kind_of_pack', 'PackKind']) : null;
+            const sapcType = isMaterial ? getVal(['SAPC_Type', 'SAPC Type', 'sapc_type', 'Type']) : null;
 
             if (id) {
               const docId = String(id).trim();
               const docRef = doc(db, targetPath, docId);
-              const dataToSet = isMaterial ? {
+              
+              const dataToSet: any = isMaterial ? {
                 MaterialID: docId,
                 Material: String(name || 'N/A').trim(),
+                KindOfPack: String(kindOfPack || 'N/A').trim(),
                 SAPC_Code: String(sapcCode || 'N/A').trim(),
+                SAPC_Type: String(sapcType || 'N/A').trim(),
                 SAPC_Desc: String(sapcDesc || 'N/A').trim(),
                 updatedAt: serverTimestamp(),
               } : {
@@ -315,23 +327,27 @@ export default function MyProduceDashboard() {
               <TableRow>
                 <TableHead className="font-bold text-gray-600">{isMaterial ? 'Material ID' : 'Customer ID'}</TableHead>
                 <TableHead className="font-bold text-gray-600">{isMaterial ? 'Material' : 'Customer'}</TableHead>
+                {isMaterial && <TableHead className="font-bold text-gray-600">Kind of Pack</TableHead>}
                 <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
+                {isMaterial && <TableHead className="font-bold text-gray-600">SAPC Type</TableHead>}
                 <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
                 <TableHead className="text-right font-bold text-gray-600">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={isMaterial ? 7 : 5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : filteredData.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">
+                <TableRow><TableCell colSpan={isMaterial ? 7 : 5} className="h-48 text-center text-gray-400 font-medium">
                   {searchTerm ? "No matching records found." : `No mappings found. Import Excel to get started.`}
                 </TableCell></TableRow>
               ) : filteredData.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
                   <TableCell className="font-mono text-xs font-bold text-anflocor-green">{isMaterial ? m.MaterialID : m.CustomerID}</TableCell>
                   <TableCell className="font-medium">{isMaterial ? m.Material : m.Customer}</TableCell>
+                  {isMaterial && <TableCell className="text-xs text-gray-600">{m.KindOfPack}</TableCell>}
                   <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">{m.SAPC_Code}</span></TableCell>
+                  {isMaterial && <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700">{m.SAPC_Type}</span></TableCell>}
                   <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
                   <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleDeleteMapping(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button></TableCell>
                 </TableRow>
@@ -354,7 +370,7 @@ export default function MyProduceDashboard() {
         </div>
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'configuration' || activeView === 'customer-mapping' || activeView === 'material-mapping') && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
+          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'configuration' || isMappingView) && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10">
           <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button>

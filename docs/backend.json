@@ -28,12 +28,14 @@
     },
     "MaterialMapping": {
       "title": "Material Mapping",
-      "description": "Mapping of materials to SAP codes.",
+      "description": "Mapping of materials to SAP codes with pack type details.",
       "type": "object",
       "properties": {
         "MaterialID": { "type": "string" },
         "Material": { "type": "string" },
+        "KindOfPack": { "type": "string" },
         "SAPC_Code": { "type": "string" },
+        "SAPC_Type": { "type": "string" },
         "SAPC_Desc": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -50,11 +52,11 @@
     },
     "/app_configuration/customer_mapping/customer_saving/{mappingId}": {
       "schema": { "$ref": "#/backend/entities/CustomerMapping" },
-      "description": "Customer mapping records stored in the production configuration sub-collection"
+      "description": "Customer mapping records"
     },
     "/app_configuration/material_mapping/material_saving/{mappingId}": {
       "schema": { "$ref": "#/backend/entities/MaterialMapping" },
-      "description": "Material mapping records stored in the production configuration sub-collection"
+      "description": "Material mapping records including pack type and SAP type"
     }
   }
 }
