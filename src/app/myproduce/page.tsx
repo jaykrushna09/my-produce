@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -91,7 +90,7 @@ export default function MyProduceDashboard() {
   
   const materialMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
-    return query(collection(db, MATERIAL_PATH), orderBy('Material', 'asc'));
+    return query(collection(db, MATERIAL_PATH), orderBy('SAPC_Code', 'asc'));
   }, [db]);
   
   const { data: customerMappings, loading: customerLoading } = useCollection(customerMappingsQuery);
@@ -104,9 +103,9 @@ export default function MyProduceDashboard() {
     return source.filter((m: any) => {
       const searchStr = searchTerm.toLowerCase();
       if (isMaterial) {
-        return String(m.Material || '').toLowerCase().includes(searchStr) ||
-               String(m.MaterialID || '').toLowerCase().includes(searchStr) ||
-               String(m.SAPC_Code || '').toLowerCase().includes(searchStr);
+        return String(m.SAPC_Code || '').toLowerCase().includes(searchStr) ||
+               String(m.SAPC_Desc || '').toLowerCase().includes(searchStr) ||
+               String(m.KindOfPack || '').toLowerCase().includes(searchStr);
       } else {
         return String(m.Customer || '').toLowerCase().includes(searchStr) ||
                String(m.CustomerID || '').toLowerCase().includes(searchStr) ||
@@ -192,45 +191,48 @@ export default function MyProduceDashboard() {
               return key ? row[key] : null;
             };
 
-            // Enhanced key matching for IDs and names
-            const id = isMaterial 
-              ? getVal(['MaterialID', 'Material_ID', 'ID', 'id', 'Code', 'MaterialCode', 'Material']) 
-              : getVal(['CustomerID', 'ID', 'id', 'Customer_ID', 'CustomerCode', 'Customer']);
-            
-            const name = isMaterial
-              ? getVal(['Material', 'MaterialName', 'Material Name', 'Name'])
-              : getVal(['Customer', 'CustomerName', 'Customer Name', 'Name', 'CustomerMapping']);
-              
-            const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code', 'SAPCCode']);
-            const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc', 'SAPCDesc']);
-            
-            const kindOfPack = isMaterial ? getVal(['KindOfPack', 'Kind Of Pack', 'kind_of_pack', 'PackKind', 'Pack_Kind']) : null;
-            const sapcType = isMaterial ? getVal(['SAPC_Type', 'SAPC Type', 'sapc_type', 'Type', 'SAPCType']) : null;
+            const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code', 'SAPCCode', 'SAP_Code']);
+            const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc', 'SAPCDesc', 'SAPC_Description']);
+            const kindOfPack = getVal(['KindOfPack', 'Kind Of Pack', 'kind_of_pack', 'PackKind', 'Pack_Kind', 'KindOf_Pack']);
+            const sapcType = getVal(['SAPC_Type', 'SAPC Type', 'sapc_type', 'Type', 'SAPCType', 'SAPC_Type']);
 
-            if (id) {
-              const docId = String(id).trim();
-              const docRef = doc(db, targetPath, docId);
-              
-              const dataToSet: any = isMaterial ? {
-                MaterialID: docId,
-                Material: String(name || docId).trim(),
-                KindOfPack: String(kindOfPack || 'N/A').trim(),
-                SAPC_Code: String(sapcCode || 'N/A').trim(),
-                SAPC_Type: String(sapcType || 'N/A').trim(),
-                SAPC_Desc: String(sapcDesc || 'N/A').trim(),
-                updatedAt: serverTimestamp(),
-              } : {
-                CustomerID: docId,
-                Customer: String(name || docId).trim(),
-                SAPC_Code: String(sapcCode || 'N/A').trim(),
-                SAPC_Desc: String(sapcDesc || 'N/A').trim(),
-                updatedAt: serverTimestamp(),
-              };
-              
-              batch.set(docRef, dataToSet);
-              chunkCount++;
+            if (isMaterial) {
+              // For materials, SAPC_Code is the unique identifier
+              if (sapcCode) {
+                const docId = String(sapcCode).trim();
+                const docRef = doc(db, targetPath, docId);
+                
+                batch.set(docRef, {
+                  SAPC_Code: docId,
+                  KindOfPack: String(kindOfPack || 'N/A').trim(),
+                  SAPC_Type: String(sapcType || 'N/A').trim(),
+                  SAPC_Desc: String(sapcDesc || 'N/A').trim(),
+                  updatedAt: serverTimestamp(),
+                });
+                chunkCount++;
+              } else {
+                skippedCount++;
+              }
             } else {
-              skippedCount++;
+              // For customers, check for CustomerID
+              const id = getVal(['CustomerID', 'ID', 'id', 'Customer_ID', 'CustomerCode', 'Customer']);
+              const name = getVal(['Customer', 'CustomerName', 'Customer Name', 'Name', 'CustomerMapping']);
+              
+              if (id) {
+                const docId = String(id).trim();
+                const docRef = doc(db, targetPath, docId);
+                
+                batch.set(docRef, {
+                  CustomerID: docId,
+                  Customer: String(name || docId).trim(),
+                  SAPC_Code: String(sapcCode || 'N/A').trim(),
+                  SAPC_Desc: String(sapcDesc || 'N/A').trim(),
+                  updatedAt: serverTimestamp(),
+                });
+                chunkCount++;
+              } else {
+                skippedCount++;
+              }
             }
           });
 
@@ -244,7 +246,7 @@ export default function MyProduceDashboard() {
           toast({ 
             variant: "destructive", 
             title: "No Valid Records", 
-            description: `Sheet found, but no rows had a valid ID column. Checked for headers like: ${isMaterial ? 'MaterialID, ID, Material' : 'CustomerID, ID, Customer'}` 
+            description: `Sheet found, but no rows had valid key columns. Checked for: ${isMaterial ? 'SAPC_Code' : 'CustomerID'}` 
           });
         } else {
           toast({ 
@@ -322,7 +324,7 @@ export default function MyProduceDashboard() {
             <div className="relative w-48 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                placeholder={`Search ${isMaterial ? 'materials' : 'customers'}...`} 
+                placeholder={`Search ${isMaterial ? 'SAP records' : 'customers'}...`} 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -340,30 +342,48 @@ export default function MyProduceDashboard() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="font-bold text-gray-600">{isMaterial ? 'Material ID' : 'Customer ID'}</TableHead>
-                <TableHead className="font-bold text-gray-600">{isMaterial ? 'Material' : 'Customer'}</TableHead>
-                {isMaterial && <TableHead className="font-bold text-gray-600">Kind of Pack</TableHead>}
-                <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
-                {isMaterial && <TableHead className="font-bold text-gray-600">SAPC Type</TableHead>}
-                <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
+                {isMaterial ? (
+                  <>
+                    <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
+                    <TableHead className="font-bold text-gray-600">Kind of Pack</TableHead>
+                    <TableHead className="font-bold text-gray-600">SAPC Type</TableHead>
+                    <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="font-bold text-gray-600">Customer ID</TableHead>
+                    <TableHead className="font-bold text-gray-600">Customer</TableHead>
+                    <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
+                    <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
+                  </>
+                )}
                 <TableHead className="text-right font-bold text-gray-600">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={isMaterial ? 7 : 5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={isMaterial ? 5 : 5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : filteredData.length === 0 ? (
-                <TableRow><TableCell colSpan={isMaterial ? 7 : 5} className="h-48 text-center text-gray-400 font-medium">
+                <TableRow><TableCell colSpan={isMaterial ? 5 : 5} className="h-48 text-center text-gray-400 font-medium">
                   {searchTerm ? "No matching records found." : `No mappings found. Import Excel to get started.`}
                 </TableCell></TableRow>
               ) : filteredData.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
-                  <TableCell className="font-mono text-xs font-bold text-anflocor-green">{isMaterial ? m.MaterialID : m.CustomerID}</TableCell>
-                  <TableCell className="font-medium">{isMaterial ? m.Material : m.Customer}</TableCell>
-                  {isMaterial && <TableCell className="text-xs text-gray-600">{m.KindOfPack}</TableCell>}
-                  <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">{m.SAPC_Code}</span></TableCell>
-                  {isMaterial && <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700">{m.SAPC_Type}</span></TableCell>}
-                  <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
+                  {isMaterial ? (
+                    <>
+                      <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.SAPC_Code}</TableCell>
+                      <TableCell className="text-xs text-gray-600 font-medium">{m.KindOfPack}</TableCell>
+                      <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700">{m.SAPC_Type}</span></TableCell>
+                      <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.CustomerID}</TableCell>
+                      <TableCell className="font-medium">{m.Customer}</TableCell>
+                      <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">{m.SAPC_Code}</span></TableCell>
+                      <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
+                    </>
+                  )}
                   <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleDeleteMapping(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button></TableCell>
                 </TableRow>
               ))}
