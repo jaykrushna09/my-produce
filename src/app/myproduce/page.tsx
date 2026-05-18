@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -163,12 +162,14 @@ export default function MyProduceDashboard() {
         if (!data) throw new Error("Failed to read file.");
 
         const wb = XLSX.read(data, { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
+        
+        // Find sheet named 'Customer Mapping' or use the first sheet
+        const targetSheetName = wb.SheetNames.find(name => name.toLowerCase() === 'customer mapping') || wb.SheetNames[0];
+        const ws = wb.Sheets[targetSheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
 
         if (jsonData.length === 0) {
-          toast({ variant: "destructive", title: "Empty Sheet", description: "No data found." });
+          toast({ variant: "destructive", title: "Empty Sheet", description: `No data found in sheet: ${targetSheetName}` });
           setIsUploading(false);
           return;
         }
@@ -182,10 +183,17 @@ export default function MyProduceDashboard() {
           let chunkCount = 0;
 
           chunk.forEach((row) => {
-            const id = row.CustomerID || row.ID || row.id;
-            const customer = row.Customer || row.Name || row.customer;
-            const sapcCode = row.SAPC_Code || row.Code || row.sapc_code;
-            const sapcDesc = row.SAPC_Desc || row.Description || row.sapc_desc;
+            // Helper to get value from row with multiple possible keys (case insensitive)
+            const getVal = (possibleKeys: string[]) => {
+              const keys = Object.keys(row);
+              const key = keys.find(k => possibleKeys.some(pk => k.toLowerCase().replace(/[\s_]/g, '') === pk.toLowerCase().replace(/[\s_]/g, '')));
+              return key ? row[key] : null;
+            };
+
+            const id = getVal(['CustomerID', 'ID', 'id', 'Customer_ID']);
+            const customer = getVal(['Customer', 'Name', 'customer', 'CustomerName']);
+            const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code']);
+            const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc']);
 
             if (id) {
               const docId = String(id).trim();
@@ -214,9 +222,9 @@ export default function MyProduceDashboard() {
           }
         }
 
-        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records.` });
+        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records from '${targetSheetName}'.` });
       } catch (err: any) {
-        // Errors are already handled or emitted
+        console.error("Excel import error:", err);
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -322,7 +330,7 @@ export default function MyProduceDashboard() {
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : filteredMappings.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">
-                  {searchTerm ? "No matching records found." : "No customer mappings found. Import Excel to get started."}
+                  {searchTerm ? "No matching records found." : "No customer mappings found. Import Excel (Customer Mapping sheet) to get started."}
                 </TableCell></TableRow>
               ) : filteredMappings.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">

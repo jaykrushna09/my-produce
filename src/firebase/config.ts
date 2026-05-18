@@ -5,12 +5,12 @@
  * (Settings > Project Settings > General > Your apps)
  */
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "YOUR_API_KEY",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "YOUR_APP_ID"
+  apiKey: "AIzaSyBeGHaSfwA5G3_MVtb5KEoXw4bb8yu1E3Q",
+  authDomain: "studio-1509262531-2336b.firebaseapp.com",
+  projectId: "studio-1509262531-2336b",
+  storageBucket: "studio-1509262531-2336b.firebasestorage.app",
+  messagingSenderId: "1082020993784",
+  appId: "1:1082020993784:web:ad140434e9594aae3bf90d"
 };
 
 /**
