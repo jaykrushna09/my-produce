@@ -23,8 +23,7 @@ import {
   ArrowLeft,
   Loader2,
   Trash2,
-  Search,
-  FlaskConical
+  Search
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -50,7 +49,7 @@ import {
   deleteDoc,
   addDoc
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError, useUser, useAuth } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 
@@ -75,12 +74,15 @@ export default function MyProduceDashboard() {
     }
   }, [user, userLoading, router]);
 
+  // Derived state for the current context
+  const isMaterial = activeView === 'material-mapping';
+  const isMappingView = activeView === 'customer-mapping' || activeView === 'material-mapping';
+
   /**
-   * DATA PATHS
+   * DATA PATHS (3-segment rule for valid collection references)
    */
   const CUSTOMER_PATH = 'app_configuration/customer_mapping/customer_saving';
   const MATERIAL_PATH = 'app_configuration/material_mapping/material_saving';
-  const TEST_PATH = 'app_configuration/test_writes/logs';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
@@ -96,22 +98,22 @@ export default function MyProduceDashboard() {
   const { data: materialMappings, loading: materialLoading } = useCollection(materialMappingsQuery);
 
   const filteredData = useMemo(() => {
-    const source = activeView === 'customer-mapping' ? customerMappings : materialMappings;
+    const source = isMaterial ? materialMappings : customerMappings;
     if (!source) return [];
     
     return source.filter((m: any) => {
       const searchStr = searchTerm.toLowerCase();
-      if (activeView === 'customer-mapping') {
-        return String(m.Customer || '').toLowerCase().includes(searchStr) ||
-               String(m.CustomerID || '').toLowerCase().includes(searchStr) ||
-               String(m.SAPC_Code || '').toLowerCase().includes(searchStr);
-      } else {
+      if (isMaterial) {
         return String(m.Material || '').toLowerCase().includes(searchStr) ||
                String(m.MaterialID || '').toLowerCase().includes(searchStr) ||
                String(m.SAPC_Code || '').toLowerCase().includes(searchStr);
+      } else {
+        return String(m.Customer || '').toLowerCase().includes(searchStr) ||
+               String(m.CustomerID || '').toLowerCase().includes(searchStr) ||
+               String(m.SAPC_Code || '').toLowerCase().includes(searchStr);
       }
     });
-  }, [customerMappings, materialMappings, activeView, searchTerm]);
+  }, [customerMappings, materialMappings, isMaterial, searchTerm]);
 
   const configOptions = [
     {
@@ -143,14 +145,6 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleTestWrite = () => {
-    if (!db) return;
-    const testData = { message: "Connectivity Test", testId: "TEST-" + Math.random().toString(36).substr(2, 9), createdAt: new Date().toISOString() };
-    addDoc(collection(db, TEST_PATH), testData).then(() => {
-      toast({ title: "Success", description: "Connection verified." });
-    });
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !db) return;
@@ -163,9 +157,6 @@ export default function MyProduceDashboard() {
         if (!data) throw new Error("Failed to read file.");
 
         const wb = XLSX.read(data, { type: 'array' });
-        
-        // Decide which path and tab to use based on active view
-        const isMaterial = activeView === 'material-mapping';
         const targetTabName = isMaterial ? 'Material Mapping' : 'Customer Mapping';
         const targetPath = isMaterial ? MATERIAL_PATH : CUSTOMER_PATH;
         
@@ -247,7 +238,7 @@ export default function MyProduceDashboard() {
 
   const handleDeleteMapping = (id: string) => {
     if (!db) return;
-    const targetPath = activeView === 'material-mapping' ? MATERIAL_PATH : CUSTOMER_PATH;
+    const targetPath = isMaterial ? MATERIAL_PATH : CUSTOMER_PATH;
     const docRef = doc(db, targetPath, id);
     deleteDoc(docRef);
   };
@@ -291,7 +282,6 @@ export default function MyProduceDashboard() {
       );
     }
 
-    const isMaterial = activeView === 'material-mapping';
     const loading = isMaterial ? materialLoading : customerLoading;
 
     return (
@@ -335,7 +325,7 @@ export default function MyProduceDashboard() {
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
               ) : filteredData.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">
-                  {searchTerm ? "No matching records found." : `No mappings found. Import Excel (${isMaterial ? 'Material Mapping' : 'Customer Mapping'} sheet) to get started.`}
+                  {searchTerm ? "No matching records found." : `No mappings found. Import Excel to get started.`}
                 </TableCell></TableRow>
               ) : filteredData.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
