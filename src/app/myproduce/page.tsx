@@ -75,9 +75,9 @@ export default function MyProduceDashboard() {
     }
   }, [user, userLoading, router]);
 
-  // Updated path structure as requested
-  const DATA_PATH = 'app_configuration/customer_mapping/customer_saving';
-  const TEST_PATH = 'app_configuration/customer_mapping/test_writes';
+  // Updated path structure as requested: app_configuration -> production -> customer_mapping
+  const DATA_PATH = 'app_configuration/production/customer_mapping';
+  const TEST_PATH = 'app_configuration/production/test_writes';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
