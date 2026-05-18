@@ -21,8 +21,8 @@ export const isFirebaseConfigValid = !!(
 
 if (typeof window !== 'undefined') {
   if (!isFirebaseConfigValid) {
-    console.warn("Firebase Studio: Project not connected. Please use the sidebar to connect your Firebase Project. This will provide the necessary NEXT_PUBLIC_FIREBASE_* environment variables.");
+    console.warn("Firebase Studio: Project not connected. Please use the sidebar 'Connect' button to sync your environment variables.");
   } else {
-    console.log("Firebase Studio: Connected to project:", firebaseConfig.projectId);
+    console.log("Firebase Studio: Successfully connected to project:", firebaseConfig.projectId);
   }
 }

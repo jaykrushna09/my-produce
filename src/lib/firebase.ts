@@ -1,6 +1,7 @@
 
+// This file is now deprecated. Please use imports from '@/firebase' instead.
 import { initializeFirebase } from '@/firebase';
 
-const { auth } = initializeFirebase();
-
-export { auth };
+const firebase = initializeFirebase();
+export const auth = firebase.auth;
+export const firestore = firebase.firestore;
