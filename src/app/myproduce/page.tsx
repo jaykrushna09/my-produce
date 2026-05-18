@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -52,6 +51,13 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { 
@@ -132,7 +138,8 @@ export default function MyProduceDashboard() {
     if (activeView === 'material-mapping') {
       return materialMappings.filter(m => 
         String(m.SAPC_Code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(m.SAPC_Desc || '').toLowerCase().includes(searchTerm.toLowerCase())
+        String(m.SAPC_Desc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(m.KindOfPack || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
     if (activeView === 'customer-mapping') {
@@ -169,7 +176,10 @@ export default function MyProduceDashboard() {
   };
 
   const handleCreateContract = async () => {
-    if (!db || !newContract.customerName) return;
+    if (!db || !newContract.customerName) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a customer." });
+      return;
+    }
     try {
       const contractId = `CTR-${Date.now()}`;
       await setDoc(doc(db, CONTRACT_PATH, contractId), {
@@ -214,30 +224,37 @@ export default function MyProduceDashboard() {
 
         const batch = writeBatch(db);
         jsonData.forEach((row: any) => {
-          const sapcCode = row.SAPC_Code || row.Code || row['SAPC Code'];
-          const docId = isMaterial ? String(sapcCode || Math.random()) : String(row.CustomerID || row.ID || Math.random());
+          // Robust header matching
+          const sapcCode = row.SAPC_Code || row.Code || row['SAPC Code'] || row['SAPC_Code'];
+          const kindOfPack = row.KindOfPack || row['Kind of Pack'] || row.PackType || row['Pack Type'];
+          const sapcType = row.SAPC_Type || row['SAPC Type'] || row.Type;
+          const sapcDesc = row.SAPC_Desc || row['SAPC Description'] || row.Description || row.Desc;
+          const customerName = row.Customer || row['Customer Name'] || row.Name;
+          const customerId = row.CustomerID || row['Customer ID'] || row.ID;
+
+          const docId = isMaterial ? String(sapcCode || Math.random()) : String(customerId || customerName || Math.random());
           const docRef = doc(db, targetPath, docId);
           
           if (isMaterial) {
             batch.set(docRef, {
               SAPC_Code: String(sapcCode || 'N/A'),
-              KindOfPack: String(row.KindOfPack || 'N/A'),
-              SAPC_Type: String(row.SAPC_Type || 'N/A'),
-              SAPC_Desc: String(row.SAPC_Desc || 'N/A'),
+              KindOfPack: String(kindOfPack || 'N/A'),
+              SAPC_Type: String(sapcType || 'N/A'),
+              SAPC_Desc: String(sapcDesc || 'N/A'),
               updatedAt: serverTimestamp()
             });
           } else {
             batch.set(docRef, {
-              CustomerID: docId,
-              Customer: String(row.Customer || 'N/A'),
+              CustomerID: String(customerId || docId),
+              Customer: String(customerName || 'N/A'),
               SAPC_Code: String(sapcCode || 'N/A'),
-              SAPC_Desc: String(row.SAPC_Desc || 'N/A'),
+              SAPC_Desc: String(sapcDesc || 'N/A'),
               updatedAt: serverTimestamp()
             });
           }
         });
         await batch.commit();
-        toast({ title: "Import Successful", description: `Uploaded ${jsonData.length} records.` });
+        toast({ title: "Import Successful", description: `Uploaded ${jsonData.length} records to ${targetTabName}.` });
       } catch (err: any) {
         toast({ variant: "destructive", title: "Import Failed", description: err.message });
       } finally {
@@ -270,7 +287,23 @@ export default function MyProduceDashboard() {
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label>Customer Name</Label>
-                  <Input value={newContract.customerName} onChange={(e) => setNewContract({...newContract, customerName: e.target.value})} placeholder="e.g. Dole Philippines" />
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, customerName: value})}
+                    value={newContract.customerName}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a mapped customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customerMappings.length === 0 ? (
+                        <div className="p-2 text-xs text-muted-foreground">No customers mapped. Please import customers first.</div>
+                      ) : (
+                        customerMappings.map((c: any) => (
+                          <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Customer Reference / Email Subject</Label>
@@ -472,20 +505,20 @@ export default function MyProduceDashboard() {
     if (activeView === 'contracts') return renderContractsView();
     if (activeView === 'contract-details') return renderContractDetails();
 
-    const isMaterial = activeView === 'material-mapping';
-    const loading = isMaterial ? materialLoading : customerLoading;
+    const isMaterialView = activeView === 'material-mapping';
+    const loading = isMaterialView ? materialLoading : customerLoading;
 
     return (
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="h-5 w-5" /></Button>
-            <h2 className="text-2xl font-bold text-gray-900">{isMaterial ? 'Material Mapping' : 'Customer Mapping'}</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{isMaterialView ? 'Material Mapping' : 'Customer Mapping'}</h2>
           </div>
           <div className="flex items-center space-x-2">
             <div className="relative w-48 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input placeholder={`Search ${isMaterial ? 'materials' : 'customers'}...`} className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <Input placeholder={`Search ${isMaterialView ? 'materials' : 'customers'}...`} className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             
             <Input type="file" accept=".xlsx, .xls" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
@@ -499,7 +532,7 @@ export default function MyProduceDashboard() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                {isMaterial ? (
+                {isMaterialView ? (
                   <>
                     <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
                     <TableHead className="font-bold text-gray-600">Kind of Pack</TableHead>
@@ -524,7 +557,7 @@ export default function MyProduceDashboard() {
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
               ) : filteredData.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
-                  {isMaterial ? (
+                  {isMaterialView ? (
                     <>
                       <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.SAPC_Code}</TableCell>
                       <TableCell className="text-xs text-gray-600 font-medium">{m.KindOfPack}</TableCell>
@@ -539,7 +572,7 @@ export default function MyProduceDashboard() {
                       <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
                     </>
                   )}
-                  <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, isMaterial ? MATERIAL_PATH : CUSTOMER_PATH, m.id))} className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button></TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, isMaterialView ? MATERIAL_PATH : CUSTOMER_PATH, m.id))} className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
