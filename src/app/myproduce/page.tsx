@@ -112,9 +112,9 @@ export default function MyProduceDashboard() {
     senderEmail: '',
     weekNumber: '',
     farm: 'TADECO',
-    pol: 'DAVAO',
+    pol: '',
     totalVolume: '',
-    notes: '' // Keeping notes in state for AI logic if needed later, but removing UI
+    notes: '' 
   });
 
   // Protect the route
@@ -220,7 +220,7 @@ export default function MyProduceDashboard() {
         updatedAt: serverTimestamp()
       });
       setIsNewContractOpen(false);
-      setNewContract({ customerName: '', contractRef: '', senderEmail: '', weekNumber: '', farm: 'TADECO', pol: 'DAVAO', totalVolume: '', notes: '' });
+      setNewContract({ customerName: '', contractRef: '', senderEmail: '', weekNumber: '', farm: 'TADECO', pol: '', totalVolume: '', notes: '' });
       toast({ title: "Contract Created", description: "New contract has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -229,7 +229,7 @@ export default function MyProduceDashboard() {
 
   const handleAiExtraction = async () => {
     if (!newContract.notes) {
-      toast({ variant: "destructive", title: "Input Required", description: "Email content is missing." });
+      toast({ variant: "destructive", title: "Input Required", description: "No context provided for extraction." });
       return;
     }
 
@@ -250,7 +250,7 @@ export default function MyProduceDashboard() {
         toast({ title: "AI Extraction Successful", description: "Contract details have been pre-filled." });
       }
     } catch (err: any) {
-      toast({ variant: "destructive", title: "AI Failed", description: "Could not extract details from text." });
+      toast({ variant: "destructive", title: "AI Failed", description: "Could not extract details." });
     } finally {
       setIsExtracting(false);
     }
@@ -437,7 +437,19 @@ export default function MyProduceDashboard() {
                 </div>
                 <div className="space-y-2">
                   <Label>POL (Port of Loading)</Label>
-                  <Input value={newContract.pol} onChange={(e) => setNewContract({...newContract, pol: e.target.value})} />
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, pol: value})}
+                    value={newContract.pol}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select POL" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {polMappings.map((p: any) => (
+                        <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Total Volume (Vans/Boxes)</Label>
