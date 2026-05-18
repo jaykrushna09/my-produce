@@ -65,11 +65,13 @@
       "type": "object",
       "properties": {
         "contractId": { "type": "string" },
-        "contractRef": { "type": "string", "description": "Customer reference number" },
+        "contractRef": { "type": "string", "description": "Customer reference or Email Subject" },
+        "senderEmail": { "type": "string", "format": "email" },
         "customerName": { "type": "string" },
         "weekNumber": { "type": "string" },
         "farm": { "type": "string" },
         "pol": { "type": "string", "description": "Port of Loading" },
+        "totalVolume": { "type": "string", "description": "Total vans/boxes mentioned in email" },
         "receivedAt": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["pending", "active", "completed", "cancelled"] },
         "notes": { "type": "string" },
@@ -124,7 +126,7 @@
       "schema": { "$ref": "#/backend/entities/Contract" },
       "description": "Root contract records"
     },
-    "/app_configuration/contracts/contract_saving/{contractId}/items/{itemId}": {
+    "/app_data/contracts/contract_saving/{contractId}/items/{itemId}": {
       "schema": { "$ref": "#/backend/entities/ContractLineItem" },
       "description": "Individual line items for a specific contract"
     }

@@ -34,7 +34,9 @@ import {
   CalendarDays,
   MapPin,
   Ship,
-  FileSignature
+  FileSignature,
+  Mail,
+  Scale
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -107,9 +109,11 @@ export default function MyProduceDashboard() {
   const [newContract, setNewContract] = useState({
     customerName: '',
     contractRef: '',
+    senderEmail: '',
     weekNumber: '',
     farm: 'TADECO',
     pol: 'DAVAO',
+    totalVolume: '',
     notes: ''
   });
 
@@ -216,7 +220,7 @@ export default function MyProduceDashboard() {
         updatedAt: serverTimestamp()
       });
       setIsNewContractOpen(false);
-      setNewContract({ customerName: '', contractRef: '', weekNumber: '', farm: 'TADECO', pol: 'DAVAO', notes: '' });
+      setNewContract({ customerName: '', contractRef: '', senderEmail: '', weekNumber: '', farm: 'TADECO', pol: 'DAVAO', totalVolume: '', notes: '' });
       toast({ title: "Contract Created", description: "New contract has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -238,9 +242,12 @@ export default function MyProduceDashboard() {
           weekNumber: result.header.weekNumber || prev.weekNumber,
           farm: result.header.farm || prev.farm,
           pol: result.header.pol || prev.pol,
-          customerName: result.header.customerName || prev.customerName
+          customerName: result.header.customerName || prev.customerName,
+          senderEmail: result.header.senderEmail || prev.senderEmail,
+          contractRef: result.header.subject || prev.contractRef,
+          totalVolume: result.header.totalVolume || prev.totalVolume
         }));
-        toast({ title: "AI Extraction Successful", description: "Contract header details have been filled." });
+        toast({ title: "AI Extraction Successful", description: "Contract details have been pre-filled." });
       }
     } catch (err: any) {
       toast({ variant: "destructive", title: "AI Failed", description: "Could not extract details from text." });
@@ -389,19 +396,40 @@ export default function MyProduceDashboard() {
             <DialogTrigger asChild>
               <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white"><Plus className="mr-2 h-4 w-4" /> New Contract</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-3xl overflow-y-auto max-h-[90vh]">
               <DialogHeader>
                 <DialogTitle>Create New Production Contract</DialogTitle>
               </DialogHeader>
               <div className="grid grid-cols-2 gap-4 py-4">
                 <div className="col-span-2 space-y-2">
+                  <Label>Email Content / Loading Advice Text</Label>
+                  <div className="flex gap-2">
+                    <Textarea 
+                      value={newContract.notes} 
+                      onChange={(e) => setNewContract({...newContract, notes: e.target.value})} 
+                      placeholder="Paste the full email here to auto-fill..." 
+                      className="h-24 flex-1" 
+                    />
+                    <Button 
+                      variant="outline" 
+                      onClick={handleAiExtraction} 
+                      disabled={isExtracting} 
+                      className="h-auto border-anflocor-green text-anflocor-green"
+                    >
+                      {isExtracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      <span className="sr-only">AI Fill</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Customer Name</Label>
                   <Select 
                     onValueChange={(value) => setNewContract({...newContract, customerName: value})}
                     value={newContract.customerName}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a mapped customer" />
+                      <SelectValue placeholder="Select Customer" />
                     </SelectTrigger>
                     <SelectContent>
                       {customerMappings.map((c: any) => (
@@ -414,10 +442,16 @@ export default function MyProduceDashboard() {
                   <Label>Week Number</Label>
                   <Input value={newContract.weekNumber} onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} placeholder="e.g. WK16" />
                 </div>
+                
                 <div className="space-y-2">
-                  <Label>Contract Reference</Label>
-                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Order #2024-001" />
+                  <Label>Email Sender</Label>
+                  <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="akwalser@goodfarmer.com" />
                 </div>
+                <div className="space-y-2">
+                  <Label>Contract/Subject Reference</Label>
+                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice for week 16" />
+                </div>
+
                 <div className="space-y-2">
                   <Label>Farm</Label>
                   <Input value={newContract.farm} onChange={(e) => setNewContract({...newContract, farm: e.target.value})} />
@@ -426,21 +460,16 @@ export default function MyProduceDashboard() {
                   <Label>POL (Port of Loading)</Label>
                   <Input value={newContract.pol} onChange={(e) => setNewContract({...newContract, pol: e.target.value})} />
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label>Email Content / Loading Advice Text</Label>
-                    <Button variant="outline" size="sm" onClick={handleAiExtraction} disabled={isExtracting} className="h-7 text-xs border-anflocor-green text-anflocor-green hover:bg-anflocor-green/5">
-                      {isExtracting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                      Fill Header with AI
-                    </Button>
-                  </div>
-                  <Textarea value={newContract.notes} onChange={(e) => setNewContract({...newContract, notes: e.target.value})} placeholder="Paste email content here..." className="h-32" />
+                <div className="space-y-2">
+                  <Label>Total Volume (Vans/Boxes)</Label>
+                  <Input value={newContract.totalVolume} onChange={(e) => setNewContract({...newContract, totalVolume: e.target.value})} placeholder="92vans ARH/CP18" />
                 </div>
+
                 <div className="col-span-2 space-y-2">
-                  <Label>Attach PDF (Optional)</Label>
+                  <Label>Attach Original PDF</Label>
                   <div className="flex items-center gap-2 border-2 border-dashed rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => attachmentRef.current?.click()}>
                     <Paperclip className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-500 font-medium">Click to select PDF Loading Advice</span>
+                    <span className="text-sm text-gray-500 font-medium">Click to upload PDF Advice</span>
                     <input type="file" className="hidden" ref={attachmentRef} accept=".pdf" />
                   </div>
                 </div>
@@ -460,7 +489,8 @@ export default function MyProduceDashboard() {
             <TableRow>
               <TableHead className="font-bold">WK NO</TableHead>
               <TableHead className="font-bold">Customer</TableHead>
-              <TableHead className="font-bold">Reference</TableHead>
+              <TableHead className="font-bold">Sender / Reference</TableHead>
+              <TableHead className="font-bold">Volume</TableHead>
               <TableHead className="font-bold">Farm / POL</TableHead>
               <TableHead className="font-bold">Status</TableHead>
               <TableHead className="text-right font-bold">Actions</TableHead>
@@ -468,14 +498,18 @@ export default function MyProduceDashboard() {
           </TableHeader>
           <TableBody>
             {contractsLoading ? (
-              <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
             ) : filteredData.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="h-48 text-center text-gray-400 font-medium">No contracts found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="h-48 text-center text-gray-400 font-medium">No contracts found.</TableCell></TableRow>
             ) : filteredData.map((c: any) => (
               <TableRow key={c.id} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
                 <TableCell><Badge variant="outline" className="font-bold text-anflocor-green">{c.weekNumber || 'N/A'}</Badge></TableCell>
                 <TableCell className="font-bold text-gray-900">{c.customerName}</TableCell>
-                <TableCell className="text-gray-500 text-sm">{c.contractRef}</TableCell>
+                <TableCell>
+                  <div className="text-xs font-medium text-gray-900 flex items-center gap-1"><Mail className="h-3 w-3" /> {c.senderEmail}</div>
+                  <div className="text-[10px] text-gray-400 line-clamp-1">{c.contractRef}</div>
+                </TableCell>
+                <TableCell className="text-xs font-bold text-indigo-700">{c.totalVolume || '-'}</TableCell>
                 <TableCell className="text-xs font-medium text-gray-600">
                   <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {c.farm}</div>
                   <div className="flex items-center gap-1 text-gray-400"><Ship className="h-3 w-3" /> {c.pol}</div>
@@ -521,7 +555,7 @@ export default function MyProduceDashboard() {
             });
           });
           await batch.commit();
-          toast({ title: "Items Extracted", description: `Successfully added ${result.items.length} line items.` });
+          toast({ title: "Items Extracted", description: `Successfully added ${result.items.length} line items from text.` });
         }
       } catch (err) {
         toast({ variant: "destructive", title: "AI Error", description: "Could not parse items from text." });
@@ -540,13 +574,13 @@ export default function MyProduceDashboard() {
                 <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
                 <Badge className="bg-anflocor-green">{contract.weekNumber}</Badge>
               </div>
-              <p className="text-sm text-gray-500">REF: {contract.contractRef} | POL: {contract.pol}</p>
+              <p className="text-sm text-gray-500">REF: {contract.contractRef} | VOL: {contract.totalVolume}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green">
               {isExtracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              Extract Items from Notes
+              Extract Items
             </Button>
             <Button className="bg-anflocor-green"><FileSignature className="h-4 w-4 mr-2" /> Finalise Advice</Button>
           </div>
@@ -554,25 +588,25 @@ export default function MyProduceDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <Card className="lg:col-span-1 h-fit bg-gray-50/50">
-            <CardHeader className="pb-2"><CardTitle className="text-sm uppercase tracking-wider text-gray-400">Logistics Info</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm uppercase tracking-wider text-gray-400">Header Info</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400">FARM</Label>
-                <p className="font-bold text-gray-700">{contract.farm}</p>
+                <Label className="text-[10px] text-gray-400 uppercase">SENDER</Label>
+                <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><Mail className="h-3 w-3" /> {contract.senderEmail || 'Unknown'}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400">ORIGIN PORT (POL)</Label>
-                <p className="font-bold text-gray-700">{contract.pol}</p>
+                <Label className="text-[10px] text-gray-400 uppercase">TOTAL VOLUME</Label>
+                <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Scale className="h-3 w-3" /> {contract.totalVolume || 'Not Specified'}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400">ATTACHMENT</Label>
-                <div className="p-2 bg-white rounded border flex items-center gap-2 text-xs font-medium text-gray-500">
-                  <FileText className="h-3 w-3" /> loading_advice.pdf
-                </div>
+                <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
+                <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
               </div>
               <div className="pt-4 border-t">
-                <Label className="text-[10px] text-gray-400">RAW EMAIL NOTES</Label>
-                <p className="text-[10px] text-gray-500 leading-relaxed mt-2 line-clamp-10 whitespace-pre-wrap">{contract.notes}</p>
+                <Label className="text-[10px] text-gray-400 uppercase">EMAIL SOURCE</Label>
+                <div className="mt-2 p-3 bg-white rounded border text-[10px] text-gray-500 leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
+                  {contract.notes}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -581,7 +615,7 @@ export default function MyProduceDashboard() {
             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
               <div>
                 <CardTitle className="text-lg">Specification Line Items</CardTitle>
-                <CardDescription>Detailed loading breakdown for this week.</CardDescription>
+                <CardDescription>Detailed breakdown extracted from the advice email.</CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={() => {
                  addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
@@ -595,7 +629,7 @@ export default function MyProduceDashboard() {
                   customerContractNumber: '',
                   updatedAt: serverTimestamp()
                 });
-              }}><Plus className="h-4 w-4 mr-1" /> Add Manual Row</Button>
+              }}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
             </CardHeader>
             <Table>
               <TableHeader className="bg-gray-50/50">
@@ -605,7 +639,7 @@ export default function MyProduceDashboard() {
                   <TableHead className="text-[10px] font-bold">SPECS</TableHead>
                   <TableHead className="text-[10px] font-bold">LIMITATION</TableHead>
                   <TableHead className="text-[10px] font-bold">PALLETISED</TableHead>
-                  <TableHead className="text-[10px] font-bold">LINE</TableHead>
+                  <TableHead className="text-[10px] font-bold">SHIPPING LINE</TableHead>
                   <TableHead className="text-[10px] font-bold">ETD</TableHead>
                   <TableHead className="text-[10px] font-bold">CONTRACT #</TableHead>
                   <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
@@ -615,17 +649,17 @@ export default function MyProduceDashboard() {
                 {itemsLoading ? (
                   <TableRow><TableCell colSpan={9} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                 ) : contractItems.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">Use "Extract Items" to automatically fill this table.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">No items. Use "Extract Items" to auto-parse the email table.</TableCell></TableRow>
                 ) : contractItems.map((item: any) => (
                   <TableRow key={item.id} className="text-xs">
                     <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
-                    <TableCell className="font-mono">{item.total}</TableCell>
-                    <TableCell className="bg-gray-50/50">{item.specs}</TableCell>
-                    <TableCell className="max-w-[120px] truncate" title={item.limitation}>{item.limitation}</TableCell>
-                    <TableCell>{item.palletized}</TableCell>
+                    <TableCell className="font-mono text-center">{item.total}</TableCell>
+                    <TableCell className="bg-gray-50/50 font-medium">{item.specs}</TableCell>
+                    <TableCell className="max-w-[150px] truncate italic text-gray-500" title={item.limitation}>{item.limitation}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[9px] uppercase">{item.palletized}</Badge></TableCell>
                     <TableCell className="font-bold">{item.shippingLines}</TableCell>
                     <TableCell className="text-orange-600 font-medium">{item.etd}</TableCell>
-                    <TableCell className="font-mono text-[9px] text-gray-400">{item.customerContractNumber}</TableCell>
+                    <TableCell className="font-mono text-[9px] text-gray-400 max-w-[120px] truncate">{item.customerContractNumber}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}><Trash2 className="h-3 w-3" /></Button>
                     </TableCell>
