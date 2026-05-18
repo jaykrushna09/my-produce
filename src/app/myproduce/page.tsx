@@ -75,7 +75,7 @@ export default function MyProduceDashboard() {
     }
   }, [user, userLoading, router]);
 
-  // Updated path structure as requested: app_configuration -> production -> customer_mapping
+  // The path declaration requested: line 75
   const DATA_PATH = 'app_configuration/production/customer_mapping';
   const TEST_PATH = 'app_configuration/production/test_writes';
 
@@ -121,7 +121,7 @@ export default function MyProduceDashboard() {
 
   const handleTestWrite = () => {
     if (!db) {
-      toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized. Please connect your project." });
+      toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized." });
       return;
     }
 
