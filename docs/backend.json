@@ -25,6 +25,19 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["CustomerID", "Customer"]
+    },
+    "MaterialMapping": {
+      "title": "Material Mapping",
+      "description": "Mapping of materials to SAP codes.",
+      "type": "object",
+      "properties": {
+        "MaterialID": { "type": "string" },
+        "Material": { "type": "string" },
+        "SAPC_Code": { "type": "string" },
+        "SAPC_Desc": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["MaterialID", "Material"]
     }
   },
   "auth": {
@@ -38,6 +51,10 @@
     "/app_configuration/customer_mapping/customer_saving/{mappingId}": {
       "schema": { "$ref": "#/backend/entities/CustomerMapping" },
       "description": "Customer mapping records stored in the production configuration sub-collection"
+    },
+    "/app_configuration/material_mapping/material_saving/{mappingId}": {
+      "schema": { "$ref": "#/backend/entities/MaterialMapping" },
+      "description": "Material mapping records stored in the production configuration sub-collection"
     }
   }
 }

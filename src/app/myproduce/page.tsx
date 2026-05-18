@@ -54,7 +54,7 @@ import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePe
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 
-type ViewState = 'dashboard' | 'configuration' | 'customer-mapping';
+type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping';
 
 export default function MyProduceDashboard() {
   const router = useRouter();
@@ -76,29 +76,42 @@ export default function MyProduceDashboard() {
   }, [user, userLoading, router]);
 
   /**
-   * DATA_PATH: app_configuration/customer_mapping/customer_saving
-   * 1. app_configuration (Collection)
-   * 2. customer_mapping (Document)
-   * 3. customer_saving (Collection) - The target for records
+   * DATA PATHS
    */
-  const DATA_PATH = 'app_configuration/customer_mapping/customer_saving';
+  const CUSTOMER_PATH = 'app_configuration/customer_mapping/customer_saving';
+  const MATERIAL_PATH = 'app_configuration/material_mapping/material_saving';
   const TEST_PATH = 'app_configuration/test_writes/logs';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
-    return query(collection(db, DATA_PATH), orderBy('Customer', 'asc'));
+    return query(collection(db, CUSTOMER_PATH), orderBy('Customer', 'asc'));
   }, [db]);
   
-  const { data: customerMappings, loading: mappingsLoading } = useCollection(customerMappingsQuery);
+  const materialMappingsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, MATERIAL_PATH), orderBy('Material', 'asc'));
+  }, [db]);
+  
+  const { data: customerMappings, loading: customerLoading } = useCollection(customerMappingsQuery);
+  const { data: materialMappings, loading: materialLoading } = useCollection(materialMappingsQuery);
 
-  const filteredMappings = useMemo(() => {
-    if (!customerMappings) return [];
-    return customerMappings.filter((m: any) => 
-      String(m.Customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(m.CustomerID || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(m.SAPC_Code || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [customerMappings, searchTerm]);
+  const filteredData = useMemo(() => {
+    const source = activeView === 'customer-mapping' ? customerMappings : materialMappings;
+    if (!source) return [];
+    
+    return source.filter((m: any) => {
+      const searchStr = searchTerm.toLowerCase();
+      if (activeView === 'customer-mapping') {
+        return String(m.Customer || '').toLowerCase().includes(searchStr) ||
+               String(m.CustomerID || '').toLowerCase().includes(searchStr) ||
+               String(m.SAPC_Code || '').toLowerCase().includes(searchStr);
+      } else {
+        return String(m.Material || '').toLowerCase().includes(searchStr) ||
+               String(m.MaterialID || '').toLowerCase().includes(searchStr) ||
+               String(m.SAPC_Code || '').toLowerCase().includes(searchStr);
+      }
+    });
+  }, [customerMappings, materialMappings, activeView, searchTerm]);
 
   const configOptions = [
     {
@@ -108,7 +121,13 @@ export default function MyProduceDashboard() {
       icon: <Users className="h-5 w-5" />,
       color: "bg-blue-600"
     },
-    { id: 'material-mapping', title: "Material Mapping", description: "Associate raw materials.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
+    { 
+      id: 'material-mapping', 
+      title: "Material Mapping", 
+      description: "Associate raw materials with SAP codes.", 
+      icon: <Box className="h-5 w-5" />, 
+      color: "bg-emerald-600" 
+    },
     { id: 'brand-mapping', title: "Brand Mapping", description: "Configure brand labels.", icon: <Tag className="h-5 w-5" />, color: "bg-indigo-600" },
     { id: 'profit-center-mapping', title: "Profit Center Mapping", description: "Assign production blocks.", icon: <DollarSign className="h-5 w-5" />, color: "bg-amber-600" },
     { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" },
@@ -125,35 +144,11 @@ export default function MyProduceDashboard() {
   };
 
   const handleTestWrite = () => {
-    if (!db) {
-      toast({ variant: "destructive", title: "Write Failed", description: "Firestore is not initialized." });
-      return;
-    }
-
-    const testData = {
-      message: "Connectivity Test",
-      testId: "TEST-" + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-      user: user?.email || 'Anonymous'
-    };
-
-    const testCollectionRef = collection(db, TEST_PATH);
-    
-    addDoc(testCollectionRef, testData)
-      .then(() => {
-        toast({ 
-          title: "Test Write SUCCESS", 
-          description: `Document successfully written to ${TEST_PATH}.` 
-        });
-      })
-      .catch(async (err) => {
-        const permissionError = new FirestorePermissionError({
-          path: testCollectionRef.path,
-          operation: 'create',
-          requestResourceData: testData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
+    if (!db) return;
+    const testData = { message: "Connectivity Test", testId: "TEST-" + Math.random().toString(36).substr(2, 9), createdAt: new Date().toISOString() };
+    addDoc(collection(db, TEST_PATH), testData).then(() => {
+      toast({ title: "Success", description: "Connection verified." });
+    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,13 +164,17 @@ export default function MyProduceDashboard() {
 
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Find sheet named 'Customer Mapping' or use the first sheet
-        const targetSheetName = wb.SheetNames.find(name => name.toLowerCase() === 'customer mapping') || wb.SheetNames[0];
-        const ws = wb.Sheets[targetSheetName];
+        // Decide which path and tab to use based on active view
+        const isMaterial = activeView === 'material-mapping';
+        const targetTabName = isMaterial ? 'Material Mapping' : 'Customer Mapping';
+        const targetPath = isMaterial ? MATERIAL_PATH : CUSTOMER_PATH;
+        
+        const sheetName = wb.SheetNames.find(name => name.toLowerCase().replace(/\s/g, '') === targetTabName.toLowerCase().replace(/\s/g, '')) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
 
         if (jsonData.length === 0) {
-          toast({ variant: "destructive", title: "Empty Sheet", description: `No data found in sheet: ${targetSheetName}` });
+          toast({ variant: "destructive", title: "Empty Sheet", description: `No data found in sheet: ${sheetName}` });
           setIsUploading(false);
           return;
         }
@@ -195,41 +194,49 @@ export default function MyProduceDashboard() {
               return key ? row[key] : null;
             };
 
-            const id = getVal(['CustomerID', 'ID', 'id', 'Customer_ID']);
-            const customer = getVal(['Customer', 'Name', 'customer', 'CustomerName']);
+            const id = isMaterial 
+              ? getVal(['MaterialID', 'Material_ID', 'ID', 'id', 'Code']) 
+              : getVal(['CustomerID', 'ID', 'id', 'Customer_ID']);
+            
+            const name = isMaterial
+              ? getVal(['Material', 'MaterialName', 'Material Name', 'Name'])
+              : getVal(['Customer', 'CustomerName', 'Customer Name', 'Name']);
+              
             const sapcCode = getVal(['SAPC_Code', 'Code', 'SAPC Code', 'sapc_code']);
             const sapcDesc = getVal(['SAPC_Desc', 'Description', 'SAPC Description', 'sapc_desc']);
 
             if (id) {
               const docId = String(id).trim();
-              const docRef = doc(db, DATA_PATH, docId);
-              batch.set(docRef, {
-                CustomerID: docId,
-                Customer: String(customer || 'N/A').trim(),
+              const docRef = doc(db, targetPath, docId);
+              const dataToSet = isMaterial ? {
+                MaterialID: docId,
+                Material: String(name || 'N/A').trim(),
                 SAPC_Code: String(sapcCode || 'N/A').trim(),
                 SAPC_Desc: String(sapcDesc || 'N/A').trim(),
                 updatedAt: serverTimestamp(),
-              });
+              } : {
+                CustomerID: docId,
+                Customer: String(name || 'N/A').trim(),
+                SAPC_Code: String(sapcCode || 'N/A').trim(),
+                SAPC_Desc: String(sapcDesc || 'N/A').trim(),
+                updatedAt: serverTimestamp(),
+              };
+              
+              batch.set(docRef, dataToSet);
               chunkCount++;
             }
           });
 
           if (chunkCount > 0) {
-            await batch.commit().catch(async (err) => {
-              const permissionError = new FirestorePermissionError({
-                path: DATA_PATH,
-                operation: 'write',
-              });
-              errorEmitter.emit('permission-error', permissionError);
-              throw err;
-            });
+            await batch.commit();
             totalProcessed += chunkCount;
           }
         }
 
-        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records to '${DATA_PATH}'.` });
+        toast({ title: "Import Complete", description: `Successfully imported ${totalProcessed} records to ${targetTabName}.` });
       } catch (err: any) {
         console.error("Excel import error:", err);
+        toast({ variant: "destructive", title: "Import Failed", description: err.message });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -240,14 +247,9 @@ export default function MyProduceDashboard() {
 
   const handleDeleteMapping = (id: string) => {
     if (!db) return;
-    const docRef = doc(db, DATA_PATH, id);
-    deleteDoc(docRef).catch(async (err) => {
-      const permissionError = new FirestorePermissionError({
-        path: docRef.path,
-        operation: 'delete',
-      });
-      errorEmitter.emit('permission-error', permissionError);
-    });
+    const targetPath = activeView === 'material-mapping' ? MATERIAL_PATH : CUSTOMER_PATH;
+    const docRef = doc(db, targetPath, id);
+    deleteDoc(docRef);
   };
 
   const renderContent = () => {
@@ -273,7 +275,7 @@ export default function MyProduceDashboard() {
         <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {configOptions.map((option) => (
-              <Card key={option.id} onClick={() => option.id === 'customer-mapping' && setActiveView('customer-mapping')} className="group hover:ring-2 hover:ring-anflocor-green/20 transition-all cursor-pointer">
+              <Card key={option.id} onClick={() => (option.id === 'customer-mapping' || option.id === 'material-mapping') && setActiveView(option.id as any)} className="group hover:ring-2 hover:ring-anflocor-green/20 transition-all cursor-pointer">
                 <CardHeader className="p-5">
                   <div className={`${option.color} text-white p-2.5 rounded-lg w-fit`}>{option.icon}</div>
                   <CardTitle className="text-base font-bold mt-4">{option.title}</CardTitle>
@@ -289,29 +291,27 @@ export default function MyProduceDashboard() {
       );
     }
 
+    const isMaterial = activeView === 'material-mapping';
+    const loading = isMaterial ? materialLoading : customerLoading;
+
     return (
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="h-5 w-5" /></Button>
-            <h2 className="text-2xl font-bold text-gray-900">Customer Mapping</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{isMaterial ? 'Material Mapping' : 'Customer Mapping'}</h2>
           </div>
           <div className="flex items-center space-x-2">
             <div className="relative w-48 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                placeholder="Search customers..." 
+                placeholder={`Search ${isMaterial ? 'materials' : 'customers'}...`} 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             
-            <Button variant="outline" size="sm" onClick={handleTestWrite} className="hidden lg:flex border-dashed border-gray-300 text-gray-500 hover:text-anflocor-green hover:border-anflocor-green">
-              <FlaskConical className="mr-2 h-4 w-4" />
-              Test Write
-            </Button>
-
             <Input type="file" accept=".xlsx, .xls" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-semibold">
               {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} 
@@ -323,24 +323,24 @@ export default function MyProduceDashboard() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="font-bold text-gray-600">Customer ID</TableHead>
-                <TableHead className="font-bold text-gray-600">Customer</TableHead>
+                <TableHead className="font-bold text-gray-600">{isMaterial ? 'Material ID' : 'Customer ID'}</TableHead>
+                <TableHead className="font-bold text-gray-600">{isMaterial ? 'Material' : 'Customer'}</TableHead>
                 <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
                 <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
                 <TableHead className="text-right font-bold text-gray-600">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mappingsLoading ? (
+              {loading ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-              ) : filteredMappings.length === 0 ? (
+              ) : filteredData.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">
-                  {searchTerm ? "No matching records found." : "No customer mappings found. Import Excel (Customer Mapping sheet) to get started."}
+                  {searchTerm ? "No matching records found." : `No mappings found. Import Excel (${isMaterial ? 'Material Mapping' : 'Customer Mapping'} sheet) to get started.`}
                 </TableCell></TableRow>
-              ) : filteredMappings.map((m: any) => (
+              ) : filteredData.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
-                  <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.CustomerID}</TableCell>
-                  <TableCell className="font-medium">{m.Customer}</TableCell>
+                  <TableCell className="font-mono text-xs font-bold text-anflocor-green">{isMaterial ? m.MaterialID : m.CustomerID}</TableCell>
+                  <TableCell className="font-medium">{isMaterial ? m.Material : m.Customer}</TableCell>
                   <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">{m.SAPC_Code}</span></TableCell>
                   <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
                   <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleDeleteMapping(m.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button></TableCell>
@@ -364,7 +364,7 @@ export default function MyProduceDashboard() {
         </div>
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'configuration' || activeView === 'customer-mapping') && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
+          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'configuration' || activeView === 'customer-mapping' || activeView === 'material-mapping') && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10">
           <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button>
@@ -374,7 +374,7 @@ export default function MyProduceDashboard() {
         <header className="mb-8 flex justify-between items-end border-b pb-6">
           <div>
             <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
-              {activeView === 'dashboard' ? 'Dashboard' : activeView === 'configuration' ? 'System Configuration' : 'Customer Mapping'}
+              {activeView === 'dashboard' ? 'Dashboard' : activeView === 'configuration' ? 'System Configuration' : isMaterial ? 'Material Mapping' : 'Customer Mapping'}
             </h1>
             <p className="text-gray-500 font-semibold mt-1">TADECO Agricultural Production Portal</p>
           </div>
