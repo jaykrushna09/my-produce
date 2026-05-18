@@ -40,6 +40,36 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["MaterialID", "Material"]
+    },
+    "Contract": {
+      "title": "Production Contract",
+      "description": "Contract details received from customer emails.",
+      "type": "object",
+      "properties": {
+        "contractId": { "type": "string" },
+        "contractRef": { "type": "string", "description": "Customer reference number" },
+        "customerName": { "type": "string" },
+        "receivedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "active", "completed", "cancelled"] },
+        "totalQuantity": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["contractId", "customerName", "status"]
+    },
+    "ContractLineItem": {
+      "title": "Contract Line Item",
+      "description": "Specific material and order details within a contract.",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string" },
+        "materialCode": { "type": "string" },
+        "quantity": { "type": "number" },
+        "uom": { "type": "string", "description": "Unit of measure" },
+        "packType": { "type": "string" },
+        "specifications": { "type": "string", "description": "Specific line item orders/specs" },
+        "status": { "type": "string" }
+      },
+      "required": ["itemId", "materialCode", "quantity"]
     }
   },
   "auth": {
@@ -56,7 +86,15 @@
     },
     "/app_configuration/material_mapping/material_saving/{mappingId}": {
       "schema": { "$ref": "#/backend/entities/MaterialMapping" },
-      "description": "Material mapping records including pack type and SAP type"
+      "description": "Material mapping records"
+    },
+    "/app_configuration/contracts/contract_saving/{contractId}": {
+      "schema": { "$ref": "#/backend/entities/Contract" },
+      "description": "Root contract records"
+    },
+    "/app_configuration/contracts/contract_saving/{contractId}/items/{itemId}": {
+      "schema": { "$ref": "#/backend/entities/ContractLineItem" },
+      "description": "Individual line items for a specific contract"
     }
   }
 }
