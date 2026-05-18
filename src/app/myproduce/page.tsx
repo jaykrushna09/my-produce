@@ -75,9 +75,14 @@ export default function MyProduceDashboard() {
     }
   }, [user, userLoading, router]);
 
-  // The path declaration requested: line 75
-  const DATA_PATH = 'app_configuration/production/customer_mapping';
-  const TEST_PATH = 'app_configuration/production/test_writes';
+  /**
+   * DATA_PATH: app_configuration/customer_mapping/customer_saving
+   * 1. app_configuration (Collection)
+   * 2. customer_mapping (Document)
+   * 3. customer_saving (Collection) - The target for records
+   */
+  const DATA_PATH = 'app_configuration/customer_mapping/customer_saving';
+  const TEST_PATH = 'app_configuration/test_writes/logs';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
@@ -126,7 +131,7 @@ export default function MyProduceDashboard() {
     }
 
     const testData = {
-      message: "Hello World",
+      message: "Connectivity Test",
       testId: "TEST-" + Math.random().toString(36).substr(2, 9),
       createdAt: new Date().toISOString(),
       user: user?.email || 'Anonymous'
