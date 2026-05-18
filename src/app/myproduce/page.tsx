@@ -262,7 +262,6 @@ export default function MyProduceDashboard() {
 
         const wb = XLSX.read(data, { type: 'array' });
         
-        // Configuration mapping
         let targetTabName = "";
         let targetPath = "";
         
@@ -272,9 +271,12 @@ export default function MyProduceDashboard() {
         } else if (activeView === 'customer-mapping') {
           targetTabName = "Customer Mapping";
           targetPath = CUSTOMER_PATH;
-        } else if (activeView === 'port-of-loading' || activeView === 'port-of-destination') {
-          targetTabName = "Pack type"; // Specialized requirement
-          targetPath = activeView === 'port-of-loading' ? POL_PATH : POD_PATH;
+        } else if (activeView === 'port-of-loading') {
+          targetTabName = "Pack Type";
+          targetPath = POL_PATH;
+        } else if (activeView === 'port-of-destination') {
+          targetTabName = "Pack Type";
+          targetPath = POD_PATH;
         }
 
         const sheetName = wb.SheetNames.find(name => 
@@ -287,10 +289,15 @@ export default function MyProduceDashboard() {
         
         const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
+        
+        if (jsonData.length === 0) {
+          throw new Error("No data found in the selected sheet.");
+        }
 
         const batch = writeBatch(db);
+        let count = 0;
+
         jsonData.forEach((row: any) => {
-          // Robust key search
           const findKey = (keys: string[]) => {
             const rowKeys = Object.keys(row);
             for (const k of keys) {
@@ -301,28 +308,30 @@ export default function MyProduceDashboard() {
           };
 
           if (activeView === 'material-mapping') {
-            const sapcCode = findKey(['SAPC_Code', 'Code', 'SAPC Code']);
+            const sapcCode = findKey(['SAPC_Code', 'SAPC Code', 'Code']);
             if (sapcCode) {
               batch.set(doc(db, targetPath, String(sapcCode)), {
                 SAPC_Code: String(sapcCode),
-                KindOfPack: String(findKey(['KindOfPack', 'Kind of Pack', 'Kind']) || 'N/A'),
-                SAPC_Type: String(findKey(['SAPC_Type', 'Type']) || 'N/A'),
-                SAPC_Desc: String(findKey(['SAPC_Desc', 'Description', 'Desc']) || 'N/A'),
+                KindOfPack: String(findKey(['KindOfPack', 'Kind of Pack', 'Pack']) || 'N/A'),
+                SAPC_Type: String(findKey(['SAPC_Type', 'SAPC Type', 'Type']) || 'N/A'),
+                SAPC_Desc: String(findKey(['SAPC_Desc', 'SAPC Description', 'Description']) || 'N/A'),
                 updatedAt: serverTimestamp()
               });
+              count++;
             }
           } else if (activeView === 'customer-mapping') {
-            const customerId = findKey(['CustomerID', 'ID', 'Customer ID']);
+            const customerId = findKey(['CustomerID', 'Customer ID', 'ID']);
             const customerName = findKey(['Customer', 'Customer Name', 'Name']);
             if (customerId || customerName) {
               const docId = String(customerId || customerName);
               batch.set(doc(db, targetPath, docId), {
                 CustomerID: String(customerId || docId),
                 Customer: String(customerName || 'N/A'),
-                SAPC_Code: String(findKey(['SAPC_Code', 'Code', 'SAPC Code']) || 'N/A'),
-                SAPC_Desc: String(findKey(['SAPC_Desc', 'Description', 'Desc']) || 'N/A'),
+                SAPC_Code: String(findKey(['SAPC_Code', 'SAPC Code', 'Code']) || 'N/A'),
+                SAPC_Desc: String(findKey(['SAPC_Desc', 'SAPC Description', 'Description']) || 'N/A'),
                 updatedAt: serverTimestamp()
               });
+              count++;
             }
           } else if (activeView === 'port-of-loading') {
             const pol = findKey(['PORT_OF_LOADING', 'PORT OF LOADING', 'POL']);
@@ -331,6 +340,7 @@ export default function MyProduceDashboard() {
                 portName: String(pol),
                 updatedAt: serverTimestamp()
               });
+              count++;
             }
           } else if (activeView === 'port-of-destination') {
             const pod = findKey(['PORT_OF_DESTINATION', 'PORT OF DESTINATION', 'POD']);
@@ -339,14 +349,19 @@ export default function MyProduceDashboard() {
                 portName: String(pod),
                 updatedAt: serverTimestamp()
               });
+              count++;
             }
           }
         });
 
-        await batch.commit();
-        toast({ title: "Import Successful", description: `Uploaded records to ${activeView}.` });
+        if (count > 0) {
+          await batch.commit();
+          toast({ title: "Import Successful", description: `Uploaded ${count} records to ${activeView}.` });
+        } else {
+          toast({ variant: "destructive", title: "Import Failed", description: "No valid records were identified. Check your column headers." });
+        }
       } catch (err: any) {
-        toast({ variant: "destructive", title: "Import Failed", description: err.message });
+        toast({ variant: "destructive", title: "Import Error", description: err.message });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
