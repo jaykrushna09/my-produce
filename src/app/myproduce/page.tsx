@@ -433,7 +433,18 @@ export default function MyProduceDashboard() {
 
                 <div className="space-y-2">
                   <Label>Farm</Label>
-                  <Input value={newContract.farm} onChange={(e) => setNewContract({...newContract, farm: e.target.value})} />
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, farm: value})}
+                    value={newContract.farm}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Farm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TADECO">TADECO</SelectItem>
+                      <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>POL (Port of Loading)</Label>
@@ -530,7 +541,7 @@ export default function MyProduceDashboard() {
 
     const handleBulkAiFill = async () => {
       if (!contract.notes) {
-        toast({ variant: "destructive", title: "Error", description: "No email context found for this contract to parse items." });
+        toast({ variant: "destructive", title: "Error", description: "No context found for this contract to parse items." });
         return;
       }
       setIsExtracting(true);
@@ -634,7 +645,7 @@ export default function MyProduceDashboard() {
                 {itemsLoading ? (
                   <TableRow><TableCell colSpan={9} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                 ) : contractItems.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">No items. Use "Extract Items" to auto-parse the email table.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">No items. Use "Extract Items" to auto-parse the context.</TableCell></TableRow>
                 ) : contractItems.map((item: any) => (
                   <TableRow key={item.id} className="text-xs">
                     <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
