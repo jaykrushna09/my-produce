@@ -38,7 +38,9 @@ import {
   CheckSquare,
   Square,
   MoreVertical,
-  X
+  X,
+  Split,
+  Copy
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -49,7 +51,8 @@ import {
   TableCell, 
   TableHead, 
   TableHeader, 
-  TableRow 
+  TableRow,
+  TableFooter
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { 
@@ -749,9 +752,40 @@ export default function MyProduceDashboard() {
 
     const handleBulkUpdateBooking = () => {
       if (selectedItemIds.length === 0) return;
-      setEditingItem({ vesselName: '', bookingNumber: '' });
+      setEditingItem({ vesselName: '', bookingNumber: '', total: 0 });
       setIsBulkUpdate(true);
       setIsBookingModalOpen(true);
+    };
+
+    const handleSplitRow = async (item: any) => {
+      if (!db) return;
+      try {
+        const half = Math.floor(item.total / 2);
+        const remaining = item.total - half;
+        
+        const batch = writeBatch(db);
+        // Update current row to half
+        batch.update(doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id), {
+          total: half,
+          updatedAt: serverTimestamp()
+        });
+        
+        // Create new row with remaining
+        const newRef = doc(collection(db, `${CONTRACT_PATH}/${selectedContractId}/items`));
+        batch.set(newRef, {
+          ...item,
+          id: newRef.id,
+          total: remaining,
+          bookingNumber: '', // Clear booking for new split part
+          vesselName: '',
+          updatedAt: serverTimestamp()
+        });
+        
+        await batch.commit();
+        toast({ title: "Row Split", description: "Requirement split into two rows for flexible booking." });
+      } catch (err: any) {
+        toast({ variant: "destructive", title: "Split Failed", description: err.message });
+      }
     };
 
     const saveBookingInfo = async () => {
@@ -762,11 +796,18 @@ export default function MyProduceDashboard() {
         
         idsToUpdate.forEach(id => {
           const itemRef = doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, id);
-          batch.update(itemRef, {
+          const updateData: any = {
             bookingNumber: editingItem.bookingNumber || '',
             vesselName: editingItem.vesselName || '',
             updatedAt: serverTimestamp()
-          });
+          };
+          
+          // Only update total if it's a single row update and has changed
+          if (!isBulkUpdate && editingItem.total !== undefined) {
+            updateData.total = Number(editingItem.total);
+          }
+          
+          batch.update(itemRef, updateData);
         });
         
         await batch.commit();
@@ -810,6 +851,8 @@ export default function MyProduceDashboard() {
       }
     };
 
+    const totalVansBooked = contractItems.reduce((acc: number, item: any) => acc + (item.total || 0), 0);
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex items-center justify-between">
@@ -820,7 +863,7 @@ export default function MyProduceDashboard() {
                 <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
                 <Badge className="bg-anflocor-green">{contract.weekNumber}</Badge>
               </div>
-              <p className="text-sm text-gray-500">REF: {contract.contractRef} | VANS: {contract.totalVans || 0}</p>
+              <p className="text-sm text-gray-500">REF: {contract.contractRef} | HEADER TOTAL: {contract.totalVans || 0} VANS</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -842,8 +885,13 @@ export default function MyProduceDashboard() {
                   <p className="text-xs font-bold text-gray-700">{contract.senderEmail || 'Unknown'}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">VOLUME</Label>
-                  <p className="text-xs font-bold text-indigo-700">{contract.totalVans || 0} Vans / {contract.totalBoxes || 0} Boxes</p>
+                  <Label className="text-[10px] text-gray-400 uppercase">VOLUME (VANS)</Label>
+                  <p className={cn(
+                    "text-xs font-bold",
+                    totalVansBooked === contract.totalVans ? "text-green-600" : "text-amber-600"
+                  )}>
+                    {totalVansBooked} / {contract.totalVans || 0} Allocated
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
@@ -883,8 +931,8 @@ export default function MyProduceDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                 <div>
-                  <CardTitle className="text-lg">Specification Line Items</CardTitle>
-                  <CardDescription>Assign vessel and booking references to production rows.</CardDescription>
+                  <CardTitle className="text-lg">Logistics Planning</CardTitle>
+                  <CardDescription>Allocate vessel bookings to requirements. Split rows for multiple ships.</CardDescription>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => {
                   addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
@@ -897,7 +945,7 @@ export default function MyProduceDashboard() {
                     etd: contract.etd || '',
                     updatedAt: serverTimestamp()
                   });
-                }}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
+                }}><Plus className="h-4 w-4 mr-1" /> Add Requirement</Button>
               </CardHeader>
               <Table>
                 <TableHeader className="bg-gray-50/50">
@@ -909,7 +957,7 @@ export default function MyProduceDashboard() {
                       />
                     </TableHead>
                     <TableHead className="text-[10px] font-bold">POD</TableHead>
-                    <TableHead className="text-[10px] font-bold text-center">TOTAL</TableHead>
+                    <TableHead className="text-[10px] font-bold text-center">VANS</TableHead>
                     <TableHead className="text-[10px] font-bold">SPECS</TableHead>
                     <TableHead className="text-[10px] font-bold">BOOKING # / VESSEL</TableHead>
                     <TableHead className="text-[10px] font-bold">STATUS</TableHead>
@@ -920,7 +968,7 @@ export default function MyProduceDashboard() {
                   {itemsLoading ? (
                     <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                   ) : contractItems.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-400">No items. Use AI Extract to parse notes.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-400">No items. Use AI Extract to parse loading advice.</TableCell></TableRow>
                   ) : contractItems.map((item: any) => (
                     <TableRow key={item.id} className="text-xs group h-12">
                       <TableCell>
@@ -940,7 +988,7 @@ export default function MyProduceDashboard() {
                           </div>
                         ) : (
                           <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold border border-dashed border-gray-200" onClick={() => handleUpdateBooking(item)}>
-                            ADD BOOKING
+                            ASSIGN LOGISTICS
                           </Button>
                         )}
                       </TableCell>
@@ -948,11 +996,20 @@ export default function MyProduceDashboard() {
                         {item.bookingNumber ? (
                           <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none text-[9px]">BOOKED</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-gray-400 text-[9px]">UNBOOKED</Badge>
+                          <Badge variant="outline" className="text-gray-400 text-[9px]">PENDING</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100" 
+                            title="Split volume for multiple bookings"
+                            onClick={() => handleSplitRow(item)}
+                          >
+                            <Split className="h-3.5 w-3.5 text-indigo-400" />
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => handleUpdateBooking(item)}>
                             <Edit2 className="h-3.5 w-3.5 text-gray-400" />
                           </Button>
@@ -964,6 +1021,17 @@ export default function MyProduceDashboard() {
                     </TableRow>
                   ))}
                 </TableBody>
+                <TableFooter>
+                  <TableRow className="bg-gray-50/50">
+                    <TableCell colSpan={2} className="text-right font-bold text-[10px] uppercase text-gray-400">Total Allocation</TableCell>
+                    <TableCell className="text-center font-black text-indigo-700">{totalVansBooked}</TableCell>
+                    <TableCell colSpan={4} className="text-left text-[10px] text-gray-400 font-medium">
+                      {totalVansBooked !== contract.totalVans ? 
+                        `Reconcile: ${Math.abs(contract.totalVans - totalVansBooked)} vans ${totalVansBooked > contract.totalVans ? 'over' : 'short'} from header.` : 
+                        "Perfect match with header."}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             </Card>
           </div>
@@ -975,10 +1043,26 @@ export default function MyProduceDashboard() {
             <DialogHeader>
               <DialogTitle>{isBulkUpdate ? `Bulk Update (${selectedItemIds.length} items)` : 'Update Logistics Booking'}</DialogTitle>
               <DialogDescription>
-                Assign vessel and booking reference to {isBulkUpdate ? 'selected items' : `row to ${editingItem?.pod}`}.
+                Assign vessel and booking reference to {isBulkUpdate ? 'selected items' : `requirement for ${editingItem?.pod}`}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {!isBulkUpdate && (
+                <div className="space-y-2">
+                  <Label htmlFor="vans">Vans Count for this Booking</Label>
+                  <div className="relative">
+                    <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input 
+                      id="vans" 
+                      type="number"
+                      placeholder="Number of vans" 
+                      className="pl-10 font-bold"
+                      value={editingItem?.total || 0}
+                      onChange={(e) => setEditingItem({...editingItem, total: e.target.value})}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="vessel">Vessel Name</Label>
                 <div className="relative">
@@ -999,7 +1083,7 @@ export default function MyProduceDashboard() {
                   <Input 
                     id="booking" 
                     placeholder="e.g. PHICHNCLGOOD90" 
-                    className="pl-10 font-mono"
+                    className="pl-10 font-mono uppercase"
                     value={editingItem?.bookingNumber || ''}
                     onChange={(e) => setEditingItem({...editingItem, bookingNumber: e.target.value})}
                   />
