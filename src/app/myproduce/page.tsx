@@ -414,133 +414,137 @@ export default function MyProduceDashboard() {
                 <DialogTitle>Create New Production Contract</DialogTitle>
                 <DialogDescription>Enter the details from the customer loading advice email.</DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 py-2">
-                {/* Left Column: Communication & Volume */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Customer Name</Label>
-                    <Select 
-                      onValueChange={(value) => setNewContract({...newContract, customerName: value})}
-                      value={newContract.customerName}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Customer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {customerMappings.map((c: any) => (
-                          <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Week Number</Label>
-                    <Input 
-                      value={newContract.weekNumber} 
-                      onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
-                      placeholder="e.g. WK16" 
-                    />
-                    {newContract.weekNumber && (
-                      <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded inline-block">
-                        {getWeekRangeDisplay(newContract.weekNumber) || 'Invalid week number'}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email Sender</Label>
-                    <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Contract/Subject Reference</Label>
-                    <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Total Vans</Label>
-                      <Input 
-                        type="number"
-                        value={newContract.totalVans} 
-                        onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
-                        placeholder="Vans" 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Box Count (Optional)</Label>
-                      <Input 
-                        type="number"
-                        value={newContract.totalBoxes} 
-                        onChange={(e) => setNewContract({...newContract, totalBoxes: parseInt(e.target.value) || 0})} 
-                        placeholder="Boxes" 
-                      />
-                    </div>
-                  </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-6 py-2">
+                {/* Row 1 */}
+                <div className="space-y-2">
+                  <Label>Customer Name</Label>
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, customerName: value})}
+                    value={newContract.customerName}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customerMappings.map((c: any) => (
+                        <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Farm</Label>
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, farm: value})}
+                    value={newContract.farm}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Farm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TADECO">TADECO</SelectItem>
+                      <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Right Column: Logistics */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Farm</Label>
-                    <Select 
-                      onValueChange={(value) => setNewContract({...newContract, farm: value})}
-                      value={newContract.farm}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Farm" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TADECO">TADECO</SelectItem>
-                        <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>POL (Port of Loading)</Label>
-                    <Select 
-                      onValueChange={(value) => setNewContract({...newContract, pol: value})}
-                      value={newContract.pol}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select POL" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {polMappings.map((p: any) => (
-                          <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ETD (Estimated Time of Departure)</Label>
-                    <Input 
-                      type="date"
-                      value={newContract.etd}
-                      onChange={(e) => setNewContract({...newContract, etd: e.target.value})}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Shipping Line</Label>
-                    <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Type</Label>
-                    <Select 
-                      onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
-                      value={newContract.palletizedType}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Palletized">Palletized</SelectItem>
-                        <SelectItem value="Non Palletized">Non Palletized</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {/* Row 2 */}
+                <div className="space-y-2">
+                  <Label>Week Number</Label>
+                  <Input 
+                    value={newContract.weekNumber} 
+                    onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
+                    placeholder="e.g. WK16" 
+                  />
+                  {newContract.weekNumber && (
+                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded inline-block">
+                      {getWeekRangeDisplay(newContract.weekNumber) || 'Invalid week number'}
+                    </p>
+                  )}
                 </div>
+                <div className="space-y-2">
+                  <Label>POL (Port of Loading)</Label>
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, pol: value})}
+                    value={newContract.pol}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select POL" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {polMappings.map((p: any) => (
+                        <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Row 3 */}
+                <div className="space-y-2">
+                  <Label>Email Sender</Label>
+                  <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
+                </div>
+                <div className="space-y-2">
+                  <Label>ETD (Estimated Time of Departure)</Label>
+                  <Input 
+                    type="date"
+                    value={newContract.etd}
+                    onChange={(e) => setNewContract({...newContract, etd: e.target.value})}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Row 4 */}
+                <div className="space-y-2">
+                  <Label>Contract/Subject Reference</Label>
+                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Shipping Line</Label>
+                  <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
+                </div>
+
+                {/* Row 5 */}
+                <div className="space-y-2">
+                  <Label>Total Vans</Label>
+                  <Input 
+                    type="number"
+                    value={newContract.totalVans} 
+                    onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
+                    placeholder="Vans" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Box Count (Optional)</Label>
+                  <Input 
+                    type="number"
+                    value={newContract.totalBoxes} 
+                    onChange={(e) => setNewContract({...newContract, totalBoxes: parseInt(e.target.value) || 0})} 
+                    placeholder="Boxes" 
+                  />
+                </div>
+
+                {/* Row 6 */}
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select 
+                    onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
+                    value={newContract.palletizedType}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Palletized">Palletized</SelectItem>
+                      <SelectItem value="Non Palletized">Non Palletized</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="hidden md:block" /> {/* Spacer */}
 
                 {/* Bottom Section: SKUs and Notes */}
-                <div className="col-span-1 md:col-span-2 space-y-4">
+                <div className="col-span-1 md:col-span-2 space-y-4 pt-2">
                   <div className="space-y-2">
                     <Label>Materials (SKUs)</Label>
                     <div className="flex flex-col gap-2">
@@ -654,6 +658,7 @@ export default function MyProduceDashboard() {
                   </div>
                 </div>
               </div>
+
               <DialogFooter className="p-6 bg-gray-50 border-t">
                 <Button variant="outline" onClick={() => setIsNewContractOpen(false)}>Cancel</Button>
                 <Button onClick={handleCreateContract} className="bg-anflocor-green">Create Contract</Button>
