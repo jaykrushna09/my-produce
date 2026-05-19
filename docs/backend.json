@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "UserProfile": {
@@ -74,6 +73,7 @@
         "selectedSKUs": { "type": "array", "items": { "type": "string" }, "description": "List of Material SAPC Codes" },
         "farm": { "type": "string" },
         "pol": { "type": "string", "description": "Port of Loading" },
+        "pod": { "type": "string", "description": "Port of Destination" },
         "totalVolume": { "type": "string", "description": "Total vans/boxes mentioned in email" },
         "receivedAt": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["pending", "active", "completed", "cancelled"] },

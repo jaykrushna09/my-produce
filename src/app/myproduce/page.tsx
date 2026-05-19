@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -136,6 +135,7 @@ export default function MyProduceDashboard() {
     totalBoxes: 0,
     farm: 'TADECO',
     pol: '',
+    pod: '',
     totalVolume: '',
     notes: '',
     etd: '',
@@ -265,6 +265,7 @@ export default function MyProduceDashboard() {
         totalBoxes: 0,
         farm: 'TADECO', 
         pol: '', 
+        pod: '',
         totalVolume: '', 
         notes: '',
         etd: '',
@@ -501,8 +502,20 @@ export default function MyProduceDashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Email Sender</Label>
-                  <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
+                  <Label>POD (Port of Destination)</Label>
+                  <Select 
+                    onValueChange={(value) => setNewContract({...newContract, pod: value})}
+                    value={newContract.pod}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select POD" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {podMappings.map((p: any) => (
+                        <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>ETD (Estimated Time of Departure)</Label>
@@ -515,14 +528,18 @@ export default function MyProduceDashboard() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Email Sender</Label>
+                  <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
+                </div>
+                <div className="space-y-2">
                   <Label>Contract/Subject Reference</Label>
                   <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Shipping Line</Label>
                   <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
                 </div>
-
                 <div className="space-y-2">
                   <Label>Total Vans</Label>
                   <Input 
@@ -532,6 +549,7 @@ export default function MyProduceDashboard() {
                     placeholder="Vans" 
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Box Count (Optional)</Label>
                   <Input 
@@ -541,7 +559,6 @@ export default function MyProduceDashboard() {
                     placeholder="Boxes" 
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label>Type</Label>
                   <Select 
@@ -557,7 +574,6 @@ export default function MyProduceDashboard() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="hidden md:block" />
 
                 <div className="col-span-1 md:col-span-2 space-y-4 pt-2">
                   <div className="space-y-2">
@@ -667,7 +683,7 @@ export default function MyProduceDashboard() {
               <TableHead className="font-bold">Customer</TableHead>
               <TableHead className="font-bold">Sender / Reference</TableHead>
               <TableHead className="font-bold">Vans / Boxes</TableHead>
-              <TableHead className="font-bold">Farm / POL</TableHead>
+              <TableHead className="font-bold">Farm / Origin</TableHead>
               <TableHead className="font-bold">Status</TableHead>
               <TableHead className="text-right font-bold">Actions</TableHead>
             </TableRow>
@@ -696,7 +712,7 @@ export default function MyProduceDashboard() {
                 </TableCell>
                 <TableCell className="text-xs font-medium text-gray-600">
                   <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {c.farm}</div>
-                  <div className="flex items-center gap-1 text-gray-400"><Ship className="h-3 w-3" /> {c.pol}</div>
+                  <div className="flex items-center gap-1 text-gray-400"><Ship className="h-3 w-3" /> {c.pol} - {c.pod}</div>
                 </TableCell>
                 <TableCell>
                   <Badge className={cn(
@@ -911,8 +927,12 @@ export default function MyProduceDashboard() {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
+                  <Label className="text-[10px] text-gray-400 uppercase">FARM / ORIGIN</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.farm}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">POL / POD</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.pol || 'N/A'} - {contract.pod || 'N/A'}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
@@ -953,7 +973,7 @@ export default function MyProduceDashboard() {
                 </div>
                 <Button size="sm" variant="outline" onClick={() => {
                   addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
-                    pod: 'NEW PORT',
+                    pod: contract.pod || 'NEW PORT',
                     total: 0,
                     specs: '',
                     limitation: '',
