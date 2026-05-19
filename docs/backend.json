@@ -99,6 +99,8 @@
         "shippingLines": { "type": "string" },
         "etd": { "type": "string" },
         "customerContractNumber": { "type": "string" },
+        "bookingNumber": { "type": "string", "description": "Booking reference number provided by carrier" },
+        "vesselName": { "type": "string", "description": "Assigned vessel name" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["itemId", "pod", "total"]

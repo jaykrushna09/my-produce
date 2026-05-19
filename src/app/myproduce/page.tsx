@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -30,7 +31,10 @@ import {
   Ship,
   FileSignature,
   Mail,
-  Check
+  Check,
+  Calendar,
+  Save,
+  Edit2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -101,6 +105,10 @@ export default function MyProduceDashboard() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Booking Update State
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+
   // Contract Modal State
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
   const [isSkuPickerOpen, setIsSkuPickerOpen] = useState(false);
@@ -759,6 +767,27 @@ export default function MyProduceDashboard() {
       }
     };
 
+    const handleUpdateBooking = (item: any) => {
+      setEditingItem(item);
+      setIsBookingModalOpen(true);
+    };
+
+    const saveBookingInfo = async () => {
+      if (!editingItem || !db) return;
+      try {
+        await updateDoc(doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, editingItem.id), {
+          bookingNumber: editingItem.bookingNumber || '',
+          vesselName: editingItem.vesselName || '',
+          updatedAt: serverTimestamp()
+        });
+        setIsBookingModalOpen(false);
+        setEditingItem(null);
+        toast({ title: "Updated", description: "Booking information has been updated successfully." });
+      } catch (err: any) {
+        toast({ variant: "destructive", title: "Update Failed", description: err.message });
+      }
+    };
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex items-center justify-between">
@@ -848,6 +877,8 @@ export default function MyProduceDashboard() {
                   shippingLines: contract.shippingLine || '',
                   etd: contract.etd || '',
                   customerContractNumber: '',
+                  bookingNumber: '',
+                  vesselName: '',
                   updatedAt: serverTimestamp()
                 });
               }}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
@@ -856,33 +887,48 @@ export default function MyProduceDashboard() {
               <TableHeader className="bg-gray-50/50">
                 <TableRow>
                   <TableHead className="text-[10px] font-bold">POD</TableHead>
-                  <TableHead className="text-[10px] font-bold">TOTAL</TableHead>
+                  <TableHead className="text-[10px] font-bold text-center">TOTAL</TableHead>
                   <TableHead className="text-[10px] font-bold">SPECS</TableHead>
-                  <TableHead className="text-[10px] font-bold">LIMITATION</TableHead>
-                  <TableHead className="text-[10px] font-bold">PALLETISED</TableHead>
-                  <TableHead className="text-[10px] font-bold">SHIPPING LINE</TableHead>
+                  <TableHead className="text-[10px] font-bold">BOOKING # / VESSEL</TableHead>
                   <TableHead className="text-[10px] font-bold">ETD</TableHead>
-                  <TableHead className="text-[10px] font-bold">CONTRACT #</TableHead>
                   <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {itemsLoading ? (
-                  <TableRow><TableCell colSpan={9} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                 ) : contractItems.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">No items. Use "Extract Items from Notes" to auto-parse data.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="h-32 text-center text-gray-400">No items. Use "Extract Items from Notes" to auto-parse data.</TableCell></TableRow>
                 ) : contractItems.map((item: any) => (
-                  <TableRow key={item.id} className="text-xs">
+                  <TableRow key={item.id} className="text-xs group">
                     <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
-                    <TableCell className="font-mono text-center">{item.total}</TableCell>
-                    <TableCell className="bg-gray-50/50 font-medium">{item.specs}</TableCell>
-                    <TableCell className="max-w-[150px] truncate italic text-gray-500" title={item.limitation}>{item.limitation}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[9px] uppercase">{item.palletized}</Badge></TableCell>
-                    <TableCell className="font-bold">{item.shippingLines}</TableCell>
-                    <TableCell className="text-orange-600 font-medium">{item.etd}</TableCell>
-                    <TableCell className="font-mono text-[9px] text-gray-400 max-w-[120px] truncate">{item.customerContractNumber}</TableCell>
+                    <TableCell className="font-mono text-center font-bold text-gray-900">{item.total}</TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <div className="font-medium truncate" title={item.specs}>{item.specs}</div>
+                      <div className="text-[10px] text-gray-400 truncate" title={item.limitation}>{item.limitation}</div>
+                    </TableCell>
+                    <TableCell>
+                      {item.bookingNumber || item.vesselName ? (
+                        <div className="flex flex-col">
+                          <span className="text-xs font-black text-anflocor-green uppercase tracking-tighter">{item.bookingNumber || 'NO BOOKING'}</span>
+                          <span className="text-[10px] text-gray-500 font-bold italic">{item.vesselName || 'NO VESSEL'}</span>
+                        </div>
+                      ) : (
+                        <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold border border-dashed border-gray-200" onClick={() => handleUpdateBooking(item)}>
+                          ADD BOOKING
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-orange-600 font-bold whitespace-nowrap">{item.etd}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}><Trash2 className="h-3 w-3" /></Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleUpdateBooking(item)} title="Update Booking Info">
+                          <Edit2 className="h-3.5 w-3.5 text-gray-400" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))} title="Delete Row">
+                          <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -890,6 +936,50 @@ export default function MyProduceDashboard() {
             </Table>
           </Card>
         </div>
+
+        {/* Booking Update Dialog */}
+        <Dialog open={isBookingModalOpen} onOpenChange={setIsBookingModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Update Logistics Booking</DialogTitle>
+              <DialogDescription>
+                Assign vessel and booking reference for <strong>{editingItem?.total} Vans</strong> to <strong>{editingItem?.pod}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="vessel">Vessel Name</Label>
+                <div className="relative">
+                  <Ship className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input 
+                    id="vessel" 
+                    placeholder="e.g. MSC SINDY" 
+                    className="pl-10"
+                    value={editingItem?.vesselName || ''}
+                    onChange={(e) => setEditingItem({...editingItem, vesselName: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="booking">Booking Number / BL Ref</Label>
+                <div className="relative">
+                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input 
+                    id="booking" 
+                    placeholder="e.g. SITC:PHICHNCLGOOD90" 
+                    className="pl-10 font-mono"
+                    value={editingItem?.bookingNumber || ''}
+                    onChange={(e) => setEditingItem({...editingItem, bookingNumber: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsBookingModalOpen(false)}>Cancel</Button>
+              <Button onClick={saveBookingInfo} className="bg-anflocor-green"><Save className="h-4 w-4 mr-2" /> Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };
