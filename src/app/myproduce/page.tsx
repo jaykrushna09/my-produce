@@ -516,7 +516,7 @@ export default function MyProduceDashboard() {
                           selected={selectedDate}
                           onSelect={(date) => {
                             setSelectedDate(date);
-                            if (date) setIsDatePickerOpen(false);
+                            // We do not auto-close here as requested to allow confirmation
                           }}
                           initialFocus
                           className="rounded-md border shadow"
