@@ -34,7 +34,11 @@ import {
   Check,
   Calendar,
   Save,
-  Edit2
+  Edit2,
+  CheckSquare,
+  Square,
+  MoreVertical,
+  X
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -68,6 +72,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { 
@@ -108,6 +113,8 @@ export default function MyProduceDashboard() {
   // Booking Update State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [isBulkUpdate, setIsBulkUpdate] = useState(false);
 
   // Contract Modal State
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
@@ -424,7 +431,6 @@ export default function MyProduceDashboard() {
               </DialogHeader>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-6 py-2">
-                {/* Row 1 */}
                 <div className="space-y-2">
                   <Label>Customer Name</Label>
                   <Select 
@@ -457,7 +463,6 @@ export default function MyProduceDashboard() {
                   </Select>
                 </div>
 
-                {/* Row 2 */}
                 <div className="space-y-2">
                   <Label>Week Number</Label>
                   <Input 
@@ -488,7 +493,6 @@ export default function MyProduceDashboard() {
                   </Select>
                 </div>
 
-                {/* Row 3 */}
                 <div className="space-y-2">
                   <Label>Email Sender</Label>
                   <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
@@ -503,7 +507,6 @@ export default function MyProduceDashboard() {
                   />
                 </div>
 
-                {/* Row 4 */}
                 <div className="space-y-2">
                   <Label>Contract/Subject Reference</Label>
                   <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
@@ -513,7 +516,6 @@ export default function MyProduceDashboard() {
                   <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
                 </div>
 
-                {/* Row 5 */}
                 <div className="space-y-2">
                   <Label>Total Vans</Label>
                   <Input 
@@ -533,7 +535,6 @@ export default function MyProduceDashboard() {
                   />
                 </div>
 
-                {/* Row 6 */}
                 <div className="space-y-2">
                   <Label>Type</Label>
                   <Select 
@@ -549,9 +550,8 @@ export default function MyProduceDashboard() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="hidden md:block" /> {/* Spacer */}
+                <div className="hidden md:block" />
 
-                {/* Bottom Section: SKUs and Notes */}
                 <div className="col-span-1 md:col-span-2 space-y-4 pt-2">
                   <div className="space-y-2">
                     <Label>Materials (SKUs)</Label>
@@ -570,13 +570,13 @@ export default function MyProduceDashboard() {
                         <DialogContent className="max-w-2xl p-0 h-[80vh] flex flex-col">
                           <DialogHeader className="p-6 pb-2 border-b">
                             <DialogTitle>Central SKU Selector</DialogTitle>
-                            <DialogDescription>Select one or more SKUs for this contract. Search by description or code.</DialogDescription>
+                            <DialogDescription>Select one or more SKUs for this contract.</DialogDescription>
                           </DialogHeader>
                           <div className="p-4 bg-gray-50/50 border-b">
                             <div className="relative">
                               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                               <Input 
-                                placeholder="Search SKUs by description or code..." 
+                                placeholder="Search SKUs by description..." 
                                 className="pl-10 bg-white" 
                                 value={skuSearchTerm} 
                                 onChange={(e) => setSkuSearchTerm(e.target.value)}
@@ -585,12 +585,7 @@ export default function MyProduceDashboard() {
                           </div>
                           <ScrollArea className="flex-1">
                             <div className="p-4 grid grid-cols-1 gap-1">
-                              {filteredSKUs.length === 0 ? (
-                                <div className="py-20 text-center text-gray-400">
-                                  <Box className="h-12 w-12 mx-auto opacity-10 mb-2" />
-                                  <p className="text-sm font-medium">No matching SKUs found.</p>
-                                </div>
-                              ) : filteredSKUs.map((sku: any) => (
+                              {filteredSKUs.map((sku: any) => (
                                 <div 
                                   key={sku.SAPC_Code} 
                                   className={cn(
@@ -601,14 +596,7 @@ export default function MyProduceDashboard() {
                                   )}
                                   onClick={() => toggleSKU(sku.SAPC_Code)}
                                 >
-                                  <div className={cn(
-                                    "h-5 w-5 rounded border flex items-center justify-center transition-colors",
-                                    newContract.selectedSKUs.includes(sku.SAPC_Code) 
-                                      ? "bg-indigo-600 border-indigo-600 text-white" 
-                                      : "bg-white border-gray-300"
-                                  )}>
-                                    {newContract.selectedSKUs.includes(sku.SAPC_Code) && <Check className="h-3 w-3 stroke-[3]" />}
-                                  </div>
+                                  <Checkbox checked={newContract.selectedSKUs.includes(sku.SAPC_Code)} onCheckedChange={() => toggleSKU(sku.SAPC_Code)} />
                                   <div className="flex-1 flex flex-col">
                                     <span className="text-sm font-bold text-gray-900">{sku.SAPC_Desc}</span>
                                     <span className="text-[10px] text-gray-400 font-mono">CODE: {sku.SAPC_Code}</span>
@@ -632,10 +620,7 @@ export default function MyProduceDashboard() {
                             return (
                               <Badge key={code} variant="secondary" className="text-[10px] py-1 pl-2 pr-1 gap-1 bg-white border-gray-200">
                                 <span className="max-w-[150px] truncate">{sku?.SAPC_Desc || code}</span>
-                                <button 
-                                  className="p-0.5 hover:bg-gray-100 rounded text-gray-400 hover:text-red-500" 
-                                  onClick={(e) => { e.stopPropagation(); toggleSKU(code); }}
-                                >
+                                <button className="p-0.5 hover:bg-gray-100 rounded text-gray-400" onClick={() => toggleSKU(code)}>
                                   <Plus className="h-3 w-3 rotate-45" />
                                 </button>
                               </Badge>
@@ -654,15 +639,6 @@ export default function MyProduceDashboard() {
                       placeholder="Enter any additional details, special instructions, or paste email content here..."
                       className="min-h-[100px] resize-none"
                     />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Attach Original PDF</Label>
-                    <div className="flex items-center gap-2 border-2 border-dashed rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => attachmentRef.current?.click()}>
-                      <Paperclip className="h-4 w-4 text-gray-400" />
-                      <span className="text-sm text-gray-500 font-medium">Click to upload original PDF advice for this contract</span>
-                      <input type="file" className="hidden" ref={attachmentRef} accept=".pdf" />
-                    </div>
                   </div>
                 </div>
               </div>
@@ -740,7 +716,7 @@ export default function MyProduceDashboard() {
 
     const handleBulkAiFill = async () => {
       if (!contract.notes) {
-        toast({ variant: "destructive", title: "No Information Found", description: "Please add email content or instructions to the 'Notes' field to parse items." });
+        toast({ variant: "destructive", title: "No Information Found", description: "Please add email content to 'Notes' to parse items." });
         return;
       }
       setIsExtracting(true);
@@ -756,12 +732,10 @@ export default function MyProduceDashboard() {
             });
           });
           await batch.commit();
-          toast({ title: "Extraction Successful", description: `Successfully added ${result.items.length} specification lines.` });
-        } else {
-           toast({ variant: "destructive", title: "No Items Found", description: "AI could not identify a valid specifications table in the notes." });
+          toast({ title: "Extraction Successful", description: `Added ${result.items.length} rows.` });
         }
       } catch (err) {
-        toast({ variant: "destructive", title: "Processing Error", description: "An error occurred while parsing information." });
+        toast({ variant: "destructive", title: "Processing Error", description: "Could not parse notes." });
       } finally {
         setIsExtracting(false);
       }
@@ -769,22 +743,70 @@ export default function MyProduceDashboard() {
 
     const handleUpdateBooking = (item: any) => {
       setEditingItem(item);
+      setIsBulkUpdate(false);
+      setIsBookingModalOpen(true);
+    };
+
+    const handleBulkUpdateBooking = () => {
+      if (selectedItemIds.length === 0) return;
+      setEditingItem({ vesselName: '', bookingNumber: '' });
+      setIsBulkUpdate(true);
       setIsBookingModalOpen(true);
     };
 
     const saveBookingInfo = async () => {
       if (!editingItem || !db) return;
       try {
-        await updateDoc(doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, editingItem.id), {
-          bookingNumber: editingItem.bookingNumber || '',
-          vesselName: editingItem.vesselName || '',
-          updatedAt: serverTimestamp()
+        const batch = writeBatch(db);
+        const idsToUpdate = isBulkUpdate ? selectedItemIds : [editingItem.id];
+        
+        idsToUpdate.forEach(id => {
+          const itemRef = doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, id);
+          batch.update(itemRef, {
+            bookingNumber: editingItem.bookingNumber || '',
+            vesselName: editingItem.vesselName || '',
+            updatedAt: serverTimestamp()
+          });
         });
+        
+        await batch.commit();
         setIsBookingModalOpen(false);
         setEditingItem(null);
-        toast({ title: "Updated", description: "Booking information has been updated successfully." });
+        setSelectedItemIds([]);
+        toast({ title: "Updated", description: `Logistics updated for ${idsToUpdate.length} item(s).` });
       } catch (err: any) {
         toast({ variant: "destructive", title: "Update Failed", description: err.message });
+      }
+    };
+
+    const toggleItemSelection = (itemId: string) => {
+      setSelectedItemIds(prev => 
+        prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
+      );
+    };
+
+    const toggleAllSelection = () => {
+      if (selectedItemIds.length === contractItems.length) {
+        setSelectedItemIds([]);
+      } else {
+        setSelectedItemIds(contractItems.map((item: any) => item.id));
+      }
+    };
+
+    const handleBulkDelete = async () => {
+      if (selectedItemIds.length === 0 || !db) return;
+      if (!confirm(`Are you sure you want to delete ${selectedItemIds.length} items?`)) return;
+      
+      try {
+        const batch = writeBatch(db);
+        selectedItemIds.forEach(id => {
+          batch.delete(doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, id));
+        });
+        await batch.commit();
+        setSelectedItemIds([]);
+        toast({ title: "Deleted", description: "Selected items have been removed." });
+      } catch (err: any) {
+        toast({ variant: "destructive", title: "Delete Failed", description: err.message });
       }
     };
 
@@ -797,15 +819,14 @@ export default function MyProduceDashboard() {
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
                 <Badge className="bg-anflocor-green">{contract.weekNumber}</Badge>
-                <span className="text-[10px] text-gray-400 font-bold uppercase">{getWeekRangeDisplay(contract.weekNumber || '')}</span>
               </div>
               <p className="text-sm text-gray-500">REF: {contract.contractRef} | VANS: {contract.totalVans || 0}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green hover:bg-anflocor-green hover:text-white">
+            <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green">
               {isExtracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              Extract Items from Notes
+              AI Extract Items
             </Button>
             <Button className="bg-anflocor-green"><FileSignature className="h-4 w-4 mr-2" /> Finalise Advice</Button>
           </div>
@@ -818,28 +839,16 @@ export default function MyProduceDashboard() {
               <CardContent className="space-y-4 pt-4">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">SENDER</Label>
-                  <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><Mail className="h-3 w-3" /> {contract.senderEmail || 'Unknown'}</p>
+                  <p className="text-xs font-bold text-gray-700">{contract.senderEmail || 'Unknown'}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">VOLUME</Label>
-                  <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Truck className="h-3 w-3" /> {contract.totalVans || 0} Vans</p>
-                  {contract.totalBoxes > 0 && <p className="text-xs font-bold text-amber-600 flex items-center gap-1"><Package className="h-3 w-3" /> {contract.totalBoxes} Boxes</p>}
+                  <p className="text-xs font-bold text-indigo-700">{contract.totalVans || 0} Vans / {contract.totalBoxes || 0} Boxes</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
                   <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
                 </div>
-                {contract.selectedSKUs && contract.selectedSKUs.length > 0 && (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-gray-400 uppercase">MATERIALS / SKUS</Label>
-                    <div className="flex flex-wrap gap-1">
-                      {contract.selectedSKUs.map((code: string) => {
-                         const sku = materialMappings.find((m: any) => m.SAPC_Code === code);
-                         return <Badge key={code} variant="outline" className="text-[9px] bg-white">{sku?.SAPC_Desc || code}</Badge>;
-                      })}
-                    </div>
-                  </div>
-                )}
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
                   <p className="text-xs font-bold text-gray-700">{contract.etd || 'Not Set'}</p>
@@ -848,102 +857,125 @@ export default function MyProduceDashboard() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Additional Information</CardTitle></CardHeader>
+              <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Notes</CardTitle></CardHeader>
               <CardContent className="pt-4">
-                <div className="text-xs text-gray-600 leading-relaxed italic whitespace-pre-wrap">
-                  {contract.notes || "No additional information provided."}
+                <div className="text-xs text-gray-600 leading-relaxed italic whitespace-pre-wrap line-clamp-6">
+                  {contract.notes || "No notes."}
                 </div>
-                <Button variant="ghost" size="sm" className="mt-4 w-full text-[10px] font-bold text-indigo-600" onClick={() => {
-                  const newNote = prompt("Edit Information:", contract.notes);
-                  if (newNote !== null) updateDoc(doc(db!, CONTRACT_PATH, contract.id), { notes: newNote, updatedAt: serverTimestamp() });
-                }}>EDIT INFORMATION</Button>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="lg:col-span-3">
-            <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
-              <div>
-                <CardTitle className="text-lg">Specification Line Items</CardTitle>
-                <CardDescription>Detailed breakdown extracted from the advice email.</CardDescription>
+          <div className="lg:col-span-3 space-y-4">
+            {selectedItemIds.length > 0 && (
+              <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-100 rounded-lg animate-in slide-in-from-top-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-indigo-900">{selectedItemIds.length} items selected</span>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedItemIds([])} className="h-8 text-indigo-600 px-2"><X className="h-4 w-4 mr-1" /> Clear</Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={handleBulkUpdateBooking} className="bg-indigo-600 hover:bg-indigo-700 text-white"><Ship className="h-4 w-4 mr-2" /> Bulk Assign Vessel</Button>
+                  <Button size="sm" variant="destructive" onClick={handleBulkDelete}><Trash2 className="h-4 w-4 mr-2" /> Delete Selected</Button>
+                </div>
               </div>
-              <Button size="sm" variant="outline" className="border-anflocor-green text-anflocor-green" onClick={() => {
-                 addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
-                  pod: 'NEW PORT',
-                  total: 0,
-                  specs: '',
-                  limitation: '',
-                  palletized: contract.palletizedType || 'Palletized',
-                  shippingLines: contract.shippingLine || '',
-                  etd: contract.etd || '',
-                  customerContractNumber: '',
-                  bookingNumber: '',
-                  vesselName: '',
-                  updatedAt: serverTimestamp()
-                });
-              }}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
-            </CardHeader>
-            <Table>
-              <TableHeader className="bg-gray-50/50">
-                <TableRow>
-                  <TableHead className="text-[10px] font-bold">POD</TableHead>
-                  <TableHead className="text-[10px] font-bold text-center">TOTAL</TableHead>
-                  <TableHead className="text-[10px] font-bold">SPECS</TableHead>
-                  <TableHead className="text-[10px] font-bold">BOOKING # / VESSEL</TableHead>
-                  <TableHead className="text-[10px] font-bold">ETD</TableHead>
-                  <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {itemsLoading ? (
-                  <TableRow><TableCell colSpan={6} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
-                ) : contractItems.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="h-32 text-center text-gray-400">No items. Use "Extract Items from Notes" to auto-parse data.</TableCell></TableRow>
-                ) : contractItems.map((item: any) => (
-                  <TableRow key={item.id} className="text-xs group">
-                    <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
-                    <TableCell className="font-mono text-center font-bold text-gray-900">{item.total}</TableCell>
-                    <TableCell className="max-w-[200px]">
-                      <div className="font-medium truncate" title={item.specs}>{item.specs}</div>
-                      <div className="text-[10px] text-gray-400 truncate" title={item.limitation}>{item.limitation}</div>
-                    </TableCell>
-                    <TableCell>
-                      {item.bookingNumber || item.vesselName ? (
-                        <div className="flex flex-col">
-                          <span className="text-xs font-black text-anflocor-green uppercase tracking-tighter">{item.bookingNumber || 'NO BOOKING'}</span>
-                          <span className="text-[10px] text-gray-500 font-bold italic">{item.vesselName || 'NO VESSEL'}</span>
-                        </div>
-                      ) : (
-                        <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold border border-dashed border-gray-200" onClick={() => handleUpdateBooking(item)}>
-                          ADD BOOKING
-                        </Button>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-orange-600 font-bold whitespace-nowrap">{item.etd}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleUpdateBooking(item)} title="Update Booking Info">
-                          <Edit2 className="h-3.5 w-3.5 text-gray-400" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))} title="Delete Row">
-                          <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            )}
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+                <div>
+                  <CardTitle className="text-lg">Specification Line Items</CardTitle>
+                  <CardDescription>Assign vessel and booking references to production rows.</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => {
+                  addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
+                    pod: 'NEW PORT',
+                    total: 0,
+                    specs: '',
+                    limitation: '',
+                    palletized: contract.palletizedType || 'Palletized',
+                    shippingLines: contract.shippingLine || '',
+                    etd: contract.etd || '',
+                    updatedAt: serverTimestamp()
+                  });
+                }}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
+              </CardHeader>
+              <Table>
+                <TableHeader className="bg-gray-50/50">
+                  <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox 
+                        checked={contractItems.length > 0 && selectedItemIds.length === contractItems.length}
+                        onCheckedChange={toggleAllSelection}
+                      />
+                    </TableHead>
+                    <TableHead className="text-[10px] font-bold">POD</TableHead>
+                    <TableHead className="text-[10px] font-bold text-center">TOTAL</TableHead>
+                    <TableHead className="text-[10px] font-bold">SPECS</TableHead>
+                    <TableHead className="text-[10px] font-bold">BOOKING # / VESSEL</TableHead>
+                    <TableHead className="text-[10px] font-bold">STATUS</TableHead>
+                    <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+                </TableHeader>
+                <TableBody>
+                  {itemsLoading ? (
+                    <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
+                  ) : contractItems.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-400">No items. Use AI Extract to parse notes.</TableCell></TableRow>
+                  ) : contractItems.map((item: any) => (
+                    <TableRow key={item.id} className="text-xs group h-12">
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedItemIds.includes(item.id)}
+                          onCheckedChange={() => toggleItemSelection(item.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
+                      <TableCell className="font-mono text-center font-bold text-gray-900">{item.total}</TableCell>
+                      <TableCell className="max-w-[150px] truncate">{item.specs}</TableCell>
+                      <TableCell>
+                        {item.bookingNumber || item.vesselName ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black text-anflocor-green uppercase truncate">{item.bookingNumber || 'NO BOOKING'}</span>
+                            <span className="text-[9px] text-gray-400 font-bold italic truncate">{item.vesselName || 'NO VESSEL'}</span>
+                          </div>
+                        ) : (
+                          <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold border border-dashed border-gray-200" onClick={() => handleUpdateBooking(item)}>
+                            ADD BOOKING
+                          </Button>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.bookingNumber ? (
+                          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none text-[9px]">BOOKED</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-gray-400 text-[9px]">UNBOOKED</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => handleUpdateBooking(item)}>
+                            <Edit2 className="h-3.5 w-3.5 text-gray-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}>
+                            <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </div>
         </div>
 
-        {/* Booking Update Dialog */}
+        {/* Logistics Update Dialog */}
         <Dialog open={isBookingModalOpen} onOpenChange={setIsBookingModalOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Update Logistics Booking</DialogTitle>
+              <DialogTitle>{isBulkUpdate ? `Bulk Update (${selectedItemIds.length} items)` : 'Update Logistics Booking'}</DialogTitle>
               <DialogDescription>
-                Assign vessel and booking reference for <strong>{editingItem?.total} Vans</strong> to <strong>{editingItem?.pod}</strong>.
+                Assign vessel and booking reference to {isBulkUpdate ? 'selected items' : `row to ${editingItem?.pod}`}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -966,7 +998,7 @@ export default function MyProduceDashboard() {
                   <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input 
                     id="booking" 
-                    placeholder="e.g. SITC:PHICHNCLGOOD90" 
+                    placeholder="e.g. PHICHNCLGOOD90" 
                     className="pl-10 font-mono"
                     value={editingItem?.bookingNumber || ''}
                     onChange={(e) => setEditingItem({...editingItem, bookingNumber: e.target.value})}
@@ -976,7 +1008,7 @@ export default function MyProduceDashboard() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsBookingModalOpen(false)}>Cancel</Button>
-              <Button onClick={saveBookingInfo} className="bg-anflocor-green"><Save className="h-4 w-4 mr-2" /> Save Changes</Button>
+              <Button onClick={saveBookingInfo} className="bg-anflocor-green"><Save className="h-4 w-4 mr-2" /> {isBulkUpdate ? 'Apply to Selected' : 'Save Changes'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -985,13 +1017,11 @@ export default function MyProduceDashboard() {
   };
 
   const configOptions = [
-    { id: 'contracts', title: "Contract Management", description: "Manage customer contracts and loading advice from emails.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
-    { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes and IDs.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
-    { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes and Pack Types.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
+    { id: 'contracts', title: "Contract Management", description: "Manage loading advice from emails.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
+    { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
+    { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
     { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
-    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" },
-    { id: 'brand-mapping', title: "Brand Mapping", description: "Configure brand labels.", icon: <Tag className="h-5 w-5" />, color: "bg-slate-600" },
-    { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" }
+    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
   ];
 
   const renderContent = () => {
@@ -1033,7 +1063,7 @@ export default function MyProduceDashboard() {
             {configOptions.map((option) => (
               <Card key={option.id} onClick={() => setActiveView(option.id as any)} className="group hover:ring-2 hover:ring-anflocor-green/20 transition-all cursor-pointer">
                 <CardHeader className="p-5">
-                  <div className={`${option.color} text-white p-2.5 rounded-lg w-fit shadow-md group-hover:scale-110 transition-transform`}>{option.icon}</div>
+                  <div className={`${option.color} text-white p-2.5 rounded-lg w-fit shadow-md transition-transform`}>{option.icon}</div>
                   <CardTitle className="text-base font-bold mt-4">{option.title}</CardTitle>
                   <CardDescription className="text-xs line-clamp-2">{option.description}</CardDescription>
                 </CardHeader>
