@@ -560,7 +560,11 @@ export default function MyProduceDashboard() {
                           <ChevronDownIcon className="ml-2 h-4 w-4 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0" align="start">
+                      <PopoverContent 
+                        className="w-[400px] p-0" 
+                        align="start" 
+                        onOpenAutoFocus={(e) => e.preventDefault()}
+                      >
                         <div className="p-2 border-b">
                           <div className="relative">
                             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
@@ -569,24 +573,32 @@ export default function MyProduceDashboard() {
                               className="pl-7 h-8 text-xs" 
                               value={skuSearchTerm} 
                               onChange={(e) => setSkuSearchTerm(e.target.value)}
+                              onKeyDown={(e) => e.stopPropagation()}
                             />
                           </div>
                         </div>
                         <ScrollArea className="h-64">
                           <div className="p-2 space-y-1">
-                            {filteredSKUs.map((sku: any) => (
+                            {filteredSKUs.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-gray-400">No matching SKUs found</div>
+                            ) : filteredSKUs.map((sku: any) => (
                               <div 
                                 key={sku.SAPC_Code} 
-                                className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md cursor-pointer"
-                                onClick={() => toggleSKU(sku.SAPC_Code)}
+                                className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleSKU(sku.SAPC_Code);
+                                }}
                               >
                                 <Checkbox 
                                   checked={newContract.selectedSKUs.includes(sku.SAPC_Code)}
                                   onCheckedChange={() => toggleSKU(sku.SAPC_Code)}
+                                  onClick={(e) => e.stopPropagation()}
                                 />
                                 <div className="flex flex-col">
-                                  <span className="text-xs font-bold">{sku.SAPC_Code}</span>
-                                  <span className="text-[10px] text-gray-500 line-clamp-1">{sku.SAPC_Desc}</span>
+                                  <span className="text-xs font-bold text-gray-800 line-clamp-1">{sku.SAPC_Desc}</span>
+                                  <span className="text-[10px] text-gray-400 font-mono">CODE: {sku.SAPC_Code}</span>
                                 </div>
                               </div>
                             ))}
