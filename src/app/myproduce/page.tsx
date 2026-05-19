@@ -30,7 +30,7 @@ import {
   Ship,
   FileSignature,
   Mail,
-  ChevronDown as ChevronDownIcon
+  Check
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -64,11 +64,6 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -109,6 +104,7 @@ export default function MyProduceDashboard() {
   
   // Contract Modal State
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
+  const [isSkuPickerOpen, setIsSkuPickerOpen] = useState(false);
   const [skuSearchTerm, setSkuSearchTerm] = useState('');
   const [newContract, setNewContract] = useState({
     customerName: '',
@@ -544,79 +540,96 @@ export default function MyProduceDashboard() {
 
                 <div className="col-span-1 md:col-span-2 space-y-4">
                   <div className="space-y-2">
-                    <Label>Select Materials (SKUs)</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between font-normal">
-                          <span className="truncate">
-                            {newContract.selectedSKUs.length > 0 
-                              ? `${newContract.selectedSKUs.length} SKU(s) selected` 
-                              : "Select SKUs"}
-                          </span>
-                          <ChevronDownIcon className="ml-2 h-4 w-4 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent 
-                        className="w-[400px] p-0" 
-                        align="start" 
-                        onOpenAutoFocus={(e) => e.preventDefault()}
-                      >
-                        <div className="p-2 border-b">
-                          <div className="relative">
-                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                            <Input 
-                              placeholder="Search SKUs..." 
-                              className="pl-7 h-8 text-xs" 
-                              value={skuSearchTerm} 
-                              onChange={(e) => setSkuSearchTerm(e.target.value)}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            />
+                    <Label>Materials (SKUs)</Label>
+                    <div className="flex flex-col gap-2">
+                      <Dialog open={isSkuPickerOpen} onOpenChange={setIsSkuPickerOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between font-normal bg-white">
+                            <span className="truncate">
+                              {newContract.selectedSKUs.length > 0 
+                                ? `${newContract.selectedSKUs.length} SKU(s) selected` 
+                                : "Click to select SKUs from list..."}
+                            </span>
+                            <Search className="ml-2 h-4 w-4 opacity-50" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl p-0 h-[80vh] flex flex-col">
+                          <DialogHeader className="p-6 pb-2 border-b">
+                            <DialogTitle>Central SKU Selector</DialogTitle>
+                            <DialogDescription>Select one or more SKUs for this contract. Search by description or code.</DialogDescription>
+                          </DialogHeader>
+                          <div className="p-4 bg-gray-50/50 border-b">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input 
+                                placeholder="Search SKUs by description or code..." 
+                                className="pl-10 bg-white" 
+                                value={skuSearchTerm} 
+                                onChange={(e) => setSkuSearchTerm(e.target.value)}
+                              />
+                            </div>
                           </div>
-                        </div>
-                        <ScrollArea className="h-64">
-                          <div className="p-2 space-y-1">
-                            {filteredSKUs.length === 0 ? (
-                              <div className="p-4 text-center text-xs text-gray-400">No matching SKUs found</div>
-                            ) : filteredSKUs.map((sku: any) => (
-                              <div 
-                                key={sku.SAPC_Code} 
-                                className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleSKU(sku.SAPC_Code);
-                                }}
-                              >
-                                <Checkbox 
-                                  checked={newContract.selectedSKUs.includes(sku.SAPC_Code)}
-                                  onCheckedChange={() => toggleSKU(sku.SAPC_Code)}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                <div className="flex flex-col">
-                                  <span className="text-xs font-bold text-gray-800 line-clamp-1">{sku.SAPC_Desc}</span>
-                                  <span className="text-[10px] text-gray-400 font-mono">CODE: {sku.SAPC_Code}</span>
+                          <ScrollArea className="flex-1">
+                            <div className="p-4 grid grid-cols-1 gap-1">
+                              {filteredSKUs.length === 0 ? (
+                                <div className="py-20 text-center text-gray-400">
+                                  <Box className="h-12 w-12 mx-auto opacity-10 mb-2" />
+                                  <p className="text-sm font-medium">No matching SKUs found.</p>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </PopoverContent>
-                    </Popover>
-                    {newContract.selectedSKUs.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {newContract.selectedSKUs.map(code => (
-                          <Badge key={code} variant="secondary" className="text-[9px]">
-                            {code}
-                            <button 
-                              className="ml-1 hover:text-red-500" 
-                              onClick={() => toggleSKU(code)}
-                            >
-                              ×
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
+                              ) : filteredSKUs.map((sku: any) => (
+                                <div 
+                                  key={sku.SAPC_Code} 
+                                  className={cn(
+                                    "flex items-center space-x-3 p-3 rounded-xl border transition-all cursor-pointer group",
+                                    newContract.selectedSKUs.includes(sku.SAPC_Code) 
+                                      ? "bg-indigo-50 border-indigo-200" 
+                                      : "hover:bg-gray-50 border-transparent"
+                                  )}
+                                  onClick={() => toggleSKU(sku.SAPC_Code)}
+                                >
+                                  <div className={cn(
+                                    "h-5 w-5 rounded border flex items-center justify-center transition-colors",
+                                    newContract.selectedSKUs.includes(sku.SAPC_Code) 
+                                      ? "bg-indigo-600 border-indigo-600 text-white" 
+                                      : "bg-white border-gray-300"
+                                  )}>
+                                    {newContract.selectedSKUs.includes(sku.SAPC_Code) && <Check className="h-3 w-3 stroke-[3]" />}
+                                  </div>
+                                  <div className="flex-1 flex flex-col">
+                                    <span className="text-sm font-bold text-gray-900">{sku.SAPC_Desc}</span>
+                                    <span className="text-[10px] text-gray-400 font-mono">CODE: {sku.SAPC_Code}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                          <DialogFooter className="p-4 border-t bg-gray-50">
+                            <Button className="w-full bg-anflocor-green" onClick={() => setIsSkuPickerOpen(false)}>
+                              Confirm Selection ({newContract.selectedSKUs.length})
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+
+                      {newContract.selectedSKUs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                          {newContract.selectedSKUs.map(code => {
+                            const sku = materialMappings.find((m: any) => m.SAPC_Code === code);
+                            return (
+                              <Badge key={code} variant="secondary" className="text-[10px] py-1 pl-2 pr-1 gap-1 bg-white border-gray-200">
+                                <span className="max-w-[150px] truncate">{sku?.SAPC_Desc || code}</span>
+                                <button 
+                                  className="p-0.5 hover:bg-gray-100 rounded text-gray-400 hover:text-red-500" 
+                                  onClick={(e) => { e.stopPropagation(); toggleSKU(code); }}
+                                >
+                                  <Plus className="h-3 w-3 rotate-45" />
+                                </button>
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -784,9 +797,10 @@ export default function MyProduceDashboard() {
                   <div className="space-y-1">
                     <Label className="text-[10px] text-gray-400 uppercase">MATERIALS / SKUS</Label>
                     <div className="flex flex-wrap gap-1">
-                      {contract.selectedSKUs.map((code: string) => (
-                        <Badge key={code} variant="outline" className="text-[9px] bg-white">{code}</Badge>
-                      ))}
+                      {contract.selectedSKUs.map((code: string) => {
+                         const sku = materialMappings.find((m: any) => m.SAPC_Code === code);
+                         return <Badge key={code} variant="outline" className="text-[9px] bg-white">{sku?.SAPC_Desc || code}</Badge>;
+                      })}
                     </div>
                   </div>
                 )}
