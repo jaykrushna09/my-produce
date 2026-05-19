@@ -63,7 +63,6 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -416,6 +415,7 @@ export default function MyProduceDashboard() {
                 <DialogDescription>Enter the details from the customer loading advice email.</DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 py-2">
+                {/* Left Column: Communication & Volume */}
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Customer Name</Label>
@@ -476,6 +476,7 @@ export default function MyProduceDashboard() {
                   </div>
                 </div>
 
+                {/* Right Column: Logistics */}
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Farm</Label>
@@ -538,6 +539,7 @@ export default function MyProduceDashboard() {
                   </div>
                 </div>
 
+                {/* Bottom Section: SKUs and Notes */}
                 <div className="col-span-1 md:col-span-2 space-y-4">
                   <div className="space-y-2">
                     <Label>Materials (SKUs)</Label>
