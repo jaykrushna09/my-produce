@@ -155,8 +155,6 @@ export default function MyProduceDashboard() {
     return query(collection(db, POL_PATH), orderBy('portName', 'asc'));
   }, [db]);
 
-  const polMappings = useCollection(polMappingsQuery).data;
-
   const podMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, POD_PATH), orderBy('portName', 'asc'));
@@ -174,6 +172,7 @@ export default function MyProduceDashboard() {
   
   const { data: customerMappings, loading: customerLoading } = useCollection(customerMappingsQuery);
   const { data: materialMappings, loading: materialLoading } = useCollection(materialMappingsQuery);
+  const { data: polMappings, loading: polLoading } = useCollection(polMappingsQuery);
   const { data: podMappings, loading: podLoading } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
   const { data: contractItems, loading: itemsLoading } = useCollection(contractItemsQuery);
@@ -408,149 +407,160 @@ export default function MyProduceDashboard() {
             <DialogTrigger asChild>
               <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white"><Plus className="mr-2 h-4 w-4" /> New Contract</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
-              <DialogHeader>
+            <DialogContent className="max-w-4xl overflow-y-auto max-h-[95vh] p-0">
+              <DialogHeader className="p-6 pb-2">
                 <DialogTitle>Create New Production Contract</DialogTitle>
+                <DialogDescription>Enter the details from the customer loading advice email.</DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-2 gap-6 py-4">
-                <div className="space-y-2">
-                  <Label>Customer Name</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, customerName: value})}
-                    value={newContract.customerName}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customerMappings.map((c: any) => (
-                        <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 py-2">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Customer Name</Label>
+                    <Select 
+                      onValueChange={(value) => setNewContract({...newContract, customerName: value})}
+                      value={newContract.customerName}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customerMappings.map((c: any) => (
+                          <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Week Number</Label>
+                    <Input 
+                      value={newContract.weekNumber} 
+                      onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
+                      placeholder="e.g. WK16" 
+                    />
+                    {newContract.weekNumber && (
+                      <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded inline-block">
+                        {getWeekRangeDisplay(newContract.weekNumber) || 'Invalid week number'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email Sender</Label>
+                    <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contract/Subject Reference</Label>
+                    <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Total Vans</Label>
+                    <Input 
+                      type="number"
+                      value={newContract.totalVans} 
+                      onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
+                      placeholder="Enter total vans" 
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Week Number</Label>
-                  <Input 
-                    value={newContract.weekNumber} 
-                    onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
-                    placeholder="e.g. WK16" 
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Farm</Label>
+                    <Select 
+                      onValueChange={(value) => setNewContract({...newContract, farm: value})}
+                      value={newContract.farm}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Farm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TADECO">TADECO</SelectItem>
+                        <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>POL (Port of Loading)</Label>
+                    <Select 
+                      onValueChange={(value) => setNewContract({...newContract, pol: value})}
+                      value={newContract.pol}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select POL" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {polMappings.map((p: any) => (
+                          <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ETD (Estimated Time of Departure)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "w-full justify-start text-left font-normal border-input",
+                            !selectedDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={setSelectedDate}
+                          initialFocus
+                          className="rounded-md border shadow"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Shipping Line</Label>
+                    <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select 
+                      onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
+                      value={newContract.palletizedType}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Palletized">Palletized</SelectItem>
+                        <SelectItem value="Non Palletized">Non Palletized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 space-y-2">
+                  <Label>Additional Information / Notes</Label>
+                  <Textarea 
+                    value={newContract.notes} 
+                    onChange={(e) => setNewContract({...newContract, notes: e.target.value})}
+                    placeholder="Enter any additional details, special instructions, or paste email content here..."
+                    className="min-h-[100px] resize-none"
                   />
-                  {newContract.weekNumber && (
-                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
-                      {getWeekRangeDisplay(newContract.weekNumber) || 'Invalid week number'}
-                    </p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Email Sender</Label>
-                  <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="akwalser@goodfarmer.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Contract/Subject Reference</Label>
-                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice for week 16" />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Farm</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, farm: value})}
-                    value={newContract.farm}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Farm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TADECO">TADECO</SelectItem>
-                      <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>POL (Port of Loading)</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, pol: value})}
-                    value={newContract.pol}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select POL" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {polMappings.map((p: any) => (
-                        <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>ETD (Estimated Time of Departure)</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !selectedDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Shipping Line</Label>
-                  <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select 
-                    onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
-                    value={newContract.palletizedType}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Palletized">Palletized</SelectItem>
-                      <SelectItem value="Non Palletized">Non Palletized</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Total Vans</Label>
-                  <Input 
-                    type="number"
-                    value={newContract.totalVans} 
-                    onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
-                    placeholder="Enter total vans" 
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-2">
+                <div className="col-span-1 md:col-span-2 space-y-2">
                   <Label>Attach Original PDF</Label>
                   <div className="flex items-center gap-2 border-2 border-dashed rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => attachmentRef.current?.click()}>
                     <Paperclip className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-500 font-medium">Click to upload PDF Advice</span>
+                    <span className="text-sm text-gray-500 font-medium">Click to upload original PDF advice for this contract</span>
                     <input type="file" className="hidden" ref={attachmentRef} accept=".pdf" />
                   </div>
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="p-6 bg-gray-50 border-t">
                 <Button variant="outline" onClick={() => setIsNewContractOpen(false)}>Cancel</Button>
                 <Button onClick={handleCreateContract} className="bg-anflocor-green">Create Contract</Button>
               </DialogFooter>
@@ -623,7 +633,7 @@ export default function MyProduceDashboard() {
 
     const handleBulkAiFill = async () => {
       if (!contract.notes) {
-        toast({ variant: "destructive", title: "Error", description: "No context found for this contract to parse items." });
+        toast({ variant: "destructive", title: "No Information Found", description: "Please add email content or instructions to the 'Notes' field to parse items." });
         return;
       }
       setIsExtracting(true);
@@ -639,10 +649,12 @@ export default function MyProduceDashboard() {
             });
           });
           await batch.commit();
-          toast({ title: "Items Extracted", description: `Successfully added ${result.items.length} line items from text.` });
+          toast({ title: "Extraction Successful", description: `Successfully added ${result.items.length} specification lines.` });
+        } else {
+           toast({ variant: "destructive", title: "No Items Found", description: "AI could not identify a valid specifications table in the notes." });
         }
       } catch (err) {
-        toast({ variant: "destructive", title: "AI Error", description: "Could not parse items from text." });
+        toast({ variant: "destructive", title: "Processing Error", description: "An error occurred while parsing information." });
       } finally {
         setIsExtracting(false);
       }
@@ -663,44 +675,59 @@ export default function MyProduceDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green">
+            <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green hover:bg-anflocor-green hover:text-white">
               {isExtracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              Extract Items
+              Extract Items from Notes
             </Button>
             <Button className="bg-anflocor-green"><FileSignature className="h-4 w-4 mr-2" /> Finalise Advice</Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <Card className="lg:col-span-1 h-fit bg-gray-50/50">
-            <CardHeader className="pb-2"><CardTitle className="text-sm uppercase tracking-wider text-gray-400">Header Info</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">SENDER</Label>
-                <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><Mail className="h-3 w-3" /> {contract.senderEmail || 'Unknown'}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">TOTAL VANS</Label>
-                <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Truck className="h-3 w-3" /> {contract.totalVans || 0} Vans</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
-                <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
-                <p className="text-xs font-bold text-gray-700">{contract.etd || 'Not Set'}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">SHIPPING LINE</Label>
-                <p className="text-xs font-bold text-gray-700">{contract.shippingLine || 'Not Set'}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">TYPE</Label>
-                <p className="text-xs font-bold text-gray-700">{contract.palletizedType || 'Not Set'}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="lg:col-span-1 space-y-6">
+            <Card className="h-fit bg-gray-50/50">
+              <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Header Information</CardTitle></CardHeader>
+              <CardContent className="space-y-4 pt-4">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">SENDER</Label>
+                  <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><Mail className="h-3 w-3" /> {contract.senderEmail || 'Unknown'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">VANS COUNT</Label>
+                  <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Truck className="h-3 w-3" /> {contract.totalVans || 0} Vans</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.etd || 'Not Set'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">SHIPPING LINE</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.shippingLine || 'Not Set'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-gray-400 uppercase">TYPE</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.palletizedType || 'Not Set'}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Additional Information</CardTitle></CardHeader>
+              <CardContent className="pt-4">
+                <div className="text-xs text-gray-600 leading-relaxed italic whitespace-pre-wrap">
+                  {contract.notes || "No additional information provided."}
+                </div>
+                <Button variant="ghost" size="sm" className="mt-4 w-full text-[10px] font-bold text-indigo-600" onClick={() => {
+                  const newNote = prompt("Edit Information:", contract.notes);
+                  if (newNote !== null) updateDoc(doc(db!, CONTRACT_PATH, contract.id), { notes: newNote, updatedAt: serverTimestamp() });
+                }}>EDIT INFORMATION</Button>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card className="lg:col-span-3">
             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
@@ -708,13 +735,13 @@ export default function MyProduceDashboard() {
                 <CardTitle className="text-lg">Specification Line Items</CardTitle>
                 <CardDescription>Detailed breakdown extracted from the advice email.</CardDescription>
               </div>
-              <Button size="sm" variant="outline" onClick={() => {
+              <Button size="sm" variant="outline" className="border-anflocor-green text-anflocor-green" onClick={() => {
                  addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
                   pod: 'NEW PORT',
                   total: 0,
-                  specs: 'A456',
+                  specs: '',
                   limitation: '',
-                  palletized: contract.palletizedType || 'Breakbulk',
+                  palletized: contract.palletizedType || 'Palletized',
                   shippingLines: contract.shippingLine || '',
                   etd: contract.etd || '',
                   customerContractNumber: '',
@@ -740,7 +767,7 @@ export default function MyProduceDashboard() {
                 {itemsLoading ? (
                   <TableRow><TableCell colSpan={9} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                 ) : contractItems.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">No items. Use "Extract Items" to auto-parse the context.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-gray-400">No items. Use "Extract Items from Notes" to auto-parse data.</TableCell></TableRow>
                 ) : contractItems.map((item: any) => (
                   <TableRow key={item.id} className="text-xs">
                     <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
@@ -837,7 +864,7 @@ export default function MyProduceDashboard() {
     
     let loading = false;
     if (isMaterialView) loading = materialLoading;
-    else if (isPolView) loading = false; 
+    else if (isPolView) loading = polLoading; 
     else if (isPodView) loading = podLoading;
     else loading = customerLoading;
 
