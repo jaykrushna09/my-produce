@@ -516,7 +516,10 @@ export default function MyProduceDashboard() {
                           selected={selectedDate}
                           onSelect={(date) => {
                             setSelectedDate(date);
-                            // We do not auto-close here as requested to allow confirmation
+                            if (date) {
+                              setNewContract(prev => ({ ...prev, etd: format(date, 'yyyy-MM-dd') }));
+                              setIsDatePickerOpen(false);
+                            }
                           }}
                           initialFocus
                           className="rounded-md border shadow"
