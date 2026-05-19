@@ -15,7 +15,6 @@ import {
   Box,
   Tag,
   DollarSign,
-  Barcode,
   Anchor,
   Navigation,
   Upload,
@@ -25,17 +24,13 @@ import {
   Search,
   FileText,
   Plus,
-  Edit,
   FileCheck,
-  ClipboardList,
   Sparkles,
   Paperclip,
-  CalendarDays,
   MapPin,
   Ship,
   FileSignature,
   Mail,
-  Scale,
   Calendar as CalendarIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -87,8 +82,6 @@ import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'contracts' | 'contract-details';
@@ -107,7 +100,6 @@ export default function MyProduceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
   // Contract Modal State
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
@@ -125,8 +117,6 @@ export default function MyProduceDashboard() {
     shippingLine: '',
     palletizedType: 'Palletized' as 'Palletized' | 'Non Palletized'
   });
-
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   // Protect the route
   useEffect(() => {
@@ -226,7 +216,6 @@ export default function MyProduceDashboard() {
       await setDoc(doc(db, CONTRACT_PATH, contractId), {
         contractId,
         ...newContract,
-        etd: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '',
         status: 'pending',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -246,7 +235,6 @@ export default function MyProduceDashboard() {
         shippingLine: '',
         palletizedType: 'Palletized'
       });
-      setSelectedDate(undefined);
       toast({ title: "Contract Created", description: "New contract has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -334,29 +322,16 @@ export default function MyProduceDashboard() {
               });
               count++;
             }
-          } else if (activeView === 'port-of-loading') {
-            const pol = findKey(['PORT_OF_LOADING', 'PORT OF LOADING', 'POL']);
-            if (pol) {
-              const portName = String(pol).trim();
-              if (portName) {
-                batch.set(doc(db, targetPath, portName), {
-                  portName: portName,
-                  updatedAt: serverTimestamp()
-                });
-                count++;
-              }
-            }
-          } else if (activeView === 'port-of-destination') {
-            const pod = findKey(['PORT_OF_DESTINATION', 'PORT OF DESTINATION', 'POD']);
-            if (pod) {
-              const portName = String(pod).trim();
-              if (portName) {
-                batch.set(doc(db, targetPath, portName), {
-                  portName: portName,
-                  updatedAt: serverTimestamp()
-                });
-                count++;
-              }
+          } else if (activeView === 'port-of-loading' || activeView === 'port-of-destination') {
+            const colName = activeView === 'port-of-loading' ? 'PORT_OF_LOADING' : 'PORT_OF_DESTINATION';
+            const portVal = findKey([colName, colName.replace(/_/g, ' '), activeView === 'port-of-loading' ? 'POL' : 'POD']);
+            if (portVal) {
+              const portName = String(portVal).trim();
+              batch.set(doc(db, targetPath, portName), {
+                portName: portName,
+                updatedAt: serverTimestamp()
+              });
+              count++;
             }
           }
         });
@@ -497,35 +472,12 @@ export default function MyProduceDashboard() {
                   </div>
                   <div className="space-y-2">
                     <Label>ETD (Estimated Time of Departure)</Label>
-                    <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full justify-start text-left font-normal border-input",
-                            !selectedDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[110]" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={selectedDate}
-                          onSelect={(date) => {
-                            if (date) {
-                              setSelectedDate(date);
-                              setNewContract(prev => ({ ...prev, etd: format(date, 'yyyy-MM-dd') }));
-                              setIsDatePickerOpen(false);
-                            }
-                          }}
-                          initialFocus
-                          className="rounded-md border shadow"
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <Input 
+                      type="date"
+                      value={newContract.etd}
+                      onChange={(e) => setNewContract({...newContract, etd: e.target.value})}
+                      className="w-full"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Shipping Line</Label>
