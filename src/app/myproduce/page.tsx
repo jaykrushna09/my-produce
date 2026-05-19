@@ -510,13 +510,13 @@ export default function MyProduceDashboard() {
                           {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                      <PopoverContent className="w-auto p-0 z-[110]" align="start">
                         <Calendar
                           mode="single"
                           selected={selectedDate}
                           onSelect={(date) => {
-                            setSelectedDate(date);
                             if (date) {
+                              setSelectedDate(date);
                               setNewContract(prev => ({ ...prev, etd: format(date, 'yyyy-MM-dd') }));
                               setIsDatePickerOpen(false);
                             }
