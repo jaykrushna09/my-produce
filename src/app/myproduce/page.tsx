@@ -107,6 +107,7 @@ export default function MyProduceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
   // Contract Modal State
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
@@ -496,7 +497,7 @@ export default function MyProduceDashboard() {
                   </div>
                   <div className="space-y-2">
                     <Label>ETD (Estimated Time of Departure)</Label>
-                    <Popover>
+                    <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           variant={"outline"}
@@ -513,7 +514,10 @@ export default function MyProduceDashboard() {
                         <Calendar
                           mode="single"
                           selected={selectedDate}
-                          onSelect={setSelectedDate}
+                          onSelect={(date) => {
+                            setSelectedDate(date);
+                            if (date) setIsDatePickerOpen(false);
+                          }}
                           initialFocus
                           className="rounded-md border shadow"
                         />
