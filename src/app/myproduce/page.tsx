@@ -89,7 +89,7 @@ import * as XLSX from 'xlsx';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { format } from 'date-fns';
+import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'contracts' | 'contract-details';
 
@@ -115,6 +115,7 @@ export default function MyProduceDashboard() {
     contractRef: '',
     senderEmail: '',
     weekNumber: '',
+    totalVans: 0,
     farm: 'TADECO',
     pol: '',
     totalVolume: '',
@@ -236,6 +237,7 @@ export default function MyProduceDashboard() {
         contractRef: '', 
         senderEmail: '', 
         weekNumber: '', 
+        totalVans: 0,
         farm: 'TADECO', 
         pol: '', 
         totalVolume: '', 
@@ -375,6 +377,21 @@ export default function MyProduceDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
+  const getWeekRangeDisplay = (weekStr: string) => {
+    const num = parseInt(weekStr.replace(/\D/g, ''));
+    if (isNaN(num) || num < 1 || num > 53) return null;
+    try {
+      const year = new Date().getFullYear();
+      const baseDate = new Date(year, 0, 4); // Jan 4 is always in week 1
+      const dateInWeek = setISOWeek(baseDate, num);
+      const start = startOfISOWeek(dateInWeek);
+      const end = endOfISOWeek(dateInWeek);
+      return `${format(start, 'MMM dd')} - ${format(end, 'MMM dd, yyyy')}`;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const renderContractsView = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -414,7 +431,16 @@ export default function MyProduceDashboard() {
                 </div>
                 <div className="space-y-2">
                   <Label>Week Number</Label>
-                  <Input value={newContract.weekNumber} onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} placeholder="e.g. WK16" />
+                  <Input 
+                    value={newContract.weekNumber} 
+                    onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
+                    placeholder="e.g. WK16" 
+                  />
+                  {newContract.weekNumber && (
+                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
+                      {getWeekRangeDisplay(newContract.weekNumber) || 'Invalid week number'}
+                    </p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -506,8 +532,13 @@ export default function MyProduceDashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Total Volume (Vans/Boxes)</Label>
-                  <Input value={newContract.totalVolume} onChange={(e) => setNewContract({...newContract, totalVolume: e.target.value})} placeholder="92vans ARH/CP18" />
+                  <Label>Total Vans</Label>
+                  <Input 
+                    type="number"
+                    value={newContract.totalVans} 
+                    onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
+                    placeholder="Enter total vans" 
+                  />
                 </div>
 
                 <div className="col-span-2 space-y-2">
@@ -535,7 +566,7 @@ export default function MyProduceDashboard() {
               <TableHead className="font-bold">WK NO</TableHead>
               <TableHead className="font-bold">Customer</TableHead>
               <TableHead className="font-bold">Sender / Reference</TableHead>
-              <TableHead className="font-bold">Volume</TableHead>
+              <TableHead className="font-bold">Vans / Volume</TableHead>
               <TableHead className="font-bold">Farm / POL</TableHead>
               <TableHead className="font-bold">Status</TableHead>
               <TableHead className="text-right font-bold">Actions</TableHead>
@@ -548,13 +579,21 @@ export default function MyProduceDashboard() {
               <TableRow><TableCell colSpan={7} className="h-48 text-center text-gray-400 font-medium">No contracts found.</TableCell></TableRow>
             ) : filteredData.map((c: any) => (
               <TableRow key={c.id} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
-                <TableCell><Badge variant="outline" className="font-bold text-anflocor-green">{c.weekNumber || 'N/A'}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="font-bold text-anflocor-green">{c.weekNumber || 'N/A'}</Badge>
+                  <div className="text-[9px] text-gray-400 mt-0.5">{getWeekRangeDisplay(c.weekNumber || '')}</div>
+                </TableCell>
                 <TableCell className="font-bold text-gray-900">{c.customerName}</TableCell>
                 <TableCell>
                   <div className="text-xs font-medium text-gray-900 flex items-center gap-1"><Mail className="h-3 w-3" /> {c.senderEmail}</div>
                   <div className="text-[10px] text-gray-400 line-clamp-1">{c.contractRef}</div>
                 </TableCell>
-                <TableCell className="text-xs font-bold text-indigo-700">{c.totalVolume || '-'}</TableCell>
+                <TableCell className="text-xs font-bold text-indigo-700">
+                  <div className="flex flex-col">
+                    <span>{c.totalVans || 0} Vans</span>
+                    <span className="text-[10px] text-gray-400 font-normal">{c.totalVolume || '-'}</span>
+                  </div>
+                </TableCell>
                 <TableCell className="text-xs font-medium text-gray-600">
                   <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {c.farm}</div>
                   <div className="flex items-center gap-1 text-gray-400"><Ship className="h-3 w-3" /> {c.pol}</div>
@@ -618,8 +657,9 @@ export default function MyProduceDashboard() {
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
                 <Badge className="bg-anflocor-green">{contract.weekNumber}</Badge>
+                <span className="text-[10px] text-gray-400 font-bold uppercase">{getWeekRangeDisplay(contract.weekNumber || '')}</span>
               </div>
-              <p className="text-sm text-gray-500">REF: {contract.contractRef} | VOL: {contract.totalVolume}</p>
+              <p className="text-sm text-gray-500">REF: {contract.contractRef} | VANS: {contract.totalVans || 0}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -640,8 +680,8 @@ export default function MyProduceDashboard() {
                 <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><Mail className="h-3 w-3" /> {contract.senderEmail || 'Unknown'}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-gray-400 uppercase">TOTAL VOLUME</Label>
-                <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Scale className="h-3 w-3" /> {contract.totalVolume || 'Not Specified'}</p>
+                <Label className="text-[10px] text-gray-400 uppercase">TOTAL VANS</Label>
+                <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Truck className="h-3 w-3" /> {contract.totalVans || 0} Vans</p>
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>

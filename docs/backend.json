@@ -69,6 +69,7 @@
         "senderEmail": { "type": "string", "format": "email" },
         "customerName": { "type": "string" },
         "weekNumber": { "type": "string" },
+        "totalVans": { "type": "number", "description": "Number of vans for this contract" },
         "farm": { "type": "string" },
         "pol": { "type": "string", "description": "Port of Loading" },
         "totalVolume": { "type": "string", "description": "Total vans/boxes mentioned in email" },
@@ -121,10 +122,7 @@
       "schema": { "$ref": "#/backend/entities/PortOfLoading" },
       "description": "Port of Loading records"
     },
-    "/app_configuration/pod_mapping/pod_saving/{portId}": {
-      "schema": { "$ref": "#/backend/entities/PortOfDestination" },
-      "description": "Port of Destination records"
-    },
+    "/app_configuration/pod_mapping/pod_saving/{portId}": { "schema": { "$ref": "#/backend/entities/PortOfDestination" }, "description": "Port of Destination records" },
     "/app_data/contracts/contract_saving/{contractId}": {
       "schema": { "$ref": "#/backend/entities/Contract" },
       "description": "Root contract records"
