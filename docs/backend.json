@@ -70,6 +70,8 @@
         "customerName": { "type": "string" },
         "weekNumber": { "type": "string" },
         "totalVans": { "type": "number", "description": "Number of vans for this contract" },
+        "totalBoxes": { "type": "number", "description": "Number of boxes for this contract" },
+        "selectedSKUs": { "type": "array", "items": { "type": "string" }, "description": "List of Material SAPC Codes" },
         "farm": { "type": "string" },
         "pol": { "type": "string", "description": "Port of Loading" },
         "totalVolume": { "type": "string", "description": "Total vans/boxes mentioned in email" },

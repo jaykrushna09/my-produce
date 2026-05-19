@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -31,7 +32,9 @@ import {
   Ship,
   FileSignature,
   Mail,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Check as CheckIcon,
+  ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -64,6 +67,13 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { 
@@ -103,19 +113,22 @@ export default function MyProduceDashboard() {
   
   // Contract Modal State
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
+  const [skuSearchTerm, setSkuSearchTerm] = useState('');
   const [newContract, setNewContract] = useState({
     customerName: '',
     contractRef: '',
     senderEmail: '',
     weekNumber: '',
     totalVans: 0,
+    totalBoxes: 0,
     farm: 'TADECO',
     pol: '',
     totalVolume: '',
     notes: '',
     etd: '',
     shippingLine: '',
-    palletizedType: 'Palletized' as 'Palletized' | 'Non Palletized'
+    palletizedType: 'Palletized' as 'Palletized' | 'Non Palletized',
+    selectedSKUs: [] as string[]
   });
 
   // Protect the route
@@ -199,6 +212,15 @@ export default function MyProduceDashboard() {
     return [];
   }, [customerMappings, materialMappings, polMappings, podMappings, contracts, activeView, searchTerm]);
 
+  const filteredSKUs = useMemo(() => {
+    if (!skuSearchTerm) return materialMappings;
+    const term = skuSearchTerm.toLowerCase();
+    return materialMappings.filter(m => 
+      String(m.SAPC_Code || '').toLowerCase().includes(term) ||
+      String(m.SAPC_Desc || '').toLowerCase().includes(term)
+    );
+  }, [materialMappings, skuSearchTerm]);
+
   const handleSignOut = async () => {
     if (auth) {
       await signOut(auth);
@@ -227,18 +249,31 @@ export default function MyProduceDashboard() {
         senderEmail: '', 
         weekNumber: '', 
         totalVans: 0,
+        totalBoxes: 0,
         farm: 'TADECO', 
         pol: '', 
         totalVolume: '', 
         notes: '',
         etd: '',
         shippingLine: '',
-        palletizedType: 'Palletized'
+        palletizedType: 'Palletized',
+        selectedSKUs: []
       });
       toast({ title: "Contract Created", description: "New contract has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
+  };
+
+  const toggleSKU = (sapcCode: string) => {
+    setNewContract(prev => {
+      const isSelected = prev.selectedSKUs.includes(sapcCode);
+      if (isSelected) {
+        return { ...prev, selectedSKUs: prev.selectedSKUs.filter(code => code !== sapcCode) };
+      } else {
+        return { ...prev, selectedSKUs: [...prev.selectedSKUs, sapcCode] };
+      }
+    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -427,14 +462,25 @@ export default function MyProduceDashboard() {
                     <Label>Contract/Subject Reference</Label>
                     <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Total Vans</Label>
-                    <Input 
-                      type="number"
-                      value={newContract.totalVans} 
-                      onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
-                      placeholder="Enter total vans" 
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Total Vans</Label>
+                      <Input 
+                        type="number"
+                        value={newContract.totalVans} 
+                        onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
+                        placeholder="Vans" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Box Count (Optional)</Label>
+                      <Input 
+                        type="number"
+                        value={newContract.totalBoxes} 
+                        onChange={(e) => setNewContract({...newContract, totalBoxes: parseInt(e.target.value) || 0})} 
+                        placeholder="Boxes" 
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -500,22 +546,88 @@ export default function MyProduceDashboard() {
                   </div>
                 </div>
 
-                <div className="col-span-1 md:col-span-2 space-y-2">
-                  <Label>Additional Information / Notes</Label>
-                  <Textarea 
-                    value={newContract.notes} 
-                    onChange={(e) => setNewContract({...newContract, notes: e.target.value})}
-                    placeholder="Enter any additional details, special instructions, or paste email content here..."
-                    className="min-h-[100px] resize-none"
-                  />
-                </div>
+                <div className="col-span-1 md:col-span-2 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Select Materials (SKUs)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {newContract.selectedSKUs.length > 0 
+                              ? `${newContract.selectedSKUs.length} SKU(s) selected` 
+                              : "Select SKUs"}
+                          </span>
+                          <ChevronDownIcon className="ml-2 h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                            <Input 
+                              placeholder="Search SKUs..." 
+                              className="pl-7 h-8 text-xs" 
+                              value={skuSearchTerm} 
+                              onChange={(e) => setSkuSearchTerm(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <ScrollArea className="h-64">
+                          <div className="p-2 space-y-1">
+                            {filteredSKUs.map((sku: any) => (
+                              <div 
+                                key={sku.SAPC_Code} 
+                                className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md cursor-pointer"
+                                onClick={() => toggleSKU(sku.SAPC_Code)}
+                              >
+                                <Checkbox 
+                                  checked={newContract.selectedSKUs.includes(sku.SAPC_Code)}
+                                  onCheckedChange={() => toggleSKU(sku.SAPC_Code)}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-bold">{sku.SAPC_Code}</span>
+                                  <span className="text-[10px] text-gray-500 line-clamp-1">{sku.SAPC_Desc}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                    {newContract.selectedSKUs.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {newContract.selectedSKUs.map(code => (
+                          <Badge key={code} variant="secondary" className="text-[9px]">
+                            {code}
+                            <button 
+                              className="ml-1 hover:text-red-500" 
+                              onClick={() => toggleSKU(code)}
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="col-span-1 md:col-span-2 space-y-2">
-                  <Label>Attach Original PDF</Label>
-                  <div className="flex items-center gap-2 border-2 border-dashed rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => attachmentRef.current?.click()}>
-                    <Paperclip className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-500 font-medium">Click to upload original PDF advice for this contract</span>
-                    <input type="file" className="hidden" ref={attachmentRef} accept=".pdf" />
+                  <div className="space-y-2">
+                    <Label>Additional Information / Notes</Label>
+                    <Textarea 
+                      value={newContract.notes} 
+                      onChange={(e) => setNewContract({...newContract, notes: e.target.value})}
+                      placeholder="Enter any additional details, special instructions, or paste email content here..."
+                      className="min-h-[100px] resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Attach Original PDF</Label>
+                    <div className="flex items-center gap-2 border-2 border-dashed rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => attachmentRef.current?.click()}>
+                      <Paperclip className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm text-gray-500 font-medium">Click to upload original PDF advice for this contract</span>
+                      <input type="file" className="hidden" ref={attachmentRef} accept=".pdf" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -535,7 +647,7 @@ export default function MyProduceDashboard() {
               <TableHead className="font-bold">WK NO</TableHead>
               <TableHead className="font-bold">Customer</TableHead>
               <TableHead className="font-bold">Sender / Reference</TableHead>
-              <TableHead className="font-bold">Vans / Volume</TableHead>
+              <TableHead className="font-bold">Vans / Boxes</TableHead>
               <TableHead className="font-bold">Farm / POL</TableHead>
               <TableHead className="font-bold">Status</TableHead>
               <TableHead className="text-right font-bold">Actions</TableHead>
@@ -560,7 +672,7 @@ export default function MyProduceDashboard() {
                 <TableCell className="text-xs font-bold text-indigo-700">
                   <div className="flex flex-col">
                     <span>{c.totalVans || 0} Vans</span>
-                    <span className="text-[10px] text-gray-400 font-normal">{c.totalVolume || '-'}</span>
+                    {c.totalBoxes > 0 && <span className="text-[10px] text-amber-600">{c.totalBoxes} Boxes</span>}
                   </div>
                 </TableCell>
                 <TableCell className="text-xs font-medium text-gray-600">
@@ -652,24 +764,27 @@ export default function MyProduceDashboard() {
                   <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><Mail className="h-3 w-3" /> {contract.senderEmail || 'Unknown'}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">VANS COUNT</Label>
+                  <Label className="text-[10px] text-gray-400 uppercase">VOLUME</Label>
                   <p className="text-xs font-bold text-indigo-700 flex items-center gap-1"><Truck className="h-3 w-3" /> {contract.totalVans || 0} Vans</p>
+                  {contract.totalBoxes > 0 && <p className="text-xs font-bold text-amber-600 flex items-center gap-1"><Package className="h-3 w-3" /> {contract.totalBoxes} Boxes</p>}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">FARM / POL</Label>
                   <p className="text-xs font-bold text-gray-700">{contract.farm} / {contract.pol}</p>
                 </div>
+                {contract.selectedSKUs && contract.selectedSKUs.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-gray-400 uppercase">MATERIALS / SKUS</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {contract.selectedSKUs.map((code: string) => (
+                        <Badge key={code} variant="outline" className="text-[9px] bg-white">{code}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
                   <p className="text-xs font-bold text-gray-700">{contract.etd || 'Not Set'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">SHIPPING LINE</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.shippingLine || 'Not Set'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">TYPE</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.palletizedType || 'Not Set'}</p>
                 </div>
               </CardContent>
             </Card>
