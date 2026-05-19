@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -15,7 +14,6 @@ import {
   Users,
   Box,
   Tag,
-  DollarSign,
   Anchor,
   Navigation,
   Upload,
@@ -32,8 +30,6 @@ import {
   Ship,
   FileSignature,
   Mail,
-  Calendar as CalendarIcon,
-  Check as CheckIcon,
   ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -884,7 +880,6 @@ export default function MyProduceDashboard() {
     { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
     { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" },
     { id: 'brand-mapping', title: "Brand Mapping", description: "Configure brand labels.", icon: <Tag className="h-5 w-5" />, color: "bg-slate-600" },
-    { id: 'profit-center-mapping', title: "Profit Center Mapping", description: "Assign production blocks.", icon: <DollarSign className="h-5 w-5" />, color: "bg-amber-600" },
     { id: 'pack-type', title: "Pack Type", description: "Define packaging specs.", icon: <Package className="h-5 w-5" />, color: "bg-orange-600" }
   ];
 
