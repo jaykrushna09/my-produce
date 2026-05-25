@@ -142,15 +142,32 @@ export default function MyProduceDashboard() {
   const auth = useAuth();
   const { user, loading: userLoading } = useUser();
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
   
+  // New LA Form State
+  const [isNewLAOpen, setIsNewLAOpen] = useState(false);
+  const [newLAHeader, setNewLAHeader] = useState({
+    customerName: '',
+    weekNumber: ''
+  });
+  const [laRows, setLaRows] = useState<LARow[]>([{
+    id: Math.random().toString(36).substr(2, 9),
+    farm: 'TADECO',
+    pol: 'DAVAO',
+    pod: '',
+    shippingLine: '',
+    cutOffDate: '',
+    etd: '',
+    totalVans: 0,
+    skuCode: '',
+    palletizedType: 'Palletized'
+  }]);
+
   // Cutting Order Rows State
   const [coRows, setCoRows] = useState<CORow[]>([]);
 
@@ -195,7 +212,111 @@ export default function MyProduceDashboard() {
   const { data: polMappings } = useCollection(polMappingsQuery);
   const { data: podMappings } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
-  const { data: contractItems, loading: itemsLoading } = useCollection(contractItemsQuery);
+  const { data: contractItems } = useCollection(contractItemsQuery);
+
+  const weekOptions = useMemo(() => {
+    const options = [];
+    const currentYear = new Date().getFullYear();
+    for (let i = 1; i <= 52; i++) {
+      options.push(`WK ${i} - ${currentYear}`);
+    }
+    return options;
+  }, []);
+
+  // New LA Helpers
+  const addLARow = () => {
+    setLaRows([...laRows, {
+      id: Math.random().toString(36).substr(2, 9),
+      farm: 'TADECO',
+      pol: 'DAVAO',
+      pod: '',
+      shippingLine: '',
+      cutOffDate: '',
+      etd: '',
+      totalVans: 0,
+      skuCode: '',
+      palletizedType: 'Palletized'
+    }]);
+  };
+
+  const updateLARow = (id: string, updates: Partial<LARow>) => {
+    setLaRows(laRows.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const removeLARow = (id: string) => {
+    if (laRows.length > 1) {
+      setLaRows(laRows.filter(r => r.id !== id));
+    }
+  };
+
+  const handleSubmitBatch = async () => {
+    if (!db || !newLAHeader.customerName || !newLAHeader.weekNumber) {
+      toast({ variant: "destructive", title: "Error", description: "Please select customer and week number." });
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      const contractId = `LA-${Date.now()}`;
+      const contractRef = doc(db, CONTRACT_PATH, contractId);
+
+      const totalVans = laRows.reduce((acc, curr) => acc + (curr.totalVans || 0), 0);
+      const firstRow = laRows[0];
+
+      batch.set(contractRef, {
+        contractId,
+        customerName: newLAHeader.customerName,
+        weekNumber: newLAHeader.weekNumber,
+        totalVans,
+        farm: firstRow.farm,
+        pol: firstRow.pol,
+        pod: firstRow.pod,
+        shippingLine: firstRow.shippingLine,
+        cutOffDate: firstRow.cutOffDate,
+        etd: firstRow.etd,
+        skuSummary: firstRow.skuCode,
+        palletizedType: firstRow.palletizedType,
+        status: 'pending',
+        receivedAt: serverTimestamp()
+      });
+
+      laRows.forEach(row => {
+        const itemRef = doc(db, `${CONTRACT_PATH}/${contractId}/items`, row.id);
+        batch.set(itemRef, {
+          itemId: row.id,
+          farm: row.farm,
+          pol: row.pol,
+          pod: row.pod,
+          shippingLines: row.shippingLine,
+          cutOffDate: row.cutOffDate,
+          etd: row.etd,
+          total: row.totalVans,
+          specs: row.skuCode,
+          palletized: row.palletizedType,
+          atwStatus: 'PENDING',
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      await batch.commit();
+      toast({ title: "Success", description: "Loading Advice batch created successfully." });
+      setIsNewLAOpen(false);
+      setLaRows([{
+        id: Math.random().toString(36).substr(2, 9),
+        farm: 'TADECO',
+        pol: 'DAVAO',
+        pod: '',
+        shippingLine: '',
+        cutOffDate: '',
+        etd: '',
+        totalVans: 0,
+        skuCode: '',
+        palletizedType: 'Palletized'
+      }]);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Submission Error", description: err.message });
+    }
+  };
 
   // Initialize CO Rows when entering edit mode
   useEffect(() => {
@@ -218,18 +339,15 @@ export default function MyProduceDashboard() {
 
   const filteredData = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    if (activeView === 'loading-advice') {
-      return contracts.filter(c => {
-        const matchesSearch = String(c.customerName || '').toLowerCase().includes(term) ||
-          String(c.contractRef || '').toLowerCase().includes(term) ||
-          String(c.weekNumber || '').toLowerCase().includes(term);
-        const matchesWeek = weekFilter === 'all' || c.weekNumber === weekFilter;
-        const matchesCustomer = customerFilter === 'all' || c.customerName === customerFilter;
-        return matchesSearch && matchesWeek && matchesCustomer;
-      });
-    }
-    return [];
-  }, [contracts, activeView, searchTerm, weekFilter, customerFilter]);
+    return contracts.filter(c => {
+      const matchesSearch = String(c.customerName || '').toLowerCase().includes(term) ||
+        String(c.contractId || '').toLowerCase().includes(term) ||
+        String(c.weekNumber || '').toLowerCase().includes(term);
+      const matchesWeek = weekFilter === 'all' || c.weekNumber === weekFilter;
+      const matchesCustomer = customerFilter === 'all' || c.customerName === customerFilter;
+      return matchesSearch && matchesWeek && matchesCustomer;
+    });
+  }, [contracts, searchTerm, weekFilter, customerFilter]);
 
   const uniqueWeeks = useMemo(() => {
     const weeks = Array.from(new Set(contracts.map(c => c.weekNumber))).filter(Boolean);
@@ -291,7 +409,7 @@ export default function MyProduceDashboard() {
       });
       await batch.commit();
       toast({ title: "COs Updated", description: "All cutting order allocations saved successfully." });
-      setActiveView('contract-details');
+      setActiveView('loading-advice');
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
@@ -301,14 +419,11 @@ export default function MyProduceDashboard() {
     const contract = contracts.find(c => c.id === selectedContractId);
     if (!contract) return null;
 
-    // Calculate POD Allocations (Allocated Count / Total Requested)
     const podStats = (podMappings as any[]).map(p => {
       const target = contractItems.filter((i: any) => i.pod === p.portName).reduce((acc: number, curr: any) => acc + (curr.total || 0), 0);
       const allocated = coRows.filter(r => r.pod === p.portName && r.containerNo).length;
       return { name: p.portName, target, allocated };
     }).filter(s => s.target > 0);
-
-    const totalAllocated = coRows.filter(r => r.containerNo).length;
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1400px] mx-auto">
@@ -327,7 +442,6 @@ export default function MyProduceDashboard() {
           </div>
 
           <div className="p-8 space-y-8">
-            {/* Header Readonly Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
@@ -337,13 +451,8 @@ export default function MyProduceDashboard() {
                 <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
                 <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700">{contract.weekNumber?.replace(/\D/g, '')}</div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">POD</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700">{contract.pod || 'MULTIPLE'}</div>
-              </div>
             </div>
 
-            {/* Containers Allocated Summary Boxes */}
             <div className="space-y-4">
               <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Allocated</Label>
               <div className="flex flex-wrap items-stretch gap-4">
@@ -363,7 +472,6 @@ export default function MyProduceDashboard() {
               </div>
             </div>
 
-            {/* Batch Entry Table */}
             <div className="border rounded-xl overflow-hidden shadow-sm">
               <Table>
                 <TableHeader className="bg-gray-50/80">
@@ -441,7 +549,7 @@ export default function MyProduceDashboard() {
           </div>
 
           <div className="p-8 border-t bg-gray-50/50 flex items-center justify-end gap-4">
-            <Button variant="outline" onClick={() => setActiveView('contract-details')} className="h-12 px-8 font-bold text-gray-400 border-gray-200 uppercase tracking-widest text-xs">CANCEL</Button>
+            <Button variant="outline" onClick={() => setActiveView('loading-advice')} className="h-12 px-8 font-bold text-gray-400 border-gray-200 uppercase tracking-widest text-xs">CANCEL</Button>
             <Button onClick={handleSubmitCOs} className="h-12 px-12 bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase tracking-widest text-xs">SUBMIT</Button>
           </div>
         </div>
@@ -654,7 +762,7 @@ export default function MyProduceDashboard() {
             ) : filteredData.length === 0 ? (
               <TableRow><TableCell colSpan={13} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
             ) : filteredData.map((c: any) => (
-              <TableRow key={c.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
+              <TableRow key={c.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group" onClick={() => { setSelectedContractId(c.id); setActiveView('loading-advice'); }}>
                 <TableCell className="font-bold text-gray-900">{c.weekNumber || 'N/A'}</TableCell>
                 <TableCell className="text-sm font-bold text-gray-700">{c.customerName}</TableCell>
                 <TableCell className="text-xs font-medium text-gray-600">{c.farm || 'TADECO'}</TableCell>
@@ -716,15 +824,6 @@ export default function MyProduceDashboard() {
 
     if (activeView === 'loading-advice') return renderLoadingAdviceView();
     if (activeView === 'edit-cutting-orders') return renderEditCuttingOrders();
-    if (activeView === 'contract-details') return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-           <Button variant="ghost" onClick={() => setActiveView('loading-advice')}><ArrowLeft className="mr-2 h-4 w-4" /> Back to Manifest</Button>
-           <Button className="bg-anflocor-green" onClick={() => setActiveView('edit-cutting-orders')}><Scissors className="mr-2 h-4 w-4" /> Edit Cutting Orders</Button>
-        </div>
-        {/* Reuse existing contract details table logic here if needed, or simply transition to Edit view */}
-      </div>
-    );
 
     return (
       <div className="p-12 text-center text-gray-400">View implementation pending.</div>
@@ -739,7 +838,7 @@ export default function MyProduceDashboard() {
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'loading-advice' || activeView === 'contract-details' || activeView === 'edit-cutting-orders') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
+          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'loading-advice' || activeView === 'edit-cutting-orders') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
           <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'configuration' && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
