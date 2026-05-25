@@ -89,26 +89,27 @@
     },
     "ContractLineItem": {
       "title": "Contract Line Item",
-      "description": "Specific loading advice row from the customer.",
+      "description": "Specific loading advice row or container allocation.",
       "type": "object",
       "properties": {
         "itemId": { "type": "string" },
         "farm": { "type": "string" },
         "pol": { "type": "string" },
-        "pod": { "type": "string", "description": "Port of Destination" },
+        "pod": { "type": "string" },
         "total": { "type": "number" },
         "specs": { "type": "string" },
-        "limitation": { "type": "string" },
+        "ps": { "type": "string", "description": "Production Specification/Segment" },
+        "containerNo": { "type": "string", "description": "Specific container number" },
+        "atwStatus": { "type": "string", "enum": ["PENDING", "READY", "LOADED"], "default": "PENDING" },
         "palletized": { "type": "string", "enum": ["Palletized", "Breakbulk", "Non-Palletized"] },
         "shippingLines": { "type": "string" },
         "etd": { "type": "string" },
         "cutOffDate": { "type": "string" },
-        "customerContractNumber": { "type": "string" },
-        "bookingNumber": { "type": "string", "description": "Booking reference number provided by carrier" },
-        "vesselName": { "type": "string", "description": "Assigned vessel name" },
+        "bookingNumber": { "type": "string" },
+        "vesselName": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["itemId", "pod", "total"]
+      "required": ["itemId", "pod"]
     }
   },
   "auth": {
@@ -138,7 +139,7 @@
     },
     "/app_data/contracts/contract_saving/{contractId}/items/{itemId}": {
       "schema": { "$ref": "#/backend/entities/ContractLineItem" },
-      "description": "Individual line items for a specific contract"
+      "description": "Individual line items or allocations"
     }
   }
 }
