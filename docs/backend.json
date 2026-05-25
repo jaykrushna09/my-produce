@@ -110,6 +110,34 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["itemId", "pod"]
+    },
+    "BookingBatch": {
+      "title": "Booking Batch",
+      "description": "A collection of confirmed bookings for a specific voyage.",
+      "type": "object",
+      "properties": {
+        "batchId": { "type": "string" },
+        "shippingLine": { "type": "string" },
+        "vesselName": { "type": "string" },
+        "receivedAt": { "type": "string", "format": "date-time" },
+        "totalVans": { "type": "number" }
+      },
+      "required": ["batchId", "shippingLine", "vesselName"]
+    },
+    "BookingRow": {
+      "title": "Booking Row",
+      "description": "Individual booking details within a batch.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "pod": { "type": "string" },
+        "bookingNumber": { "type": "string" },
+        "etd": { "type": "string", "format": "date" },
+        "cutOffDate": { "type": "string", "format": "date" },
+        "totalVans": { "type": "number" },
+        "sku": { "type": "string" }
+      },
+      "required": ["bookingId", "pod", "bookingNumber"]
     }
   },
   "auth": {
@@ -140,6 +168,14 @@
     "/app_data/contracts/contract_saving/{contractId}/items/{itemId}": {
       "schema": { "$ref": "#/backend/entities/ContractLineItem" },
       "description": "Individual line items or allocations"
+    },
+    "/app_data/bookings/booking_saving/{batchId}": {
+      "schema": { "$ref": "#/backend/entities/BookingBatch" },
+      "description": "Booking batch header"
+    },
+    "/app_data/bookings/booking_saving/{batchId}/rows/{bookingId}": {
+      "schema": { "$ref": "#/backend/entities/BookingRow" },
+      "description": "Individual booking details"
     }
   }
 }

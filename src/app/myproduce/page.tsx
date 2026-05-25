@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -50,7 +51,9 @@ import {
   HelpCircle,
   Filter,
   Info,
-  Scissors
+  Scissors,
+  TrendingUp,
+  AlertCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -106,7 +109,7 @@ import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
 
-type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders';
+type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings';
 
 interface LARow {
   id: string;
@@ -133,6 +136,16 @@ interface CORow {
   etd: string;
   sku: string;
   palletization: string;
+}
+
+interface BookingRow {
+  id: string;
+  pod: string;
+  bookingNo: string;
+  etd: string;
+  cutOff: string;
+  totalVans: number;
+  sku: string;
 }
 
 export default function MyProduceDashboard() {
@@ -167,6 +180,22 @@ export default function MyProduceDashboard() {
     palletizedType: 'Palletized'
   }]);
 
+  // New Booking State
+  const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
+  const [newBookingHeader, setNewBookingHeader] = useState({
+    shippingLine: '',
+    vesselName: ''
+  });
+  const [bookingRows, setBookingRows] = useState<BookingRow[]>([{
+    id: Math.random().toString(36).substr(2, 9),
+    pod: '',
+    bookingNo: '',
+    etd: '',
+    cutOff: '',
+    totalVans: 0,
+    sku: ''
+  }]);
+
   // Cutting Order Rows State
   const [coRows, setCoRows] = useState<CORow[]>([]);
 
@@ -175,6 +204,7 @@ export default function MyProduceDashboard() {
   const POL_PATH = 'app_configuration/pol_mapping/pol_saving';
   const POD_PATH = 'app_configuration/pod_mapping/pod_saving';
   const CONTRACT_PATH = 'app_data/contracts/contract_saving';
+  const BOOKING_PATH = 'app_data/bookings/booking_saving';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
@@ -205,6 +235,11 @@ export default function MyProduceDashboard() {
     if (!db || !selectedContractId) return null;
     return query(collection(db, `${CONTRACT_PATH}/${selectedContractId}/items`));
   }, [db, selectedContractId]);
+
+  const bookingsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, BOOKING_PATH), orderBy('receivedAt', 'desc'));
+  }, [db]);
   
   const { data: customerMappings } = useCollection(customerMappingsQuery);
   const { data: materialMappings } = useCollection(materialMappingsQuery);
@@ -212,6 +247,7 @@ export default function MyProduceDashboard() {
   const { data: podMappings } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
   const { data: contractItems } = useCollection(contractItemsQuery);
+  const { data: bookings, loading: bookingsLoading } = useCollection(bookingsQuery);
 
   const weekOptions = useMemo(() => {
     const options = [];
@@ -314,6 +350,80 @@ export default function MyProduceDashboard() {
       }]);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Submission Error", description: err.message });
+    }
+  };
+
+  // Booking Batch Helpers
+  const addBookingRow = () => {
+    setBookingRows([...bookingRows, {
+      id: Math.random().toString(36).substr(2, 9),
+      pod: '',
+      bookingNo: '',
+      etd: '',
+      cutOff: '',
+      totalVans: 0,
+      sku: ''
+    }]);
+  };
+
+  const updateBookingRow = (id: string, updates: Partial<BookingRow>) => {
+    setBookingRows(bookingRows.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const removeBookingRow = (id: string) => {
+    if (bookingRows.length > 1) {
+      setBookingRows(bookingRows.filter(r => r.id !== id));
+    }
+  };
+
+  const handleSubmitBookingBatch = async () => {
+    if (!db || !newBookingHeader.shippingLine || !newBookingHeader.vesselName) {
+      toast({ variant: "destructive", title: "Error", description: "Please select shipping line and vessel." });
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      const batchId = `BK-${Date.now()}`;
+      const batchRef = doc(db, BOOKING_PATH, batchId);
+
+      const totalVans = bookingRows.reduce((acc, curr) => acc + (curr.totalVans || 0), 0);
+
+      batch.set(batchRef, {
+        batchId,
+        shippingLine: newBookingHeader.shippingLine,
+        vesselName: newBookingHeader.vesselName,
+        totalVans,
+        receivedAt: serverTimestamp()
+      });
+
+      bookingRows.forEach(row => {
+        const rowRef = doc(db, `${BOOKING_PATH}/${batchId}/rows`, row.id);
+        batch.set(rowRef, {
+          bookingId: row.id,
+          pod: row.pod,
+          bookingNumber: row.bookingNo,
+          etd: row.etd,
+          cutOffDate: row.cutOff,
+          totalVans: row.totalVans,
+          sku: row.sku
+        });
+      });
+
+      await batch.commit();
+      toast({ title: "Success", description: "Booking batch created successfully." });
+      setIsNewBookingOpen(false);
+      setBookingRows([{
+        id: Math.random().toString(36).substr(2, 9),
+        pod: '',
+        bookingNo: '',
+        etd: '',
+        cutOff: '',
+        totalVans: 0,
+        sku: ''
+      }]);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
     }
   };
 
@@ -458,7 +568,6 @@ export default function MyProduceDashboard() {
               </div>
             </div>
 
-            {/* Containers Allocated Section - Design from Attachment */}
             <div className="space-y-4 bg-gray-50/50 p-6 rounded-xl border border-gray-100/50">
               <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Allocated</Label>
               <div className="flex flex-wrap items-center gap-4">
@@ -469,7 +578,6 @@ export default function MyProduceDashboard() {
                   </div>
                 ))}
                 
-                {/* Total Allocation Black Card */}
                 <div className="ml-auto bg-black text-white rounded-lg p-5 min-w-[240px] shadow-lg">
                    <span className="text-[9px] font-black uppercase text-gray-500 block mb-1">Total Allocation</span>
                    <span className="text-lg font-bold">Total for week {contract.weekNumber?.split(' ')[1] || '0'} : {totalTarget}</span>
@@ -798,6 +906,203 @@ export default function MyProduceDashboard() {
     </div>
   );
 
+  const renderBookingsView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm no-print">
+        <div className="w-64">
+          <Select value={weekFilter} onValueChange={setWeekFilter}>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100">
+              <SelectValue placeholder="Select Week Number" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Weeks</SelectItem>
+              {weekOptions.map(w => (
+                <SelectItem key={w} value={w}>{w}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-64">
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100">
+              <SelectValue placeholder="Select Customer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
+              {customerMappings.map((c: any) => (
+                <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Bell className="h-5 w-5 text-gray-400 cursor-pointer" />
+          <HelpCircle className="h-5 w-5 text-gray-400 cursor-pointer" />
+          <div className="h-8 w-[1px] bg-gray-100 mx-2" />
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <div className="h-8 w-8 rounded-full bg-anflocor-green/10 flex items-center justify-center text-anflocor-green">
+              <User className="h-4 w-4" />
+            </div>
+            <span>COORDINATOR</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center text-xs text-gray-400 gap-2 mb-1">
+            <span>Logistics</span>
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-gray-900 font-medium">Bookings</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">Bookings</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <Dialog open={isNewBookingOpen} onOpenChange={setIsNewBookingOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> NEW BOOKING</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-[90vw] w-full p-0 overflow-hidden">
+              <div className="bg-white">
+                <div className="p-6 border-b">
+                  <DialogTitle className="text-xl font-bold">New Booking Batch</DialogTitle>
+                  <DialogDescription className="text-gray-500 mt-1">
+                    Define booking details and allocate multiple containers for this shipment.
+                  </DialogDescription>
+                </div>
+
+                <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-gray-400">Shipping Line</Label>
+                      <Select value={newBookingHeader.shippingLine} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, shippingLine: val})}>
+                        <SelectTrigger className="h-12"><SelectValue placeholder="Select Line" /></SelectTrigger>
+                        <SelectContent><SelectItem value="CMA CGM">CMA CGM</SelectItem><SelectItem value="Maersk">Maersk</SelectItem><SelectItem value="MSC">MSC</SelectItem><SelectItem value="OOCL">OOCL</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-gray-400">Vessel Name</Label>
+                      <Input value={newBookingHeader.vesselName} onChange={(e) => setNewBookingHeader({...newBookingHeader, vesselName: e.target.value})} className="h-12" placeholder="e.g. V MAERSK 02" />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-xl overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead className="text-[10px] font-black uppercase">POD</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Booking No.</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">ETD</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Cut-off</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase text-center">Total Vans</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">SKU</TableHead>
+                          <TableHead className="w-12"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bookingRows.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell className="p-2">
+                              <Select value={row.pod} onValueChange={(val) => updateBookingRow(row.id, { pod: val })}>
+                                <SelectTrigger className="h-10 text-xs"><SelectValue placeholder="POD" /></SelectTrigger>
+                                <SelectContent>{podMappings.map((p: any) => (<SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>))}</SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-2"><Input className="h-10 text-xs font-bold" placeholder="BK-2024..." value={row.bookingNo} onChange={(e) => updateBookingRow(row.id, { bookingNo: e.target.value })}/></TableCell>
+                            <TableCell className="p-2"><Input type="date" className="h-10 text-xs" value={row.etd} onChange={(e) => updateBookingRow(row.id, { etd: e.target.value })}/></TableCell>
+                            <TableCell className="p-2"><Input type="date" className="h-10 text-xs" value={row.cutOff} onChange={(e) => updateBookingRow(row.id, { cutOff: e.target.value })}/></TableCell>
+                            <TableCell className="p-2"><Input type="number" className="h-10 text-xs w-20 text-center mx-auto" value={row.totalVans} onChange={(e) => updateBookingRow(row.id, { totalVans: parseInt(e.target.value) || 0 })}/></TableCell>
+                            <TableCell className="p-2"><Input className="h-10 text-xs" placeholder="SKU" value={row.sku} onChange={(e) => updateBookingRow(row.id, { sku: e.target.value })}/></TableCell>
+                            <TableCell className="p-2 text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => removeBookingRow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto" onClick={addBookingRow}><Plus className="h-4 w-4" /> Add Row</Button>
+                </div>
+
+                <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setIsNewBookingOpen(false)} className="text-gray-400 font-bold uppercase text-[10px] tracking-wider">CANCEL</Button>
+                  <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase text-[10px] tracking-widest px-8" onClick={handleSubmitBookingBatch}>SUBMIT BATCH</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="bg-white border-gray-100 shadow-sm relative overflow-hidden group">
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Active Bookings</span>
+              <div className="bg-gray-50 p-2 rounded-lg"><Ship className="h-5 w-5 text-gray-300" /></div>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-4xl font-black text-gray-900">142</span>
+              <span className="text-xs font-bold text-green-500 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> ~12%</span>
+            </div>
+            <p className="text-xs text-gray-500 font-medium mt-2">Currently in transit or processing</p>
+          </CardContent>
+          <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] rotate-[15deg] transition-transform group-hover:scale-110 duration-500"><Ship className="h-32 w-32" /></div>
+        </Card>
+        <Card className="bg-white border-gray-100 shadow-sm relative overflow-hidden group">
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Pending</span>
+              <div className="bg-gray-50 p-2 rounded-lg"><Box className="h-5 w-5 text-gray-300" /></div>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-4xl font-black text-gray-900">89</span>
+              <span className="text-[10px] font-black px-2 py-0.5 bg-red-100 text-red-600 rounded-full flex items-center gap-1"><AlertCircle className="h-3 w-3" /> CRITICAL</span>
+            </div>
+            <p className="text-xs text-gray-500 font-medium mt-2">Awaiting port assignment</p>
+          </CardContent>
+          <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] rotate-[15deg] transition-transform group-hover:scale-110 duration-500"><Box className="h-32 w-32" /></div>
+        </Card>
+      </div>
+
+      <Card className="border-gray-200 shadow-sm overflow-hidden bg-white">
+        <CardHeader className="bg-white border-b py-3 px-6 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Booking Manifests</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black gap-1 uppercase tracking-wider"><Filter className="h-3 w-3" /> Filter</Button>
+            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black gap-1 uppercase tracking-wider"><Download className="h-3 w-3" /> Export</Button>
+          </div>
+        </CardHeader>
+        <Table>
+          <TableHeader className="bg-gray-50/50">
+            <TableRow className="h-10 hover:bg-transparent">
+              <TableHead className="text-[10px] font-black uppercase text-gray-400">Booking No</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400">Shipping Line</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400">Vessel</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400">POD</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {bookingsLoading ? (
+              <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+            ) : bookings.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No booking manifests found.</TableCell></TableRow>
+            ) : bookings.map((b: any) => (
+              <TableRow key={b.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group">
+                <TableCell className="font-bold text-[#1B4D3E] underline decoration-transparent hover:decoration-[#1B4D3E] transition-all">{b.batchId || 'N/A'}</TableCell>
+                <TableCell className="text-sm font-medium text-gray-700">{b.shippingLine}</TableCell>
+                <TableCell className="text-sm text-gray-600 italic">{b.vesselName}</TableCell>
+                <TableCell className="text-sm font-black text-gray-800 uppercase tracking-tight">VARIOUS</TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900"><MoreVertical className="h-4 w-4" /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+
   const renderContent = () => {
     if (activeView === 'dashboard') {
       return (
@@ -829,6 +1134,7 @@ export default function MyProduceDashboard() {
 
     if (activeView === 'loading-advice') return renderLoadingAdviceView();
     if (activeView === 'edit-cutting-orders') return renderEditCuttingOrders();
+    if (activeView === 'bookings') return renderBookingsView();
 
     return (
       <div className="p-12 text-center text-gray-400">View implementation pending.</div>
@@ -844,6 +1150,7 @@ export default function MyProduceDashboard() {
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
           <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'loading-advice' || activeView === 'edit-cutting-orders') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
+          <Button variant="ghost" onClick={() => setActiveView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'bookings' && "bg-white/10 shadow-inner")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
           <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'configuration' && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
@@ -854,7 +1161,8 @@ export default function MyProduceDashboard() {
             <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
               {activeView === 'dashboard' ? 'Dashboard' : 
                activeView === 'loading-advice' ? 'Loading Advice' :
-               activeView === 'edit-cutting-orders' ? 'Edit Cutting Orders' : 'System Overview'}
+               activeView === 'edit-cutting-orders' ? 'Edit Cutting Orders' : 
+               activeView === 'bookings' ? 'Bookings' : 'System Overview'}
             </h1>
             <p className="text-gray-500 font-semibold mt-1">TADECO Agricultural Production Portal</p>
           </div>
@@ -866,3 +1174,4 @@ export default function MyProduceDashboard() {
     </div>
   );
 }
+
