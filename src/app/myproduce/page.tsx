@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -43,7 +44,12 @@ import {
   Printer,
   Download,
   FileSpreadsheet,
-  RefreshCcw
+  RefreshCcw,
+  ChevronDown,
+  ChevronLeft,
+  Bell,
+  HelpCircle,
+  Filter
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -100,7 +106,7 @@ import * as XLSX from 'xlsx';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
 import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
 
-type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'contracts' | 'contract-details' | 'cutting-order';
+type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order';
 
 export default function MyProduceDashboard() {
   const router = useRouter();
@@ -115,6 +121,8 @@ export default function MyProduceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [weekFilter, setWeekFilter] = useState<string>('all');
+  const [customerFilter, setCustomerFilter] = useState<string>('all');
   
   // Booking Update State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -122,8 +130,8 @@ export default function MyProduceDashboard() {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isBulkUpdate, setIsBulkUpdate] = useState(false);
 
-  // Contract Modal State
-  const [isNewContractOpen, setIsNewContractOpen] = useState(false);
+  // LA Modal State
+  const [isNewLAOpen, setIsNewLAOpen] = useState(false);
   const [isSkuPickerOpen, setIsSkuPickerOpen] = useState(false);
   const [skuSearchTerm, setSkuSearchTerm] = useState('');
   const [newContract, setNewContract] = useState({
@@ -139,6 +147,7 @@ export default function MyProduceDashboard() {
     totalVolume: '',
     notes: '',
     etd: '',
+    cutOffDate: '',
     shippingLine: '',
     palletizedType: 'Palletized' as 'Palletized' | 'Non Palletized',
     selectedSKUs: [] as string[]
@@ -215,15 +224,18 @@ export default function MyProduceDashboard() {
     if (activeView === 'port-of-destination') {
       return podMappings.filter(m => String(m.portName || '').toLowerCase().includes(term));
     }
-    if (activeView === 'contracts') {
-      return contracts.filter(c => 
-        String(c.customerName || '').toLowerCase().includes(term) ||
-        String(c.contractRef || '').toLowerCase().includes(term) ||
-        String(c.weekNumber || '').toLowerCase().includes(term)
-      );
+    if (activeView === 'loading-advice') {
+      return contracts.filter(c => {
+        const matchesSearch = String(c.customerName || '').toLowerCase().includes(term) ||
+          String(c.contractRef || '').toLowerCase().includes(term) ||
+          String(c.weekNumber || '').toLowerCase().includes(term);
+        const matchesWeek = weekFilter === 'all' || c.weekNumber === weekFilter;
+        const matchesCustomer = customerFilter === 'all' || c.customerName === customerFilter;
+        return matchesSearch && matchesWeek && matchesCustomer;
+      });
     }
     return [];
-  }, [customerMappings, materialMappings, polMappings, podMappings, contracts, activeView, searchTerm]);
+  }, [customerMappings, materialMappings, polMappings, podMappings, contracts, activeView, searchTerm, weekFilter, customerFilter]);
 
   const filteredSKUs = useMemo(() => {
     if (!skuSearchTerm) return materialMappings;
@@ -234,6 +246,11 @@ export default function MyProduceDashboard() {
     );
   }, [materialMappings, skuSearchTerm]);
 
+  const uniqueWeeks = useMemo(() => {
+    const weeks = Array.from(new Set(contracts.map(c => c.weekNumber))).filter(Boolean);
+    return weeks.sort();
+  }, [contracts]);
+
   const handleSignOut = async () => {
     if (auth) {
       await signOut(auth);
@@ -241,13 +258,13 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleCreateContract = async () => {
+  const handleCreateLA = async () => {
     if (!db || !newContract.customerName) {
       toast({ variant: "destructive", title: "Error", description: "Please select a customer." });
       return;
     }
     try {
-      const contractId = `CTR-${Date.now()}`;
+      const contractId = `LA-${Date.now()}`;
       await setDoc(doc(db, CONTRACT_PATH, contractId), {
         contractId,
         ...newContract,
@@ -255,7 +272,7 @@ export default function MyProduceDashboard() {
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setIsNewContractOpen(false);
+      setIsNewLAOpen(false);
       setNewContract({ 
         customerName: '', 
         contractRef: '', 
@@ -269,11 +286,12 @@ export default function MyProduceDashboard() {
         totalVolume: '', 
         notes: '',
         etd: '',
+        cutOffDate: '',
         shippingLine: '',
         palletizedType: 'Palletized',
         selectedSKUs: []
       });
-      toast({ title: "Contract Created", description: "New contract has been added to the system." });
+      toast({ title: "LA Created", description: "New loading advice has been added to the system." });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
@@ -416,25 +434,69 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const renderContractsView = () => (
+  const renderLoadingAdviceView = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
-          <h2 className="text-2xl font-bold text-gray-900">Contract Management</h2>
+      {/* Filters Bar */}
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm no-print">
+        <div className="w-64">
+          <Select value={weekFilter} onValueChange={setWeekFilter}>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100">
+              <SelectValue placeholder="Select Week Number" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Weeks</SelectItem>
+              {uniqueWeeks.map(w => (
+                <SelectItem key={w} value={w}>{w}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="flex items-center space-x-2">
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input placeholder="Search contracts..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        <div className="w-64">
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100">
+              <SelectValue placeholder="Select Customer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
+              {customerMappings.map((c: any) => (
+                <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Bell className="h-5 w-5 text-gray-400 cursor-pointer" />
+          <HelpCircle className="h-5 w-5 text-gray-400 cursor-pointer" />
+          <div className="h-8 w-[1px] bg-gray-100 mx-2" />
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <div className="h-8 w-8 rounded-full bg-anflocor-green/10 flex items-center justify-center text-anflocor-green">
+              <User className="h-4 w-4" />
+            </div>
+            <span>COORDINATOR</span>
           </div>
-          <Dialog open={isNewContractOpen} onOpenChange={setIsNewContractOpen}>
+        </div>
+      </div>
+
+      {/* Breadcrumbs & Title */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center text-xs text-gray-400 gap-2 mb-1">
+            <span>Logistics</span>
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-gray-900 font-medium">Loading Advice</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">Loading Advice</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="text-xs font-bold border-gray-200">CREATE/VIEW BOOKINGS</Button>
+          <Button variant="outline" className="text-xs font-bold border-gray-200" onClick={() => setActiveView('cutting-order')}>CREATE/VIEW COS</Button>
+          <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white"><Plus className="mr-2 h-4 w-4" /> New Contract</Button>
+              <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> NEW LA</Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl overflow-y-auto max-h-[95vh] p-0">
               <DialogHeader className="p-6 pb-2">
-                <DialogTitle>Create New Production Contract</DialogTitle>
+                <DialogTitle>Create New Loading Advice</DialogTitle>
                 <DialogDescription>Enter the details from the customer loading advice email.</DialogDescription>
               </DialogHeader>
               
@@ -478,11 +540,6 @@ export default function MyProduceDashboard() {
                     onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
                     placeholder="e.g. WK16" 
                   />
-                  {newContract.weekNumber && (
-                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded inline-block">
-                      {getWeekRangeDisplay(newContract.weekNumber) || 'Invalid week number'}
-                    </p>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>POL (Port of Loading)</Label>
@@ -523,23 +580,22 @@ export default function MyProduceDashboard() {
                     type="date"
                     value={newContract.etd}
                     onChange={(e) => setNewContract({...newContract, etd: e.target.value})}
-                    className="w-full"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Email Sender</Label>
-                  <Input value={newContract.senderEmail} onChange={(e) => setNewContract({...newContract, senderEmail: e.target.value})} placeholder="sender@company.com" />
+                  <Label>Cut-off Date</Label>
+                  <Input 
+                    type="date"
+                    value={newContract.cutOffDate}
+                    onChange={(e) => setNewContract({...newContract, cutOffDate: e.target.value})}
+                  />
                 </div>
-                <div className="space-y-2">
-                  <Label>Contract/Subject Reference</Label>
-                  <Input value={newContract.contractRef} onChange={(e) => setNewContract({...newContract, contractRef: e.target.value})} placeholder="Loading advice week 16" />
-                </div>
-
                 <div className="space-y-2">
                   <Label>Shipping Line</Label>
                   <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Total Vans</Label>
                   <Input 
@@ -549,18 +605,8 @@ export default function MyProduceDashboard() {
                     placeholder="Vans" 
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label>Box Count (Optional)</Label>
-                  <Input 
-                    type="number"
-                    value={newContract.totalBoxes} 
-                    onChange={(e) => setNewContract({...newContract, totalBoxes: parseInt(e.target.value) || 0})} 
-                    placeholder="Boxes" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Type</Label>
+                  <Label>Palletization Type</Label>
                   <Select 
                     onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
                     value={newContract.palletizedType}
@@ -578,97 +624,26 @@ export default function MyProduceDashboard() {
                 <div className="col-span-1 md:col-span-2 space-y-4 pt-2">
                   <div className="space-y-2">
                     <Label>Materials (SKUs)</Label>
-                    <div className="flex flex-col gap-2">
-                      <Dialog open={isSkuPickerOpen} onOpenChange={setIsSkuPickerOpen}>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full justify-between font-normal bg-white">
-                            <span className="truncate">
-                              {newContract.selectedSKUs.length > 0 
-                                ? `${newContract.selectedSKUs.length} SKU(s) selected` 
-                                : "Click to select SKUs from list..."}
-                            </span>
-                            <Search className="ml-2 h-4 w-4 opacity-50" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl p-0 h-[80vh] flex flex-col">
-                          <DialogHeader className="p-6 pb-2 border-b">
-                            <DialogTitle>Central SKU Selector</DialogTitle>
-                            <DialogDescription>Select one or more SKUs for this contract.</DialogDescription>
-                          </DialogHeader>
-                          <div className="p-4 bg-gray-50/50 border-b">
-                            <div className="relative">
-                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                              <Input 
-                                placeholder="Search SKUs by description..." 
-                                className="pl-10 bg-white" 
-                                value={skuSearchTerm} 
-                                onChange={(e) => setSkuSearchTerm(e.target.value)}
-                              />
-                            </div>
-                          </div>
-                          <ScrollArea className="flex-1">
-                            <div className="p-4 grid grid-cols-1 gap-1">
-                              {filteredSKUs.map((sku: any) => (
-                                <div 
-                                  key={sku.SAPC_Code} 
-                                  className={cn(
-                                    "flex items-center space-x-3 p-3 rounded-xl border transition-all cursor-pointer group",
-                                    newContract.selectedSKUs.includes(sku.SAPC_Code) 
-                                      ? "bg-indigo-50 border-indigo-200" 
-                                      : "hover:bg-gray-50 border-transparent"
-                                  )}
-                                  onClick={() => toggleSKU(sku.SAPC_Code)}
-                                >
-                                  <Checkbox checked={newContract.selectedSKUs.includes(sku.SAPC_Code)} onCheckedChange={() => toggleSKU(sku.SAPC_Code)} />
-                                  <div className="flex-1 flex flex-col">
-                                    <span className="text-sm font-bold text-gray-900">{sku.SAPC_Desc}</span>
-                                    <span className="text-[10px] text-gray-400 font-mono">CODE: {sku.SAPC_Code}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                          <DialogFooter className="p-4 border-t bg-gray-50">
-                            <Button className="w-full bg-anflocor-green" onClick={() => setIsSkuPickerOpen(false)}>
-                              Confirm Selection ({newContract.selectedSKUs.length})
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-
-                      {newContract.selectedSKUs.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                          {newContract.selectedSKUs.map(code => {
-                            const sku = materialMappings.find((m: any) => m.SAPC_Code === code);
-                            return (
-                              <Badge key={code} variant="secondary" className="text-[10px] py-1 pl-2 pr-1 gap-1 bg-white border-gray-200">
-                                <span className="max-w-[150px] truncate">{sku?.SAPC_Desc || code}</span>
-                                <button className="p-0.5 hover:bg-gray-100 rounded text-gray-400" onClick={() => toggleSKU(code)}>
-                                  <Plus className="h-3 w-3 rotate-45" />
-                                </button>
-                              </Badge>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    <Button variant="outline" className="w-full justify-between" onClick={() => setIsSkuPickerOpen(true)}>
+                      {newContract.selectedSKUs.length > 0 ? `${newContract.selectedSKUs.length} Selected` : "Select SKUs"}
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
                   </div>
-
                   <div className="space-y-2">
-                    <Label>Additional Information / Notes</Label>
+                    <Label>Notes / Email Content</Label>
                     <Textarea 
                       value={newContract.notes} 
                       onChange={(e) => setNewContract({...newContract, notes: e.target.value})}
-                      placeholder="Enter any additional details, special instructions, or paste email content here..."
-                      className="min-h-[100px] resize-none"
+                      placeholder="Paste loading advice email details here..."
+                      className="min-h-[100px]"
                     />
                   </div>
                 </div>
               </div>
 
               <DialogFooter className="p-6 bg-gray-50 border-t">
-                <Button variant="outline" onClick={() => setIsNewContractOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateContract} className="bg-anflocor-green">Create Contract</Button>
+                <Button variant="outline" onClick={() => setIsNewLAOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateLA} className="bg-anflocor-green">Save Loading Advice</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -676,59 +651,56 @@ export default function MyProduceDashboard() {
       </div>
 
       <Card className="border-gray-200 shadow-sm overflow-hidden bg-white">
+        <CardHeader className="bg-white border-b py-3 px-6 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Loading Advice Manifests</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs font-bold gap-1"><Filter className="h-3 w-3" /> Filter</Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs font-bold gap-1"><Download className="h-3 w-3" /> Export</Button>
+          </div>
+        </CardHeader>
         <Table>
-          <TableHeader className="bg-gray-50">
-            <TableRow>
-              <TableHead className="font-bold">WK NO</TableHead>
-              <TableHead className="font-bold">Customer</TableHead>
-              <TableHead className="font-bold">Sender / Reference</TableHead>
-              <TableHead className="font-bold">Vans / Boxes</TableHead>
-              <TableHead className="font-bold">Farm / Origin</TableHead>
-              <TableHead className="font-bold">Status</TableHead>
-              <TableHead className="text-right font-bold">Actions</TableHead>
+          <TableHeader className="bg-gray-100/50">
+            <TableRow className="h-10 hover:bg-transparent">
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">WEEK NO.</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">FARM</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">PORT OF LOADING</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">PORT OF DESTINATION</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">SHIPPING LINES</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">CUT-OFF DATE</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">ETD</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500 text-center">TOTAL VANS</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">SKU</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">PALLETIZATION</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contractsLoading ? (
-              <TableRow><TableCell colSpan={7} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
             ) : filteredData.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="h-48 text-center text-gray-400 font-medium">No contracts found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
             ) : filteredData.map((c: any) => (
-              <TableRow key={c.id} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
-                <TableCell>
-                  <Badge variant="outline" className="font-bold text-anflocor-green">{c.weekNumber || 'N/A'}</Badge>
-                  <div className="text-[9px] text-gray-400 mt-0.5">{getWeekRangeDisplay(c.weekNumber || '')}</div>
-                </TableCell>
-                <TableCell className="font-bold text-gray-900">{c.customerName}</TableCell>
-                <TableCell>
-                  <div className="text-xs font-medium text-gray-900 flex items-center gap-1"><Mail className="h-3 w-3" /> {c.senderEmail}</div>
-                  <div className="text-[10px] text-gray-400 line-clamp-1">{c.contractRef}</div>
-                </TableCell>
-                <TableCell className="text-xs font-bold text-indigo-700">
-                  <div className="flex flex-col">
-                    <span>{c.totalVans || 0} Vans</span>
-                    {c.totalBoxes > 0 && <span className="text-[10px] text-amber-600">{c.totalBoxes} Boxes</span>}
-                  </div>
-                </TableCell>
-                <TableCell className="text-xs font-medium text-gray-600">
-                  <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {c.farm}</div>
-                  <div className="flex items-center gap-1 text-gray-400"><Ship className="h-3 w-3" /> {c.pol} - {c.pod}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge className={cn(
-                    "text-[10px] font-bold uppercase",
-                    c.status === 'completed' ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                  )}>
-                    {c.status === 'completed' ? 'FINALIZED' : c.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, CONTRACT_PATH, c.id))}><Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" /></Button>
-                </TableCell>
+              <TableRow key={c.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
+                <TableCell className="font-bold text-gray-900">{c.weekNumber || 'N/A'}</TableCell>
+                <TableCell className="text-xs text-gray-600 font-medium leading-tight">{c.farm}</TableCell>
+                <TableCell className="text-xs text-gray-600 font-medium">{c.pol || 'N/A'}</TableCell>
+                <TableCell className="text-xs text-gray-900 font-bold">{c.pod || 'N/A'}</TableCell>
+                <TableCell className="text-[11px] font-black text-gray-700 uppercase">{c.shippingLine || 'N/A'}</TableCell>
+                <TableCell className="text-xs text-gray-500 font-medium">{c.cutOffDate || 'N/A'}</TableCell>
+                <TableCell className="text-xs text-gray-500 font-medium">{c.etd || 'N/A'}</TableCell>
+                <TableCell className="text-sm font-black text-center text-gray-900">{c.totalVans || 0}</TableCell>
+                <TableCell className="text-[10px] font-bold text-gray-500 max-w-[100px] truncate">{c.selectedSKUs?.join(', ') || 'N/A'}</TableCell>
+                <TableCell className="text-[11px] font-medium text-gray-500">{c.palletizedType || 'N/A'}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        <div className="p-4 border-t flex items-center justify-between text-xs text-gray-400 font-medium">
+          <span>Showing 1-{filteredData.length} of {contracts.length} manifests</span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-7 w-7"><ChevronLeft className="h-3 w-3" /></Button>
+            <Button variant="outline" size="icon" className="h-7 w-7"><ChevronRight className="h-3 w-3" /></Button>
+          </div>
+        </div>
       </Card>
     </div>
   );
@@ -888,7 +860,7 @@ export default function MyProduceDashboard() {
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon" onClick={() => setActiveView('contracts')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setActiveView('loading-advice')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
@@ -935,8 +907,11 @@ export default function MyProduceDashboard() {
                   <p className="text-xs font-bold text-gray-700">{contract.pol || 'N/A'} - {contract.pod || 'N/A'}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">ETD</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.etd || 'Not Set'}</p>
+                  <Label className="text-[10px] text-gray-400 uppercase">ETD / CUT-OFF</Label>
+                  <div className="text-xs font-bold text-gray-700">
+                    <div>ETD: {contract.etd || 'TBA'}</div>
+                    <div className="text-amber-600">CUT: {contract.cutOffDate || 'TBA'}</div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1156,7 +1131,7 @@ export default function MyProduceDashboard() {
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex items-center justify-between no-print">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon" onClick={() => setActiveView('contract-details')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setActiveView('loading-advice')} className="rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Cutting Order Preview</h2>
               <p className="text-sm text-gray-500">Formal advice for harvesting and packing teams.</p>
@@ -1294,7 +1269,7 @@ export default function MyProduceDashboard() {
   };
 
   const configOptions = [
-    { id: 'contracts', title: "Contract Management", description: "Manage loading advice from emails.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
+    { id: 'loading-advice', title: "Loading Advice", description: "Manage manifests and allocations.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
     { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
     { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
     { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
@@ -1311,7 +1286,7 @@ export default function MyProduceDashboard() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card className="bg-white border-l-4 border-l-indigo-700">
-              <CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Pending Contracts</CardDescription></CardHeader>
+              <CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Pending manifests</CardDescription></CardHeader>
               <CardContent><p className="text-3xl font-black text-gray-900">{contracts.filter(c => c.status === 'pending').length}</p></CardContent>
             </Card>
             <Card className="bg-white border-l-4 border-l-emerald-600">
@@ -1320,7 +1295,7 @@ export default function MyProduceDashboard() {
             </Card>
             <Card className="bg-white border-l-4 border-l-amber-600">
               <CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Latest Activity</CardDescription></CardHeader>
-              <CardContent><p className="text-xs text-gray-500 font-medium">New contract from {contracts[0]?.customerName || 'N/A'}</p></CardContent>
+              <CardContent><p className="text-xs text-gray-500 font-medium">New manifest from {contracts[0]?.customerName || 'N/A'}</p></CardContent>
             </Card>
           </div>
           <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
@@ -1354,7 +1329,7 @@ export default function MyProduceDashboard() {
       );
     }
 
-    if (activeView === 'contracts') return renderContractsView();
+    if (activeView === 'loading-advice') return renderLoadingAdviceView();
     if (activeView === 'contract-details') return renderContractDetails();
     if (activeView === 'cutting-order') return renderCuttingOrder();
 
@@ -1362,10 +1337,6 @@ export default function MyProduceDashboard() {
     const isPolView = activeView === 'port-of-loading';
     const isPodView = activeView === 'port-of-destination';
     
-    let loading = false;
-    if (isMaterialView) loading = false; // logic simplified for demo
-    else loading = false;
-
     return (
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1470,7 +1441,7 @@ export default function MyProduceDashboard() {
         </div>
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('contracts')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'contracts' || activeView === 'contract-details' || activeView === 'cutting-order') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Contracts</Button>
+          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'loading-advice' || activeView === 'contract-details' || activeView === 'cutting-order') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
           <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'configuration' && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10">
@@ -1483,8 +1454,8 @@ export default function MyProduceDashboard() {
             <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
               {activeView === 'dashboard' ? 'Dashboard' : 
                activeView === 'configuration' ? 'System Configuration' : 
-               activeView === 'contracts' ? 'Contract Management' :
-               activeView === 'contract-details' ? 'Contract Details' :
+               activeView === 'loading-advice' ? 'Loading Advice' :
+               activeView === 'contract-details' ? 'Loading Advice Details' :
                activeView === 'cutting-order' ? 'Cutting Order' :
                activeView === 'port-of-loading' ? 'Port of Loading' :
                activeView === 'port-of-destination' ? 'Port of Destination' :

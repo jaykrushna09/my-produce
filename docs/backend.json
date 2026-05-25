@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -80,6 +81,7 @@
         "notes": { "type": "string" },
         "attachmentUrl": { "type": "string" },
         "etd": { "type": "string", "format": "date" },
+        "cutOffDate": { "type": "string", "format": "date" },
         "shippingLine": { "type": "string" },
         "palletizedType": { "type": "string", "enum": ["Palletized", "Non Palletized"] }
       },
