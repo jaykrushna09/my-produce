@@ -424,8 +424,10 @@ export default function MyProduceDashboard() {
       return { name: p.portName, target, allocated };
     }).filter(s => s.target > 0);
 
+    const totalTarget = podStats.reduce((acc, curr) => acc + curr.target, 0);
+
     return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1400px] mx-auto">
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1400px] mx-auto pb-12">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-6 border-b flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -452,19 +454,26 @@ export default function MyProduceDashboard() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">POD</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700 uppercase">{contract.pod || 'DAVAO'}</div>
+                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700 uppercase">{contract.pod || '--'}</div>
               </div>
             </div>
 
-            <div className="space-y-4">
+            {/* Containers Allocated Section - Design from Attachment */}
+            <div className="space-y-4 bg-gray-50/50 p-6 rounded-xl border border-gray-100/50">
               <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Allocated</Label>
-              <div className="flex flex-wrap items-stretch gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 {podStats.map(stat => (
-                  <div key={stat.name} className="min-w-[140px] border border-gray-200 rounded-md p-4 bg-white flex flex-col items-start shadow-sm">
-                    <span className="text-[9px] font-black uppercase text-gray-400 mb-1">{stat.name}</span>
-                    <span className="text-lg font-bold text-gray-900">{stat.allocated}/{stat.target}</span>
+                  <div key={stat.name} className="w-[180px] bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <span className="text-[9px] font-black uppercase text-gray-300 block mb-1">{stat.name}</span>
+                    <span className="text-2xl font-bold text-gray-900">{stat.allocated}/{stat.target}</span>
                   </div>
                 ))}
+                
+                {/* Total Allocation Black Card */}
+                <div className="ml-auto bg-black text-white rounded-lg p-5 min-w-[240px] shadow-lg">
+                   <span className="text-[9px] font-black uppercase text-gray-500 block mb-1">Total Allocation</span>
+                   <span className="text-lg font-bold">Total for week {contract.weekNumber?.split(' ')[1] || '0'} : {totalTarget}</span>
+                </div>
               </div>
             </div>
 
