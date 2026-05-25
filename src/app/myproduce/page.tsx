@@ -49,7 +49,8 @@ import {
   ChevronLeft,
   Bell,
   HelpCircle,
-  Filter
+  Filter,
+  Info
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -104,9 +105,22 @@ import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
-import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
+import { format, setISOWeek, startOfISOWeek, endOfISOWeek, addWeeks } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order';
+
+interface LARow {
+  id: string;
+  farm: string;
+  pol: string;
+  pod: string;
+  shippingLine: string;
+  cutOffDate: string;
+  etd: string;
+  totalVans: number;
+  skuCode: string;
+  palletizedType: 'Palletized' | 'Non Palletized';
+}
 
 export default function MyProduceDashboard() {
   const router = useRouter();
@@ -130,28 +144,24 @@ export default function MyProduceDashboard() {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isBulkUpdate, setIsBulkUpdate] = useState(false);
 
-  // LA Modal State
+  // New multi-row LA State
   const [isNewLAOpen, setIsNewLAOpen] = useState(false);
-  const [isSkuPickerOpen, setIsSkuPickerOpen] = useState(false);
-  const [skuSearchTerm, setSkuSearchTerm] = useState('');
-  const [newContract, setNewContract] = useState({
+  const [newLAHeader, setNewLAHeader] = useState({
     customerName: '',
-    contractRef: '',
-    senderEmail: '',
-    weekNumber: '',
-    totalVans: 0,
-    totalBoxes: 0,
+    weekNumber: ''
+  });
+  const [laRows, setLaRows] = useState<LARow[]>([{
+    id: Math.random().toString(36).substr(2, 9),
     farm: 'TADECO',
     pol: '',
     pod: '',
-    totalVolume: '',
-    notes: '',
-    etd: '',
-    cutOffDate: '',
     shippingLine: '',
-    palletizedType: 'Palletized' as 'Palletized' | 'Non Palletized',
-    selectedSKUs: [] as string[]
-  });
+    cutOffDate: '',
+    etd: '',
+    totalVans: 0,
+    skuCode: '',
+    palletizedType: 'Palletized'
+  }]);
 
   // Protect the route
   useEffect(() => {
@@ -237,15 +247,6 @@ export default function MyProduceDashboard() {
     return [];
   }, [customerMappings, materialMappings, polMappings, podMappings, contracts, activeView, searchTerm, weekFilter, customerFilter]);
 
-  const filteredSKUs = useMemo(() => {
-    if (!skuSearchTerm) return materialMappings;
-    const term = skuSearchTerm.toLowerCase();
-    return materialMappings.filter(m => 
-      String(m.SAPC_Code || '').toLowerCase().includes(term) ||
-      String(m.SAPC_Desc || '').toLowerCase().includes(term)
-    );
-  }, [materialMappings, skuSearchTerm]);
-
   const uniqueWeeks = useMemo(() => {
     const weeks = Array.from(new Set(contracts.map(c => c.weekNumber))).filter(Boolean);
     return weeks.sort();
@@ -258,54 +259,91 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleCreateLA = async () => {
-    if (!db || !newContract.customerName) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a customer." });
+  const addLARow = () => {
+    setLaRows([...laRows, {
+      id: Math.random().toString(36).substr(2, 9),
+      farm: 'TADECO',
+      pol: '',
+      pod: '',
+      shippingLine: '',
+      cutOffDate: '',
+      etd: '',
+      totalVans: 0,
+      skuCode: '',
+      palletizedType: 'Palletized'
+    }]);
+  };
+
+  const removeLARow = (id: string) => {
+    if (laRows.length > 1) {
+      setLaRows(laRows.filter(r => r.id !== id));
+    }
+  };
+
+  const updateLARow = (id: string, updates: Partial<LARow>) => {
+    setLaRows(laRows.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const handleSubmitBatch = async () => {
+    if (!db || !newLAHeader.customerName || !newLAHeader.weekNumber) {
+      toast({ variant: "destructive", title: "Error", description: "Please select customer and week." });
       return;
     }
+
     try {
+      const batch = writeBatch(db);
       const contractId = `LA-${Date.now()}`;
-      await setDoc(doc(db, CONTRACT_PATH, contractId), {
+      
+      const totalVans = laRows.reduce((sum, r) => sum + r.totalVans, 0);
+
+      // Save Header
+      batch.set(doc(db, CONTRACT_PATH, contractId), {
         contractId,
-        ...newContract,
+        customerName: newLAHeader.customerName,
+        weekNumber: newLAHeader.weekNumber,
+        totalVans,
         status: 'pending',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setIsNewLAOpen(false);
-      setNewContract({ 
-        customerName: '', 
-        contractRef: '', 
-        senderEmail: '', 
-        weekNumber: '', 
-        totalVans: 0,
-        totalBoxes: 0,
-        farm: 'TADECO', 
-        pol: '', 
-        pod: '',
-        totalVolume: '', 
-        notes: '',
-        etd: '',
-        cutOffDate: '',
-        shippingLine: '',
-        palletizedType: 'Palletized',
-        selectedSKUs: []
+
+      // Save Line Items
+      laRows.forEach(row => {
+        const itemRef = doc(collection(db, `${CONTRACT_PATH}/${contractId}/items`));
+        batch.set(itemRef, {
+          itemId: itemRef.id,
+          pod: row.pod,
+          pol: row.pol,
+          farm: row.farm,
+          total: row.totalVans,
+          specs: row.skuCode,
+          shippingLines: row.shippingLine,
+          etd: row.etd,
+          cutOffDate: row.cutOffDate,
+          palletized: row.palletizedType,
+          updatedAt: serverTimestamp()
+        });
       });
-      toast({ title: "LA Created", description: "New loading advice has been added to the system." });
+
+      await batch.commit();
+      setIsNewLAOpen(false);
+      setNewLAHeader({ customerName: '', weekNumber: '' });
+      setLaRows([{
+        id: Math.random().toString(36).substr(2, 9),
+        farm: 'TADECO',
+        pol: '',
+        pod: '',
+        shippingLine: '',
+        cutOffDate: '',
+        etd: '',
+        totalVans: 0,
+        skuCode: '',
+        palletizedType: 'Palletized'
+      }]);
+      toast({ title: "Batch Submitted", description: `Loading Advice created with ${laRows.length} rows.` });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
-  };
-
-  const toggleSKU = (sapcCode: string) => {
-    setNewContract(prev => {
-      const isSelected = prev.selectedSKUs.includes(sapcCode);
-      if (isSelected) {
-        return { ...prev, selectedSKUs: prev.selectedSKUs.filter(code => code !== sapcCode) };
-      } else {
-        return { ...prev, selectedSKUs: [...prev.selectedSKUs, sapcCode] };
-      }
-    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -434,6 +472,16 @@ export default function MyProduceDashboard() {
     }
   };
 
+  const weekOptions = useMemo(() => {
+    const options = [];
+    const currentWeek = parseInt(format(new Date(), 'I'));
+    for (let i = -2; i < 10; i++) {
+      const w = currentWeek + i;
+      if (w > 0 && w <= 53) options.push(`WK${w.toString().padStart(2, '0')}`);
+    }
+    return options;
+  }, []);
+
   const renderLoadingAdviceView = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       {/* Filters Bar */}
@@ -490,161 +538,178 @@ export default function MyProduceDashboard() {
         <div className="flex items-center gap-3">
           <Button variant="outline" className="text-xs font-bold border-gray-200">CREATE/VIEW BOOKINGS</Button>
           <Button variant="outline" className="text-xs font-bold border-gray-200" onClick={() => setActiveView('cutting-order')}>CREATE/VIEW COS</Button>
+          
           <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
             <DialogTrigger asChild>
               <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> NEW LA</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl overflow-y-auto max-h-[95vh] p-0">
-              <DialogHeader className="p-6 pb-2">
-                <DialogTitle>Create New Loading Advice</DialogTitle>
-                <DialogDescription>Enter the details from the customer loading advice email.</DialogDescription>
-              </DialogHeader>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-6 py-2">
-                <div className="space-y-2">
-                  <Label>Customer Name</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, customerName: value})}
-                    value={newContract.customerName}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customerMappings.map((c: any) => (
-                        <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Farm</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, farm: value})}
-                    value={newContract.farm}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Farm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TADECO">TADECO</SelectItem>
-                      <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden">
+              <div className="bg-white rounded-lg shadow-xl">
+                <div className="p-6 border-b">
+                  <DialogTitle className="text-xl font-bold">New Loading Advice</DialogTitle>
+                  <DialogDescription className="text-gray-500 mt-1 flex items-center gap-2">
+                    <Info className="h-4 w-4" /> Multiple entries added here will be linked under a single transaction ID.
+                  </DialogDescription>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Week Number</Label>
-                  <Input 
-                    value={newContract.weekNumber} 
-                    onChange={(e) => setNewContract({...newContract, weekNumber: e.target.value})} 
-                    placeholder="e.g. WK16" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>POL (Port of Loading)</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, pol: value})}
-                    value={newContract.pol}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select POL" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {polMappings.map((p: any) => (
-                        <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>POD (Port of Destination)</Label>
-                  <Select 
-                    onValueChange={(value) => setNewContract({...newContract, pod: value})}
-                    value={newContract.pod}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select POD" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {podMappings.map((p: any) => (
-                        <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>ETD (Estimated Time of Departure)</Label>
-                  <Input 
-                    type="date"
-                    value={newContract.etd}
-                    onChange={(e) => setNewContract({...newContract, etd: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Cut-off Date</Label>
-                  <Input 
-                    type="date"
-                    value={newContract.cutOffDate}
-                    onChange={(e) => setNewContract({...newContract, cutOffDate: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Shipping Line</Label>
-                  <Input value={newContract.shippingLine} onChange={(e) => setNewContract({...newContract, shippingLine: e.target.value})} placeholder="Enter Shipping Line" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Total Vans</Label>
-                  <Input 
-                    type="number"
-                    value={newContract.totalVans} 
-                    onChange={(e) => setNewContract({...newContract, totalVans: parseInt(e.target.value) || 0})} 
-                    placeholder="Vans" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Palletization Type</Label>
-                  <Select 
-                    onValueChange={(value: any) => setNewContract({...newContract, palletizedType: value})}
-                    value={newContract.palletizedType}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Palletized">Palletized</SelectItem>
-                      <SelectItem value="Non Palletized">Non Palletized</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-1 md:col-span-2 space-y-4 pt-2">
-                  <div className="space-y-2">
-                    <Label>Materials (SKUs)</Label>
-                    <Button variant="outline" className="w-full justify-between" onClick={() => setIsSkuPickerOpen(true)}>
-                      {newContract.selectedSKUs.length > 0 ? `${newContract.selectedSKUs.length} Selected` : "Select SKUs"}
-                      <ChevronDown className="h-4 w-4 opacity-50" />
-                    </Button>
+                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                  {/* Header Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
+                      <Select value={newLAHeader.customerName} onValueChange={(val) => setNewLAHeader({...newLAHeader, customerName: val})}>
+                        <SelectTrigger className="h-10">
+                          <SelectValue placeholder="Select Customer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customerMappings.map((c: any) => (
+                            <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-gray-400">Week No</Label>
+                      <Select value={newLAHeader.weekNumber} onValueChange={(val) => setNewLAHeader({...newLAHeader, weekNumber: val})}>
+                        <SelectTrigger className="h-10">
+                          <SelectValue placeholder="Select Week" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {weekOptions.map(w => (
+                            <SelectItem key={w} value={w}>{w}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Notes / Email Content</Label>
-                    <Textarea 
-                      value={newContract.notes} 
-                      onChange={(e) => setNewContract({...newContract, notes: e.target.value})}
-                      placeholder="Paste loading advice email details here..."
-                      className="min-h-[100px]"
-                    />
+
+                  {/* Rows Table */}
+                  <div className="border rounded-lg overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead className="text-[10px] font-black uppercase">Farm</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Port of Loading</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Port of Destination</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Shipping Line</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Cut-off Date</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">ETD</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase text-center">Total Vans</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">SKU</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Palletization</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase text-right w-[50px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {laRows.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell className="p-2">
+                              <Select value={row.farm} onValueChange={(val) => updateLARow(row.id, { farm: val })}>
+                                <SelectTrigger className="h-8 text-xs min-w-[100px] border-gray-200">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="TADECO">TADECO</SelectItem>
+                                  <SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Select value={row.pol} onValueChange={(val) => updateLARow(row.id, { pol: val })}>
+                                <SelectTrigger className="h-8 text-xs min-w-[120px] border-gray-200">
+                                  <SelectValue placeholder="City/Port" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {polMappings.map((p: any) => (
+                                    <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Select value={row.pod} onValueChange={(val) => updateLARow(row.id, { pod: val })}>
+                                <SelectTrigger className="h-8 text-xs min-w-[120px] border-gray-200">
+                                  <SelectValue placeholder="City/Port" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {podMappings.map((p: any) => (
+                                    <SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                className="h-8 text-xs border-gray-200 min-w-[100px]" 
+                                placeholder="Select L"
+                                value={row.shippingLine}
+                                onChange={(e) => updateLARow(row.id, { shippingLine: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                type="date"
+                                className="h-8 text-xs border-gray-200"
+                                value={row.cutOffDate}
+                                onChange={(e) => updateLARow(row.id, { cutOffDate: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                type="date"
+                                className="h-8 text-xs border-gray-200"
+                                value={row.etd}
+                                onChange={(e) => updateLARow(row.id, { etd: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                type="number"
+                                className="h-8 text-xs border-gray-200 w-16 text-center"
+                                value={row.totalVans}
+                                onChange={(e) => updateLARow(row.id, { totalVans: parseInt(e.target.value) || 0 })}
+                              />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                className="h-8 text-xs border-gray-200 min-w-[100px]" 
+                                placeholder="SKU Cod"
+                                value={row.skuCode}
+                                onChange={(e) => updateLARow(row.id, { skuCode: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Select value={row.palletizedType} onValueChange={(val: any) => updateLARow(row.id, { palletizedType: val })}>
+                                <SelectTrigger className="h-8 text-xs min-w-[120px] border-gray-200">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Palletized">Palletized</SelectItem>
+                                  <SelectItem value="Non Palletized">Non Palletized</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-2 text-right">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => removeLARow(row.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
+
+                  <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto" onClick={addLARow}>
+                    <Plus className="h-4 w-4" /> Add Row
+                  </Button>
+                </div>
+
+                <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3 rounded-b-lg">
+                  <Button variant="ghost" onClick={() => setIsNewLAOpen(false)} className="text-gray-400 font-bold uppercase text-[10px] tracking-wider">CANCEL</Button>
+                  <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase text-[10px] tracking-widest px-8" onClick={handleSubmitBatch}>SUBMIT BATCH</Button>
                 </div>
               </div>
-
-              <DialogFooter className="p-6 bg-gray-50 border-t">
-                <Button variant="outline" onClick={() => setIsNewLAOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateLA} className="bg-anflocor-green">Save Loading Advice</Button>
-              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
@@ -662,45 +727,39 @@ export default function MyProduceDashboard() {
           <TableHeader className="bg-gray-100/50">
             <TableRow className="h-10 hover:bg-transparent">
               <TableHead className="text-[10px] font-black uppercase text-gray-500">WEEK NO.</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">FARM</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">PORT OF LOADING</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">PORT OF DESTINATION</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">SHIPPING LINES</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">CUT-OFF DATE</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">ETD</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">CUSTOMER</TableHead>
               <TableHead className="text-[10px] font-black uppercase text-gray-500 text-center">TOTAL VANS</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">SKU</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">PALLETIZATION</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">RECEIVED AT</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500">STATUS</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-500 text-right">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contractsLoading ? (
-              <TableRow><TableCell colSpan={10} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
             ) : filteredData.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
             ) : filteredData.map((c: any) => (
               <TableRow key={c.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group" onClick={() => { setSelectedContractId(c.id); setActiveView('contract-details'); }}>
                 <TableCell className="font-bold text-gray-900">{c.weekNumber || 'N/A'}</TableCell>
-                <TableCell className="text-xs text-gray-600 font-medium leading-tight">{c.farm}</TableCell>
-                <TableCell className="text-xs text-gray-600 font-medium">{c.pol || 'N/A'}</TableCell>
-                <TableCell className="text-xs text-gray-900 font-bold">{c.pod || 'N/A'}</TableCell>
-                <TableCell className="text-[11px] font-black text-gray-700 uppercase">{c.shippingLine || 'N/A'}</TableCell>
-                <TableCell className="text-xs text-gray-500 font-medium">{c.cutOffDate || 'N/A'}</TableCell>
-                <TableCell className="text-xs text-gray-500 font-medium">{c.etd || 'N/A'}</TableCell>
-                <TableCell className="text-sm font-black text-center text-gray-900">{c.totalVans || 0}</TableCell>
-                <TableCell className="text-[10px] font-bold text-gray-500 max-w-[100px] truncate">{c.selectedSKUs?.join(', ') || 'N/A'}</TableCell>
-                <TableCell className="text-[11px] font-medium text-gray-500">{c.palletizedType || 'N/A'}</TableCell>
+                <TableCell className="text-sm font-bold text-gray-700">{c.customerName}</TableCell>
+                <TableCell className="text-sm font-black text-center text-indigo-700">{c.totalVans || 0}</TableCell>
+                <TableCell className="text-xs text-gray-500">{c.receivedAt?.toDate()?.toLocaleDateString() || 'N/A'}</TableCell>
+                <TableCell>
+                  <Badge className={cn(
+                    "text-[10px] font-black",
+                    c.status === 'completed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                  )} variant="outline">
+                    {c.status?.toUpperCase()}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"><ChevronRight className="h-4 w-4" /></Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <div className="p-4 border-t flex items-center justify-between text-xs text-gray-400 font-medium">
-          <span>Showing 1-{filteredData.length} of {contracts.length} manifests</span>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-7 w-7"><ChevronLeft className="h-3 w-3" /></Button>
-            <Button variant="outline" size="icon" className="h-7 w-7"><ChevronRight className="h-3 w-3" /></Button>
-          </div>
-        </div>
       </Card>
     </div>
   );
@@ -708,33 +767,6 @@ export default function MyProduceDashboard() {
   const renderContractDetails = () => {
     const contract = contracts.find(c => c.id === selectedContractId);
     if (!contract) return null;
-
-    const handleBulkAiFill = async () => {
-      if (!contract.notes) {
-        toast({ variant: "destructive", title: "No Information Found", description: "Please add email content to 'Notes' to parse items." });
-        return;
-      }
-      setIsExtracting(true);
-      try {
-        const result = await extractContractData({ text: contract.notes });
-        if (result.items && result.items.length > 0) {
-          const batch = writeBatch(db!);
-          result.items.forEach(item => {
-            const itemRef = doc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`));
-            batch.set(itemRef, {
-              ...item,
-              updatedAt: serverTimestamp()
-            });
-          });
-          await batch.commit();
-          toast({ title: "Extraction Successful", description: `Added ${result.items.length} rows.` });
-        }
-      } catch (err) {
-        toast({ variant: "destructive", title: "Processing Error", description: "Could not parse notes." });
-      } finally {
-        setIsExtracting(false);
-      }
-    };
 
     const handleUpdateBooking = (item: any) => {
       setEditingItem(item);
@@ -866,14 +898,10 @@ export default function MyProduceDashboard() {
                 <h2 className="text-2xl font-bold text-gray-900">{contract.customerName}</h2>
                 <Badge className="bg-anflocor-green">{contract.weekNumber}</Badge>
               </div>
-              <p className="text-sm text-gray-500">REF: {contract.contractRef} | HEADER TOTAL: {contract.totalVans || 0} VANS</p>
+              <p className="text-sm text-gray-500">HEADER TOTAL: {contract.totalVans || 0} VANS</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleBulkAiFill} disabled={isExtracting} className="border-anflocor-green text-anflocor-green">
-              {isExtracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              AI Extract Items
-            </Button>
             <Button className="bg-anflocor-green" onClick={handleFinalize} disabled={contractItems.length === 0}>
               <FileSignature className="h-4 w-4 mr-2" /> {contract.status === 'completed' ? 'View Cutting Order' : 'Finalise Advice'}
             </Button>
@@ -886,10 +914,6 @@ export default function MyProduceDashboard() {
               <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Header Information</CardTitle></CardHeader>
               <CardContent className="space-y-4 pt-4">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">SENDER</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.senderEmail || 'Unknown'}</p>
-                </div>
-                <div className="space-y-1">
                   <Label className="text-[10px] text-gray-400 uppercase">VOLUME (VANS)</Label>
                   <p className={cn(
                     "text-xs font-bold",
@@ -899,28 +923,8 @@ export default function MyProduceDashboard() {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">FARM / ORIGIN</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.farm}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">POL / POD</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.pol || 'N/A'} - {contract.pod || 'N/A'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">ETD / CUT-OFF</Label>
-                  <div className="text-xs font-bold text-gray-700">
-                    <div>ETD: {contract.etd || 'TBA'}</div>
-                    <div className="text-amber-600">CUT: {contract.cutOffDate || 'TBA'}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Notes</CardTitle></CardHeader>
-              <CardContent className="pt-4">
-                <div className="text-xs text-gray-600 leading-relaxed italic whitespace-pre-wrap line-clamp-6">
-                  {contract.notes || "No notes."}
+                  <Label className="text-[10px] text-gray-400 uppercase">CREATED AT</Label>
+                  <p className="text-xs font-bold text-gray-700">{contract.receivedAt?.toDate()?.toLocaleString() || 'N/A'}</p>
                 </div>
               </CardContent>
             </Card>
@@ -948,13 +952,13 @@ export default function MyProduceDashboard() {
                 </div>
                 <Button size="sm" variant="outline" onClick={() => {
                   addDoc(collection(db!, `${CONTRACT_PATH}/${selectedContractId}/items`), {
-                    pod: contract.pod || 'NEW PORT',
+                    pod: 'NEW PORT',
                     total: 0,
                     specs: '',
                     limitation: '',
-                    palletized: contract.palletizedType || 'Palletized',
-                    shippingLines: contract.shippingLine || '',
-                    etd: contract.etd || '',
+                    palletized: 'Palletized',
+                    shippingLines: '',
+                    etd: '',
                     updatedAt: serverTimestamp()
                   });
                 }}><Plus className="h-4 w-4 mr-1" /> Add Requirement</Button>
@@ -968,9 +972,9 @@ export default function MyProduceDashboard() {
                         onCheckedChange={toggleAllSelection}
                       />
                     </TableHead>
-                    <TableHead className="text-[10px] font-bold">POD</TableHead>
+                    <TableHead className="text-[10px] font-bold">FARM / POL / POD</TableHead>
                     <TableHead className="text-[10px] font-bold text-center">VANS</TableHead>
-                    <TableHead className="text-[10px] font-bold">SPECS</TableHead>
+                    <TableHead className="text-[10px] font-bold">SKU</TableHead>
                     <TableHead className="text-[10px] font-bold">BOOKING # / VESSEL</TableHead>
                     <TableHead className="text-[10px] font-bold">STATUS</TableHead>
                     <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
@@ -980,7 +984,7 @@ export default function MyProduceDashboard() {
                   {itemsLoading ? (
                     <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
                   ) : contractItems.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-400">No items. Use AI Extract to parse loading advice.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-400">No items found.</TableCell></TableRow>
                   ) : contractItems.map((item: any) => (
                     <TableRow key={item.id} className="text-xs group h-12">
                       <TableCell>
@@ -989,7 +993,12 @@ export default function MyProduceDashboard() {
                           onCheckedChange={() => toggleItemSelection(item.id)}
                         />
                       </TableCell>
-                      <TableCell className="font-bold text-indigo-700">{item.pod}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-indigo-700">{item.pod}</span>
+                          <span className="text-[9px] text-gray-400">{item.farm} / {item.pol}</span>
+                        </div>
+                      </TableCell>
                       <TableCell className="font-mono text-center font-bold text-gray-900">{item.total}</TableCell>
                       <TableCell className="max-w-[150px] truncate">{item.specs}</TableCell>
                       <TableCell>
@@ -1171,20 +1180,8 @@ export default function MyProduceDashboard() {
               <p className="text-sm font-bold">{contract.customerName}</p>
             </div>
             <div className="space-y-1">
-              <Label className="text-[9px] text-gray-400 font-black uppercase">Reference / PO</Label>
-              <p className="text-sm font-bold">{contract.contractRef}</p>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[9px] text-gray-400 font-black uppercase">Farm / Origin</Label>
-              <p className="text-sm font-bold">{contract.farm}</p>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[9px] text-gray-400 font-black uppercase">Port of Loading</Label>
-              <p className="text-sm font-bold">{contract.pol}</p>
-            </div>
-            <div className="space-y-1">
               <Label className="text-[9px] text-gray-400 font-black uppercase">Allocation</Label>
-              <p className="text-sm font-bold">{contract.totalVans} VANS ({contract.palletizedType})</p>
+              <p className="text-sm font-bold">{contract.totalVans} VANS</p>
             </div>
             <div className="space-y-1">
               <Label className="text-[9px] text-gray-400 font-black uppercase">Issue Date</Label>
@@ -1219,13 +1216,10 @@ export default function MyProduceDashboard() {
                         <TableCell className="text-xs font-black text-center">{item.total}</TableCell>
                         <TableCell className="text-[11px] leading-tight">
                           <div className="font-bold">{item.specs || 'REGULAR SPEC'}</div>
-                          {contract.selectedSKUs.length > 0 && (
-                            <div className="text-[9px] text-gray-400 italic">SKU Ref: {contract.selectedSKUs.join(', ')}</div>
-                          )}
                         </TableCell>
                         <TableCell className="text-[11px] leading-tight">
-                          <div className="font-bold">{item.etd || contract.etd || 'TBA'}</div>
-                          <div className="text-[9px] text-gray-400">{item.shippingLines || contract.shippingLine || 'N/A'}</div>
+                          <div className="font-bold">{item.etd || 'TBA'}</div>
+                          <div className="text-[9px] text-gray-400">{item.shippingLines || 'N/A'}</div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1234,14 +1228,6 @@ export default function MyProduceDashboard() {
               </div>
             ))}
           </div>
-
-          {/* Remarks Section */}
-          {contract.notes && (
-            <div className="mt-12 p-4 border-2 border-dashed border-gray-200 rounded-lg">
-              <Label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Special Instructions / Remarks</Label>
-              <p className="text-xs text-gray-600 italic leading-relaxed">{contract.notes}</p>
-            </div>
-          )}
 
           {/* Footer / Signatures */}
           <div className="mt-20 grid grid-cols-3 gap-12 pt-12">
@@ -1258,23 +1244,10 @@ export default function MyProduceDashboard() {
               <Label className="text-[9px] font-bold uppercase text-gray-400">Authorized Signature</Label>
             </div>
           </div>
-
-          {/* Branding Footer */}
-          <div className="mt-12 text-center text-[8px] text-gray-300 font-bold uppercase tracking-[0.2em] pt-4 border-t border-gray-50">
-            Automated Generation via myProduce Enterprise Portal
-          </div>
         </div>
       </div>
     );
   };
-
-  const configOptions = [
-    { id: 'loading-advice', title: "Loading Advice", description: "Manage manifests and allocations.", icon: <FileText className="h-5 w-5" />, color: "bg-indigo-700" },
-    { id: 'customer-mapping', title: "Customer Mapping", description: "Map customers using SAPC codes.", icon: <Users className="h-5 w-5" />, color: "bg-blue-600" },
-    { id: 'material-mapping', title: "Material Mapping", description: "Associate materials with SAP codes.", icon: <Box className="h-5 w-5" />, color: "bg-emerald-600" },
-    { id: 'port-of-loading', title: "Port of Loading", description: "Configure origin ports.", icon: <Anchor className="h-5 w-5" />, color: "bg-sky-600" },
-    { id: 'port-of-destination', title: "Port of Destination", description: "Manage destinations.", icon: <Navigation className="h-5 w-5" />, color: "bg-rose-600" }
-  ];
 
   const renderContent = () => {
     if (activeView === 'dashboard') {
@@ -1308,44 +1281,19 @@ export default function MyProduceDashboard() {
       );
     }
 
-    if (activeView === 'configuration') {
-      return (
-        <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {configOptions.map((option) => (
-              <Card key={option.id} onClick={() => setActiveView(option.id as any)} className="group hover:ring-2 hover:ring-anflocor-green/20 transition-all cursor-pointer">
-                <CardHeader className="p-5">
-                  <div className={`${option.color} text-white p-2.5 rounded-lg w-fit shadow-md transition-transform`}>{option.icon}</div>
-                  <CardTitle className="text-base font-bold mt-4">{option.title}</CardTitle>
-                  <CardDescription className="text-xs line-clamp-2">{option.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="p-5 pt-0">
-                  <Button variant="link" className="p-0 h-auto text-anflocor-green text-xs font-bold">ACCESS <ChevronRight className="ml-1 h-3 w-3" /></Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-      );
-    }
-
     if (activeView === 'loading-advice') return renderLoadingAdviceView();
     if (activeView === 'contract-details') return renderContractDetails();
     if (activeView === 'cutting-order') return renderCuttingOrder();
 
-    const isMaterialView = activeView === 'material-mapping';
-    const isPolView = activeView === 'port-of-loading';
-    const isPodView = activeView === 'port-of-destination';
-    
     return (
       <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" onClick={() => setActiveView('configuration')} className="rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="h-5 w-5" /></Button>
             <h2 className="text-2xl font-bold text-gray-900">
-              {isMaterialView ? 'Material Mapping' : 
-               isPolView ? 'Port of Loading' : 
-               isPodView ? 'Port of Destination' : 'Customer Mapping'}
+              {activeView === 'material-mapping' ? 'Material Mapping' : 
+               activeView === 'port-of-loading' ? 'Port of Loading' : 
+               activeView === 'port-of-destination' ? 'Port of Destination' : 'Customer Mapping'}
             </h2>
           </div>
           <div className="flex items-center space-x-2">
@@ -1365,14 +1313,14 @@ export default function MyProduceDashboard() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                {isMaterialView ? (
+                {activeView === 'material-mapping' ? (
                   <>
                     <TableHead className="font-bold text-gray-600">SAPC Code</TableHead>
                     <TableHead className="font-bold text-gray-600">Kind of Pack</TableHead>
                     <TableHead className="font-bold text-gray-600">SAPC Type</TableHead>
                     <TableHead className="font-bold text-gray-600">SAPC Description</TableHead>
                   </>
-                ) : (isPolView || isPodView) ? (
+                ) : (activeView === 'port-of-loading' || activeView === 'port-of-destination') ? (
                   <>
                     <TableHead className="font-bold text-gray-600">Port Name</TableHead>
                     <TableHead className="font-bold text-gray-600">Last Updated</TableHead>
@@ -1393,14 +1341,14 @@ export default function MyProduceDashboard() {
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
               ) : filteredData.map((m: any) => (
                 <TableRow key={m.id} className="hover:bg-gray-50/50">
-                  {isMaterialView ? (
+                  {activeView === 'material-mapping' ? (
                     <>
                       <TableCell className="font-mono text-xs font-bold text-anflocor-green">{m.SAPC_Code}</TableCell>
                       <TableCell className="text-xs text-gray-600 font-medium">{m.KindOfPack}</TableCell>
                       <TableCell><span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700">{m.SAPC_Type}</span></TableCell>
                       <TableCell className="text-gray-500 text-sm">{m.SAPC_Desc}</TableCell>
                     </>
-                  ) : (isPolView || isPodView) ? (
+                  ) : (activeView === 'port-of-loading' || activeView === 'port-of-destination') ? (
                     <>
                       <TableCell className="font-bold text-gray-900">{m.portName}</TableCell>
                       <TableCell className="text-gray-400 text-xs">{m.updatedAt?.toDate()?.toLocaleString() || 'N/A'}</TableCell>
@@ -1415,9 +1363,9 @@ export default function MyProduceDashboard() {
                   )}
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(db!, 
-                      isMaterialView ? MATERIAL_PATH : 
-                      isPolView ? POL_PATH : 
-                      isPodView ? POD_PATH : CUSTOMER_PATH, m.id))} className="text-gray-400 hover:text-red-500">
+                      activeView === 'material-mapping' ? MATERIAL_PATH : 
+                      activeView === 'port-of-loading' ? POL_PATH : 
+                      activeView === 'port-of-destination' ? POD_PATH : CUSTOMER_PATH, m.id))} className="text-gray-400 hover:text-red-500">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
