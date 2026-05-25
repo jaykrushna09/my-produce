@@ -93,6 +93,8 @@
       "type": "object",
       "properties": {
         "itemId": { "type": "string" },
+        "farm": { "type": "string" },
+        "pol": { "type": "string" },
         "pod": { "type": "string", "description": "Port of Destination" },
         "total": { "type": "number" },
         "specs": { "type": "string" },
@@ -100,6 +102,7 @@
         "palletized": { "type": "string", "enum": ["Palletized", "Breakbulk", "Non-Palletized"] },
         "shippingLines": { "type": "string" },
         "etd": { "type": "string" },
+        "cutOffDate": { "type": "string" },
         "customerContractNumber": { "type": "string" },
         "bookingNumber": { "type": "string", "description": "Booking reference number provided by carrier" },
         "vesselName": { "type": "string", "description": "Assigned vessel name" },

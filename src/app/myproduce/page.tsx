@@ -908,29 +908,8 @@ export default function MyProduceDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1 space-y-6">
-            <Card className="h-fit bg-gray-50/50">
-              <CardHeader className="pb-2 border-b"><CardTitle className="text-[10px] uppercase tracking-wider text-gray-400 font-black">Header Information</CardTitle></CardHeader>
-              <CardContent className="space-y-4 pt-4">
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">VOLUME (VANS)</Label>
-                  <p className={cn(
-                    "text-xs font-bold",
-                    totalVansBooked === contract.totalVans ? "text-green-600" : "text-amber-600"
-                  )}>
-                    {totalVansBooked} / {contract.totalVans || 0} Allocated
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-gray-400 uppercase">CREATED AT</Label>
-                  <p className="text-xs font-bold text-gray-700">{contract.receivedAt?.toDate()?.toLocaleString() || 'N/A'}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="lg:col-span-3 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-12 space-y-4">
             {selectedItemIds.length > 0 && (
               <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-100 rounded-lg animate-in slide-in-from-top-2">
                 <div className="flex items-center gap-3">
@@ -944,7 +923,7 @@ export default function MyProduceDashboard() {
               </div>
             )}
 
-            <Card>
+            <Card className="overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                 <div>
                   <CardTitle className="text-lg">Logistics Planning</CardTitle>
@@ -959,101 +938,109 @@ export default function MyProduceDashboard() {
                     palletized: 'Palletized',
                     shippingLines: '',
                     etd: '',
+                    farm: 'TADECO',
+                    pol: '',
+                    cutOffDate: '',
                     updatedAt: serverTimestamp()
                   });
                 }}><Plus className="h-4 w-4 mr-1" /> Add Requirement</Button>
               </CardHeader>
-              <Table>
-                <TableHeader className="bg-gray-50/50">
-                  <TableRow>
-                    <TableHead className="w-[40px]">
-                      <Checkbox 
-                        checked={contractItems.length > 0 && selectedItemIds.length === contractItems.length}
-                        onCheckedChange={toggleAllSelection}
-                      />
-                    </TableHead>
-                    <TableHead className="text-[10px] font-bold">FARM / POL / POD</TableHead>
-                    <TableHead className="text-[10px] font-bold text-center">VANS</TableHead>
-                    <TableHead className="text-[10px] font-bold">SKU</TableHead>
-                    <TableHead className="text-[10px] font-bold">BOOKING # / VESSEL</TableHead>
-                    <TableHead className="text-[10px] font-bold">STATUS</TableHead>
-                    <TableHead className="text-right text-[10px] font-bold">ACTIONS</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {itemsLoading ? (
-                    <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
-                  ) : contractItems.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-400">No items found.</TableCell></TableRow>
-                  ) : contractItems.map((item: any) => (
-                    <TableRow key={item.id} className="text-xs group h-12">
-                      <TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-gray-50/80">
+                    <TableRow>
+                      <TableHead className="w-[40px]">
                         <Checkbox 
-                          checked={selectedItemIds.includes(item.id)}
-                          onCheckedChange={() => toggleItemSelection(item.id)}
+                          checked={contractItems.length > 0 && selectedItemIds.length === contractItems.length}
+                          onCheckedChange={toggleAllSelection}
                         />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold text-indigo-700">{item.pod}</span>
-                          <span className="text-[9px] text-gray-400">{item.farm} / {item.pol}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-center font-bold text-gray-900">{item.total}</TableCell>
-                      <TableCell className="max-w-[150px] truncate">{item.specs}</TableCell>
-                      <TableCell>
-                        {item.bookingNumber || item.vesselName ? (
-                          <div className="flex flex-col">
-                            <span className="text-xs font-black text-anflocor-green uppercase truncate">{item.bookingNumber || 'NO BOOKING'}</span>
-                            <span className="text-[9px] text-gray-400 font-bold italic truncate">{item.vesselName || 'NO VESSEL'}</span>
+                      </TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">WEEK NO.</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">FARM</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">PORT OF LOADING</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">PORT OF DESTINATION</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">SHIPPING LINE</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">CUT-OFF DATE</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">ETD</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500 text-center">TOTAL VANS</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">SKU</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">PALLETIZATION</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase text-gray-500">LOGISTICS (BOOKING / VESSEL)</TableHead>
+                      <TableHead className="text-right text-[10px] font-black uppercase text-gray-500">ACTIONS</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {itemsLoading ? (
+                      <TableRow><TableCell colSpan={13} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-anflocor-green" /></TableCell></TableRow>
+                    ) : contractItems.length === 0 ? (
+                      <TableRow><TableCell colSpan={13} className="h-32 text-center text-gray-400">No items found.</TableCell></TableRow>
+                    ) : contractItems.map((item: any) => (
+                      <TableRow key={item.id} className="text-xs group hover:bg-gray-50/50">
+                        <TableCell>
+                          <Checkbox 
+                            checked={selectedItemIds.includes(item.id)}
+                            onCheckedChange={() => toggleItemSelection(item.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-bold text-gray-900">{contract.weekNumber}</TableCell>
+                        <TableCell className="font-medium">{item.farm || 'TADECO'}</TableCell>
+                        <TableCell className="text-gray-600">{item.pol || 'N/A'}</TableCell>
+                        <TableCell className="font-bold text-gray-900">{item.pod}</TableCell>
+                        <TableCell className="text-gray-600 font-medium">{item.shippingLines || 'TBA'}</TableCell>
+                        <TableCell className="text-gray-400">{item.cutOffDate || '--'}</TableCell>
+                        <TableCell className="text-gray-900 font-medium">{item.etd || 'TBA'}</TableCell>
+                        <TableCell className="font-black text-center text-gray-900 text-base">{item.total}</TableCell>
+                        <TableCell className="font-bold text-indigo-600">{item.specs || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] px-1 h-5">{item.palletized || 'Palletized'}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {item.bookingNumber || item.vesselName ? (
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-black text-emerald-700 uppercase leading-none">{item.bookingNumber || 'NO BOOKING'}</span>
+                              <span className="text-[9px] text-gray-400 font-bold italic mt-1 leading-none">{item.vesselName || 'NO VESSEL'}</span>
+                            </div>
+                          ) : (
+                            <Button variant="ghost" size="sm" className="h-7 text-[9px] font-black border border-dashed border-gray-200 text-indigo-500" onClick={() => handleUpdateBooking(item)}>
+                              ADD BOOKING
+                            </Button>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100" 
+                              title="Split volume"
+                              onClick={() => handleSplitRow(item)}
+                            >
+                              <Split className="h-3.5 w-3.5 text-indigo-400" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => handleUpdateBooking(item)}>
+                              <Edit2 className="h-3.5 w-3.5 text-gray-400" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}>
+                              <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
+                            </Button>
                           </div>
-                        ) : (
-                          <Button variant="ghost" size="sm" className="h-7 text-[9px] font-bold border border-dashed border-gray-200" onClick={() => handleUpdateBooking(item)}>
-                            ASSIGN LOGISTICS
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {item.bookingNumber ? (
-                          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none text-[9px]">BOOKED</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-gray-400 text-[9px]">PENDING</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 opacity-0 group-hover:opacity-100" 
-                            title="Split volume for multiple bookings"
-                            onClick={() => handleSplitRow(item)}
-                          >
-                            <Split className="h-3.5 w-3.5 text-indigo-400" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => handleUpdateBooking(item)}>
-                            <Edit2 className="h-3.5 w-3.5 text-gray-400" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => deleteDoc(doc(db!, `${CONTRACT_PATH}/${selectedContractId}/items`, item.id))}>
-                            <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
-                          </Button>
-                        </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow className="bg-gray-50/80">
+                      <TableCell colSpan={8} className="text-right font-black text-[10px] uppercase text-gray-400">Total Allocated</TableCell>
+                      <TableCell className="text-center font-black text-indigo-700 text-lg">{totalVansBooked}</TableCell>
+                      <TableCell colSpan={4} className="text-left text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+                        {totalVansBooked !== contract.totalVans ? 
+                          `Attention: ${Math.abs(contract.totalVans - totalVansBooked)} vans ${totalVansBooked > contract.totalVans ? 'over' : 'short'} from LA Header.` : 
+                          "Allocation matches LA requirement exactly."}
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow className="bg-gray-50/50">
-                    <TableCell colSpan={2} className="text-right font-bold text-[10px] uppercase text-gray-400">Total Allocation</TableCell>
-                    <TableCell className="text-center font-black text-indigo-700">{totalVansBooked}</TableCell>
-                    <TableCell colSpan={4} className="text-left text-[10px] text-gray-400 font-medium">
-                      {totalVansBooked !== contract.totalVans ? 
-                        `Reconcile: ${Math.abs(contract.totalVans - totalVansBooked)} vans ${totalVansBooked > contract.totalVans ? 'over' : 'short'} from header.` : 
-                        "Perfect match with header."}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
+                  </TableFooter>
+                </Table>
+              </div>
             </Card>
           </div>
         </div>
