@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -322,7 +321,7 @@ export default function MyProduceDashboard() {
   useEffect(() => {
     if (activeView === 'edit-cutting-orders' && contractItems.length > 0) {
       setCoRows(contractItems.map((item: any) => ({
-        id: item.id || Math.random().toString(36).substr(2, 9),
+        id: item.itemId || item.id || Math.random().toString(36).substr(2, 9),
         ps: item.ps || 'PS',
         shippingLine: item.shippingLines || '',
         bookingNo: item.bookingNumber || '',
@@ -442,14 +441,18 @@ export default function MyProduceDashboard() {
           </div>
 
           <div className="p-8 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700">{contract.customerName}</div>
+                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700 uppercase">{contract.customerName}</div>
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700">{contract.weekNumber?.replace(/\D/g, '')}</div>
+                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700">{contract.weekNumber?.split(' ')[1] || contract.weekNumber}</div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">POD</Label>
+                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700 uppercase">{contract.pod || 'DAVAO'}</div>
               </div>
             </div>
 
@@ -457,18 +460,11 @@ export default function MyProduceDashboard() {
               <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Allocated</Label>
               <div className="flex flex-wrap items-stretch gap-4">
                 {podStats.map(stat => (
-                  <div key={stat.name} className="flex-1 min-w-[180px] border border-gray-200 rounded-lg p-6 bg-white flex flex-col justify-center">
-                    <span className="text-[10px] font-black uppercase text-gray-300 mb-2">{stat.name}</span>
-                    <span className="text-2xl font-black text-gray-900">{stat.allocated}/{stat.target}</span>
+                  <div key={stat.name} className="min-w-[140px] border border-gray-200 rounded-md p-4 bg-white flex flex-col items-start shadow-sm">
+                    <span className="text-[9px] font-black uppercase text-gray-400 mb-1">{stat.name}</span>
+                    <span className="text-lg font-bold text-gray-900">{stat.allocated}/{stat.target}</span>
                   </div>
                 ))}
-                <div className="flex-[1.5] min-w-[250px] bg-black text-white rounded-lg p-6 flex flex-col justify-center relative overflow-hidden">
-                  <div className="relative z-10">
-                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-tighter">Total Allocation</span>
-                    <h3 className="text-xl font-bold mt-1">Total for week {contract.weekNumber?.replace(/\D/g, '')} : {contract.totalVans}</h3>
-                  </div>
-                  <Sparkles className="absolute right-4 bottom-4 h-12 w-12 text-white/5" />
-                </div>
               </div>
             </div>
 
