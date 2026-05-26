@@ -337,7 +337,7 @@ export default function MyProduceDashboard() {
 
   const renderTripsView = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Top Filter Bar from Screenshot */}
+      {/* Top Filter Bar */}
       <div className="flex items-center gap-4 mb-4">
         <Select value={weekFilter} onValueChange={setWeekFilter}>
           <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="All Weeks" /></SelectTrigger>
@@ -415,7 +415,7 @@ export default function MyProduceDashboard() {
               <TableHead className="text-[9px] font-black uppercase text-gray-400">SEAL NO.</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">DRIVER</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE ATW RELEASED</TableHead>
-              <TableHead className="text-[9px) font-black uppercase text-gray-400">DATE WITHDRAWN</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE WITHDRAWN</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400 text-right">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
@@ -437,7 +437,7 @@ export default function MyProduceDashboard() {
         </Table>
       </div>
 
-      {/* New Trip Modal with Correct Flex Layout for Scrolling */}
+      {/* New Trip Modal */}
       <Dialog open={isNewTripOpen} onOpenChange={(open) => { setIsNewTripOpen(open); if(!open) setTripStep(1); }}>
         <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
           <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0">
@@ -495,14 +495,17 @@ export default function MyProduceDashboard() {
                   <TableHeader className="bg-gray-100">
                     <TableRow>
                       <TableHead className="w-12 text-center text-[9px] font-black uppercase">PS</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">Container No.</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">Van No.</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">Seal No.</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase text-center">ATW</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">Released</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">PM No.</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">Driver</TableHead>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">CONTAINER NO.</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">VAN NO.</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">SEAL NO.</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-center">ATW STATUS</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">ATW RELEASED</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">PM NO.</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">DRIVER NAME</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">SIGNATURE</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">DATE WITHDRAWN</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">ATTACHMENTS</TableHead>
+                      <TableHead className="w-12 text-[9px] font-black uppercase">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -512,10 +515,13 @@ export default function MyProduceDashboard() {
                         <TableCell><Input className="h-9 uppercase font-bold" value={row.containerNo} onChange={(e) => updateTripRow(row.id, { containerNo: e.target.value })}/></TableCell>
                         <TableCell><Input className="h-9 uppercase" value={row.vanNo} onChange={(e) => updateTripRow(row.id, { vanNo: e.target.value })}/></TableCell>
                         <TableCell><Input className="h-9 uppercase" value={row.sealNo} onChange={(e) => updateTripRow(row.id, { sealNo: e.target.value })}/></TableCell>
-                        <TableCell className="text-center"><Badge variant="outline" className="cursor-pointer" onClick={() => updateTripRow(row.id, { atwStatus: row.atwStatus === 'Y' ? 'N' : 'Y' })}>{row.atwStatus}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className={cn("cursor-pointer font-bold", row.atwStatus === 'Y' ? "text-green-600 border-green-200 bg-green-50" : "text-red-600 border-red-200 bg-red-50")} onClick={() => updateTripRow(row.id, { atwStatus: row.atwStatus === 'Y' ? 'N' : 'Y' })}>{row.atwStatus}</Badge></TableCell>
                         <TableCell><Input type="date" className="h-9 text-[10px]" value={row.atwReleased} onChange={(e) => updateTripRow(row.id, { atwReleased: e.target.value })}/></TableCell>
-                        <TableCell><Input className="h-9" value={row.pmNo} onChange={(e) => updateTripRow(row.id, { pmNo: e.target.value })}/></TableCell>
-                        <TableCell><Input className="h-9" value={row.driverName} onChange={(e) => updateTripRow(row.id, { driverName: e.target.value })}/></TableCell>
+                        <TableCell><Input className="h-9" placeholder="PM No." value={row.pmNo} onChange={(e) => updateTripRow(row.id, { pmNo: e.target.value })}/></TableCell>
+                        <TableCell><Input className="h-9" placeholder="Driver Name" value={row.driverName} onChange={(e) => updateTripRow(row.id, { driverName: e.target.value })}/></TableCell>
+                        <TableCell className="text-[10px] italic text-gray-400">Pending</TableCell>
+                        <TableCell><Input type="date" className="h-9 text-[10px]" value={row.dateWithdrawn} onChange={(e) => updateTripRow(row.id, { dateWithdrawn: e.target.value })}/></TableCell>
+                        <TableCell><Button variant="ghost" size="sm" className="h-8 text-anflocor-green gap-2 px-2"><Paperclip className="h-3 w-3" /> Upload</Button></TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeTripRow(row.id)}><Trash2 className="h-4 w-4 text-red-300" /></Button></TableCell>
                       </TableRow>
                     ))}
@@ -548,9 +554,10 @@ export default function MyProduceDashboard() {
                     <TableRow>
                       <TableHead className="w-12 text-[9px] font-black uppercase">#</TableHead>
                       <TableHead className="w-20 text-[9px] font-black uppercase">PS</TableHead>
-                      <TableHead className="w-32 text-[9px] font-black uppercase">Cut-off</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">Container No.</TableHead>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="w-32 text-[9px] font-black uppercase">CUT-OFF</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">CONTAINER NO.</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase">ATTACHMENTS</TableHead>
+                      <TableHead className="w-12 text-[9px] font-black uppercase">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -565,6 +572,7 @@ export default function MyProduceDashboard() {
                             <SelectContent>{tripRows.map(tr => (<SelectItem key={tr.id} value={tr.containerNo}>{tr.containerNo}</SelectItem>))}</SelectContent>
                           </Select>
                         </TableCell>
+                        <TableCell><Button variant="ghost" size="sm" className="h-8 text-anflocor-green gap-2 px-2"><Paperclip className="h-3 w-3" /> Upload</Button></TableCell>
                         <TableCell><Button variant="ghost" size="icon" className="text-red-200"><Trash2 className="h-4 w-4" /></Button></TableCell>
                       </TableRow>
                     ))}
