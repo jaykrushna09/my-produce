@@ -54,7 +54,9 @@ import {
   TrendingUp,
   AlertCircle,
   History,
-  Clock
+  Clock,
+  ClipboardCheck,
+  PackageCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -87,6 +89,13 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -179,6 +188,9 @@ export default function MyProduceDashboard() {
   const [isNewLAOpen, setIsNewLAOpen] = useState(false);
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
   const [isNewTripOpen, setIsNewTripOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [selectedTripForTransfer, setSelectedTripForTransfer] = useState<any>(null);
+  
   const [tripStep, setTripStep] = useState<1 | 2>(1);
   const [newTripHeader, setNewTripHeader] = useState({ 
     customerName: '', 
@@ -273,7 +285,6 @@ export default function MyProduceDashboard() {
       return;
     }
     
-    // Auto-generate mock binding rows as per screenshot columns
     const mockItems: CORow[] = [{
       id: `MOCK-${Date.now()}-1`,
       ps: '1',
@@ -418,12 +429,92 @@ export default function MyProduceDashboard() {
                 <TableCell className="font-bold text-xs uppercase">{t.driver}</TableCell>
                 <TableCell className="text-[10px] text-gray-400">{t.dateAtwReleased}</TableCell>
                 <TableCell className="text-[10px] text-gray-400">{t.dateWithdrawn}</TableCell>
-                <TableCell className="text-right"><Button variant="ghost" size="icon" className="text-gray-300"><MoreVertical className="h-4 w-4" /></Button></TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-gray-400">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem 
+                        className="gap-3 py-2.5 cursor-pointer font-medium"
+                        onClick={() => { setSelectedTripForTransfer(t); setIsTransferModalOpen(true); }}
+                      >
+                        <Truck className="h-4 w-4 text-gray-500" /> Start Transfer
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium">
+                        <FileText className="h-4 w-4 text-gray-500" /> Check Docs
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium">
+                        <PackageCheck className="h-4 w-4 text-gray-500" /> Dispatch
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-white">
+          <div className="p-6 space-y-4">
+            <div className="flex flex-col gap-1">
+              <DialogTitle className="text-2xl font-black text-gray-900">Start Transfer</DialogTitle>
+              <DialogDescription className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                Initiating container movement to port
+              </DialogDescription>
+            </div>
+            
+            <div className="space-y-4 pt-4">
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">POD Destination</span>
+                <span className="text-xs font-bold text-anflocor-green">{selectedTripForTransfer?.pod || 'DAVAO'}</span>
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Gate Pass Number</Label>
+                <Input placeholder="GP-000000" className="h-11 font-bold" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Seal Verification</Label>
+                <Select defaultValue="verified">
+                  <SelectTrigger className="h-11 font-bold">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="verified">Intact & Verified</SelectItem>
+                    <SelectItem value="pending">Pending Inspection</SelectItem>
+                    <SelectItem value="issue">Seal Mismatch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Dispatcher ID</Label>
+                <Input placeholder="Enter ID" className="h-11 font-bold uppercase" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Notes</Label>
+                <Textarea placeholder="Additional movement notes..." className="resize-none h-20 text-xs" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 bg-gray-50 border-t flex gap-3">
+            <Button variant="ghost" className="flex-1 font-black uppercase text-[10px]" onClick={() => setIsTransferModalOpen(false)}>CANCEL</Button>
+            <Button className="flex-1 bg-anflocor-green text-white font-black uppercase text-[10px]" onClick={() => { 
+              toast({ title: "Transfer Started", description: "Manifest has been assigned to transfer workflow." });
+              setIsTransferModalOpen(false);
+            }}>CONFIRM TRANSFER</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isNewTripOpen} onOpenChange={(open) => { setIsNewTripOpen(open); if(!open) setTripStep(1); }}>
         <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
