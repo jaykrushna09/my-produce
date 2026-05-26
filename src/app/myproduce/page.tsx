@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -130,15 +129,16 @@ interface LARow {
 interface CORow {
   id: string;
   ps: string;
-  shippingLine: string;
-  bookingNo: string;
-  containerNo: string;
-  atwStatus: 'PENDING' | 'READY' | 'LOADED';
   pod: string;
   cutOffDate: string;
   etd: string;
+  taskDate: string;
   sku: string;
   palletization: string;
+  containerNo: string;
+  shippingLine: string;
+  bookingNo: string;
+  atwStatus: 'PENDING' | 'READY' | 'LOADED';
 }
 
 interface BookingRow {
@@ -176,22 +176,8 @@ export default function MyProduceDashboard() {
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
   
-  // State for forms
   const [isNewLAOpen, setIsNewLAOpen] = useState(false);
-  const [newLAHeader, setNewLAHeader] = useState({ customerName: '', weekNumber: '' });
-  const [laRows, setLaRows] = useState<LARow[]>([{
-    id: Math.random().toString(36).substr(2, 9),
-    farm: 'TADECO', pol: 'DAVAO', pod: '', shippingLine: '',
-    cutOffDate: '', etd: '', totalVans: 0, skuCode: '', palletizedType: 'Palletized'
-  }]);
-
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
-  const [newBookingHeader, setNewBookingHeader] = useState({ customerName: '', weekNumber: '' });
-  const [bookingRows, setBookingRows] = useState<BookingRow[]>([{
-    id: Math.random().toString(36).substr(2, 9),
-    bookingNo: '', shippingLine: '', vesselName: '', pod: ''
-  }]);
-
   const [isNewTripOpen, setIsNewTripOpen] = useState(false);
   const [tripStep, setTripStep] = useState<1 | 2>(1);
   const [newTripHeader, setNewTripHeader] = useState({ 
@@ -287,14 +273,20 @@ export default function MyProduceDashboard() {
       return;
     }
     
-    // Auto-generate mock binding rows if no LA items found for testing
+    // Auto-generate mock binding rows as per screenshot columns
     const mockItems: CORow[] = [{
-      id: `MOCK-${Date.now()}`,
-      ps: 'PS', shippingLine: newTripHeader.shippingLine || 'LINE',
-      bookingNo: newTripHeader.bookingNo || 'BK-123',
-      containerNo: '', atwStatus: 'PENDING', pod: newTripHeader.pod,
-      cutOffDate: format(new Date(), 'yyyy-MM-dd'), etd: format(new Date(), 'yyyy-MM-dd'),
-      sku: 'SKU-MOCK', palletization: 'Palletized'
+      id: `MOCK-${Date.now()}-1`,
+      ps: '1',
+      pod: newTripHeader.pod || 'SHA',
+      cutOffDate: format(new Date(), 'yyyy-MM-dd'),
+      etd: format(new Date(), 'yyyy-MM-dd'),
+      taskDate: format(new Date(), 'yyyy-MM-dd'),
+      sku: 'SKU-001',
+      palletization: 'PALLETIZE',
+      containerNo: '',
+      shippingLine: newTripHeader.shippingLine || '',
+      bookingNo: newTripHeader.bookingNo || '',
+      atwStatus: 'PENDING'
     }];
 
     setBindCoRows(mockItems);
@@ -337,7 +329,6 @@ export default function MyProduceDashboard() {
 
   const renderTripsView = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Top Filter Bar */}
       <div className="flex items-center gap-4 mb-4">
         <Select value={weekFilter} onValueChange={setWeekFilter}>
           <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="All Weeks" /></SelectTrigger>
@@ -357,7 +348,6 @@ export default function MyProduceDashboard() {
         </div>
       </div>
 
-      {/* Breadcrumb and Title Row */}
       <div className="flex justify-between items-end">
         <div>
           <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
@@ -371,7 +361,6 @@ export default function MyProduceDashboard() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-6">
         <Card className="bg-white border-none shadow-sm relative overflow-hidden h-[180px]">
           <div className="p-8">
@@ -396,7 +385,6 @@ export default function MyProduceDashboard() {
         </Card>
       </div>
 
-      {/* Table Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b flex justify-between items-center">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT TRIP MANIFESTS</h3>
@@ -437,7 +425,6 @@ export default function MyProduceDashboard() {
         </Table>
       </div>
 
-      {/* New Trip Modal */}
       <Dialog open={isNewTripOpen} onOpenChange={(open) => { setIsNewTripOpen(open); if(!open) setTripStep(1); }}>
         <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
           <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0">
@@ -445,7 +432,6 @@ export default function MyProduceDashboard() {
           </div>
           
           <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
-            {/* Workflow Stepper */}
             <div className="flex items-center justify-center max-w-2xl mx-auto mb-8">
               <div className="flex flex-col items-center">
                 <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold mb-2", tripStep === 1 ? "bg-anflocor-green text-white" : "bg-green-100 text-green-700")}>1</div>
@@ -552,28 +538,40 @@ export default function MyProduceDashboard() {
                 <Table>
                   <TableHeader className="bg-gray-100">
                     <TableRow>
-                      <TableHead className="w-12 text-[9px] font-black uppercase">#</TableHead>
-                      <TableHead className="w-20 text-[9px] font-black uppercase">PS</TableHead>
-                      <TableHead className="w-32 text-[9px] font-black uppercase">CUT-OFF</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">CONTAINER NO.</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase">ATTACHMENTS</TableHead>
-                      <TableHead className="w-12 text-[9px] font-black uppercase">ACTIONS</TableHead>
+                      <TableHead className="w-12 text-[9px] font-black uppercase text-gray-400">#</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">PS</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">POD</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">CUT-OFF DATE</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">ETD</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">TASK DATE</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">PALLETIZATION</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase text-gray-400">CONTAINER NO.</TableHead>
+                      <TableHead className="w-12 text-[9px] font-black uppercase text-gray-400 text-center">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {bindCoRows.map((row, index) => (
                       <TableRow key={row.id}>
                         <TableCell className="text-[11px] font-bold text-gray-400">{index + 1}</TableCell>
-                        <TableCell><Input className="h-9 bg-gray-50" value={row.ps} readOnly/></TableCell>
-                        <TableCell><Input className="h-9 bg-gray-50" value={row.cutOffDate} readOnly/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-20" value={row.ps} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, ps: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-24" value={row.pod} readOnly/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.cutOffDate} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, cutOffDate: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.etd} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, etd: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.taskDate} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, taskDate: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-24" value={row.sku} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, sku: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-28" value={row.palletization} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, palletization: e.target.value } : r))}/></TableCell>
                         <TableCell>
                           <Select value={row.containerNo} onValueChange={(val) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, containerNo: val } : r))}>
-                            <SelectTrigger className="h-9 font-bold"><SelectValue placeholder="Select Container" /></SelectTrigger>
-                            <SelectContent>{tripRows.map(tr => (<SelectItem key={tr.id} value={tr.containerNo}>{tr.containerNo}</SelectItem>))}</SelectContent>
+                            <SelectTrigger className="h-9 bg-white border shadow-sm font-bold w-40"><SelectValue placeholder="Select Container" /></SelectTrigger>
+                            <SelectContent>{tripRows.filter(tr => tr.containerNo).map(tr => (<SelectItem key={tr.id} value={tr.containerNo}>{tr.containerNo}</SelectItem>))}</SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell><Button variant="ghost" size="sm" className="h-8 text-anflocor-green gap-2 px-2"><Paperclip className="h-3 w-3" /> Upload</Button></TableCell>
-                        <TableCell><Button variant="ghost" size="icon" className="text-red-200"><Trash2 className="h-4 w-4" /></Button></TableCell>
+                        <TableCell className="text-center">
+                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setBindCoRows(bindCoRows.filter(r => r.id !== row.id))}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -698,6 +696,55 @@ export default function MyProduceDashboard() {
              </TableBody>
           </Table>
        </Card>
+
+       <Dialog open={isNewBookingOpen} onOpenChange={setIsNewBookingOpen}>
+        <DialogContent className="max-w-[95vw] p-0 overflow-hidden h-[90vh] flex flex-col">
+          <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0">
+             <p className="text-sm font-medium">Please ensure all manifest details match the confirmed booking documents.</p>
+          </div>
+          <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
+            <div className="grid grid-cols-2 gap-8 border-b pb-8">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
+                <Input className="h-12 bg-gray-50 font-bold" placeholder="Select Customer" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Week No</Label>
+                <Input className="h-12 bg-gray-50 font-bold" placeholder="Select Week" />
+              </div>
+            </div>
+            <Table>
+              <TableHeader className="bg-gray-100">
+                <TableRow>
+                  <TableHead className="w-12 text-center text-[9px] font-black uppercase">#</TableHead>
+                  <TableHead className="text-[9px] font-black uppercase">BOOKING NO.</TableHead>
+                  <TableHead className="text-[9px] font-black uppercase">SHIPPING LINE</TableHead>
+                  <TableHead className="text-[9px] font-black uppercase">VESSEL</TableHead>
+                  <TableHead className="text-[9px] font-black uppercase">POD</TableHead>
+                  <TableHead className="text-[9px] font-black uppercase">ATTACHMENTS</TableHead>
+                  <TableHead className="w-12 text-[9px] font-black uppercase">ACTIONS</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="text-center font-bold text-gray-400">1</TableCell>
+                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
+                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
+                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
+                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
+                  <TableCell><Button variant="ghost" size="sm" className="h-8 text-anflocor-green gap-2 px-2"><Paperclip className="h-3 w-3" /> Upload</Button></TableCell>
+                  <TableCell><Button variant="ghost" size="icon" className="text-red-300"><Trash2 className="h-4 w-4" /></Button></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+            <Button variant="ghost" className="text-anflocor-green text-xs font-bold"><Plus className="mr-2 h-4 w-4" /> Add Row</Button>
+          </div>
+          <div className="p-6 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
+            <Button variant="ghost" onClick={() => setIsNewBookingOpen(false)} className="text-[10px] font-black uppercase">CANCEL</Button>
+            <Button className="bg-anflocor-green text-white text-[10px] font-black uppercase px-8 h-10">FINALIZE</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
