@@ -56,7 +56,9 @@ import {
   History,
   Clock,
   ClipboardCheck,
-  PackageCheck
+  PackageCheck,
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -460,58 +462,85 @@ export default function MyProduceDashboard() {
       </div>
 
       <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
-        <DialogContent className="max-w-md p-0 overflow-hidden bg-white">
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col gap-1">
-              <DialogTitle className="text-2xl font-black text-gray-900">Start Transfer</DialogTitle>
-              <DialogDescription className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                Initiating container movement to port
-              </DialogDescription>
+        <DialogContent className="max-w-[700px] p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-6 flex justify-between items-center border-b">
+            <DialogTitle className="text-lg font-semibold text-gray-700">Start Transfer - {selectedTripForTransfer?.vanNo || 'V-4022'}</DialogTitle>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsTransferModalOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <div className="p-8 space-y-10">
+            <div className="grid grid-cols-2 gap-12">
+              <div className="space-y-8">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">INBOUND DRIVER NAME</Label>
+                  <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
+                </div>
+
+                <div className="space-y-4">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">INSPECTION CHECKLIST</Label>
+                  <div className="grid grid-cols-2 gap-y-3">
+                    <div className="flex items-center space-x-3">
+                      <Checkbox id="temp" className="border-gray-300 h-4 w-4 rounded-sm" />
+                      <label htmlFor="temp" className="text-sm font-medium text-gray-600 cursor-pointer">Temperature</label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <Checkbox id="leaks" className="border-gray-300 h-4 w-4 rounded-sm" />
+                      <label htmlFor="leaks" className="text-sm font-medium text-gray-600 cursor-pointer">No Leaks</label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <Checkbox id="drain" className="border-gray-300 h-4 w-4 rounded-sm" />
+                      <label htmlFor="drain" className="text-sm font-medium text-gray-600 cursor-pointer">Check Drain Plug</label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <Checkbox id="odor" className="border-gray-300 h-4 w-4 rounded-sm" />
+                      <label htmlFor="odor" className="text-sm font-medium text-gray-600 cursor-pointer">No Odor</label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">OUTBOUND DRIVER NAME</Label>
+                  <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PHOTO CONFIRMATION</Label>
+                  <div className="flex flex-wrap gap-2.5">
+                    <div className="w-14 h-14 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
+                      <Camera className="h-5 w-5 text-gray-300" />
+                      <span className="text-[8px] font-black text-gray-400 mt-1 uppercase tracking-tighter">UPLOAD</span>
+                    </div>
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="w-14 h-14 bg-gray-50 border border-gray-100 rounded flex items-center justify-center">
+                        <ImageIcon className="h-5 w-5 text-gray-200" />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-gray-400 italic font-medium">Up to 5 photos can be uploaded for loading verification.</p>
+                </div>
+              </div>
             </div>
-            
-            <div className="space-y-4 pt-4">
-              <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">POD Destination</span>
-                <span className="text-xs font-bold text-anflocor-green">{selectedTripForTransfer?.pod || 'DAVAO'}</span>
-              </div>
-              
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Gate Pass Number</Label>
-                <Input placeholder="GP-000000" className="h-11 font-bold" />
-              </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Seal Verification</Label>
-                <Select defaultValue="verified">
-                  <SelectTrigger className="h-11 font-bold">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="verified">Intact & Verified</SelectItem>
-                    <SelectItem value="pending">Pending Inspection</SelectItem>
-                    <SelectItem value="issue">Seal Mismatch</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Dispatcher ID</Label>
-                <Input placeholder="Enter ID" className="h-11 font-bold uppercase" />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Notes</Label>
-                <Textarea placeholder="Additional movement notes..." className="resize-none h-20 text-xs" />
+            <div className="space-y-3">
+              <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">DOCUMENT ACTIONS</Label>
+              <div className="flex gap-4">
+                <Button className="h-12 px-6 bg-black hover:bg-black/90 text-white font-bold text-xs tracking-widest gap-2 uppercase">+ CREATE VLS</Button>
+                <Button variant="outline" className="h-12 px-6 border-2 border-black text-black font-bold text-xs tracking-widest gap-2 bg-white hover:bg-gray-50 uppercase">+ CREATE DR</Button>
               </div>
             </div>
           </div>
           
-          <div className="p-6 bg-gray-50 border-t flex gap-3">
-            <Button variant="ghost" className="flex-1 font-black uppercase text-[10px]" onClick={() => setIsTransferModalOpen(false)}>CANCEL</Button>
-            <Button className="flex-1 bg-anflocor-green text-white font-black uppercase text-[10px]" onClick={() => { 
-              toast({ title: "Transfer Started", description: "Manifest has been assigned to transfer workflow." });
+          <div className="p-6 bg-gray-50/50 border-t flex justify-end">
+            <Button className="h-12 px-10 bg-[#14532d] hover:bg-[#114626] text-white font-bold text-xs tracking-widest gap-2 shadow-sm rounded-sm uppercase" onClick={() => { 
+              toast({ title: "Transfer Saved", description: "Inbound/Outbound details have been logged." });
               setIsTransferModalOpen(false);
-            }}>CONFIRM TRANSFER</Button>
+            }}>
+              <RefreshCcw className="h-4 w-4" /> SAVE
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
