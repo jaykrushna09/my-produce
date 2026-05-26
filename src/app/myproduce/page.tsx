@@ -1005,7 +1005,20 @@ export default function MyProduceDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-gray-300">Booking No</Label>
-                  <Select value={newTripHeader.bookingNo} onValueChange={(val) => setNewTripHeader({...newTripHeader, bookingNo: val})}>
+                  <Select value={newTripHeader.bookingNo} onValueChange={(val) => {
+                    const selectedBooking = bookings.find((b: any) => b.bookingNumber === val);
+                    if (selectedBooking) {
+                      setNewTripHeader({
+                        ...newTripHeader,
+                        bookingNo: val,
+                        shippingLine: selectedBooking.shippingLine || '',
+                        vessel: selectedBooking.vesselName || '',
+                        pod: selectedBooking.pod || ''
+                      });
+                    } else {
+                      setNewTripHeader({...newTripHeader, bookingNo: val});
+                    }
+                  }}>
                     <SelectTrigger className="h-10 border-gray-200"><SelectValue placeholder="--Select--" /></SelectTrigger>
                     <SelectContent>{bookings.map((b: any) => (<SelectItem key={b.id} value={b.bookingNumber}>{b.bookingNumber}</SelectItem>))}</SelectContent>
                   </Select>
@@ -1221,4 +1234,3 @@ export default function MyProduceDashboard() {
     </div>
   );
 }
-
