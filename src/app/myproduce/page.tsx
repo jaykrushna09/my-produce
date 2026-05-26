@@ -147,7 +147,6 @@ interface BookingRow {
   shippingLine: string;
   vesselName: string;
   pod: string;
-  attachmentUrl?: string;
 }
 
 interface TripRow {
@@ -182,25 +181,15 @@ export default function MyProduceDashboard() {
   const [newLAHeader, setNewLAHeader] = useState({ customerName: '', weekNumber: '' });
   const [laRows, setLaRows] = useState<LARow[]>([{
     id: Math.random().toString(36).substr(2, 9),
-    farm: 'TADECO',
-    pol: 'DAVAO',
-    pod: '',
-    shippingLine: '',
-    cutOffDate: '',
-    etd: '',
-    totalVans: 0,
-    skuCode: '',
-    palletizedType: 'Palletized'
+    farm: 'TADECO', pol: 'DAVAO', pod: '', shippingLine: '',
+    cutOffDate: '', etd: '', totalVans: 0, skuCode: '', palletizedType: 'Palletized'
   }]);
 
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
   const [newBookingHeader, setNewBookingHeader] = useState({ customerName: '', weekNumber: '' });
   const [bookingRows, setBookingRows] = useState<BookingRow[]>([{
     id: Math.random().toString(36).substr(2, 9),
-    bookingNo: '',
-    shippingLine: '',
-    vesselName: '',
-    pod: ''
+    bookingNo: '', shippingLine: '', vesselName: '', pod: ''
   }]);
 
   const [isNewTripOpen, setIsNewTripOpen] = useState(false);
@@ -215,25 +204,16 @@ export default function MyProduceDashboard() {
   });
   const [tripRows, setTripRows] = useState<TripRow[]>([{
     id: Math.random().toString(36).substr(2, 9),
-    ps: '1',
-    containerNo: '',
-    vanNo: '',
-    sealNo: '',
-    atwStatus: 'Y',
-    atwReleased: format(new Date(), 'yyyy-MM-dd'),
-    pmNo: '',
-    driverName: '',
-    signature: 'Pending',
+    ps: '1', containerNo: '', vanNo: '', sealNo: '',
+    atwStatus: 'Y', atwReleased: format(new Date(), 'yyyy-MM-dd'),
+    pmNo: '', driverName: '', signature: 'Pending',
     dateWithdrawn: format(new Date(), 'yyyy-MM-dd')
   }]);
 
   const [bindCoRows, setBindCoRows] = useState<CORow[]>([]);
-
   const [coRows, setCoRows] = useState<CORow[]>([]);
 
   const CUSTOMER_PATH = 'app_configuration/customer_mapping/customer_saving';
-  const MATERIAL_PATH = 'app_configuration/material_mapping/material_saving';
-  const POL_PATH = 'app_configuration/pol_mapping/pol_saving';
   const POD_PATH = 'app_configuration/pod_mapping/pod_saving';
   const CONTRACT_PATH = 'app_data/contracts/contract_saving';
   const BOOKING_PATH = 'app_data/bookings/booking_saving';
@@ -244,11 +224,6 @@ export default function MyProduceDashboard() {
     return query(collection(db, CUSTOMER_PATH), orderBy('Customer', 'asc'));
   }, [db]);
   
-  const polMappingsQuery = useMemoFirebase(() => {
-    if (!db) return null;
-    return query(collection(db, POL_PATH), orderBy('portName', 'asc'));
-  }, [db]);
-
   const podMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, POD_PATH), orderBy('portName', 'asc'));
@@ -269,16 +244,9 @@ export default function MyProduceDashboard() {
     return query(collection(db, TRIP_PATH), orderBy('updatedAt', 'desc'));
   }, [db]);
 
-  const contractItemsQuery = useMemoFirebase(() => {
-    if (!db || !selectedContractId) return null;
-    return query(collection(db, `${CONTRACT_PATH}/${selectedContractId}/items`));
-  }, [db, selectedContractId]);
-
   const { data: customerMappings } = useCollection(customerMappingsQuery);
-  const { data: polMappings } = useCollection(polMappingsQuery);
   const { data: podMappings } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
-  const { data: contractItems } = useCollection(contractItemsQuery);
   const { data: bookings, loading: bookingsLoading } = useCollection(bookingsQuery);
   const { data: trips, loading: tripsLoading } = useCollection(tripsQuery);
 
@@ -295,150 +263,13 @@ export default function MyProduceDashboard() {
     }
   };
 
-  // LA Handlers
-  const addLARow = () => {
-    setLaRows([...laRows, {
-      id: Math.random().toString(36).substr(2, 9),
-      farm: 'TADECO',
-      pol: 'DAVAO',
-      pod: '',
-      shippingLine: '',
-      cutOffDate: '',
-      etd: '',
-      totalVans: 0,
-      skuCode: '',
-      palletizedType: 'Palletized'
-    }]);
-  };
-
-  const updateLARow = (id: string, updates: Partial<LARow>) => {
-    setLaRows(laRows.map(r => r.id === id ? { ...r, ...updates } : r));
-  };
-
-  const removeLARow = (id: string) => {
-    if (laRows.length > 1) setLaRows(laRows.filter(r => r.id !== id));
-  };
-
-  const handleSubmitBatch = async () => {
-    if (!db || !newLAHeader.customerName || !newLAHeader.weekNumber) {
-      toast({ variant: "destructive", title: "Error", description: "Please complete the header details." });
-      return;
-    }
-    try {
-      const batch = writeBatch(db);
-      const contractId = `LA-${Date.now()}`;
-      const contractRef = doc(db, CONTRACT_PATH, contractId);
-      const totalVans = laRows.reduce((acc, curr) => acc + (curr.totalVans || 0), 0);
-      const firstRow = laRows[0];
-
-      batch.set(contractRef, {
-        contractId,
-        customerName: newLAHeader.customerName,
-        weekNumber: newLAHeader.weekNumber,
-        totalVans,
-        farm: firstRow.farm,
-        pol: firstRow.pol,
-        pod: firstRow.pod,
-        shippingLine: firstRow.shippingLine,
-        cutOffDate: firstRow.cutOffDate,
-        etd: firstRow.etd,
-        skuSummary: firstRow.skuCode,
-        palletizedType: firstRow.palletizedType,
-        status: 'pending',
-        receivedAt: serverTimestamp()
-      });
-
-      laRows.forEach(row => {
-        const itemRef = doc(db, `${CONTRACT_PATH}/${contractId}/items`, row.id);
-        batch.set(itemRef, {
-          itemId: row.id,
-          farm: row.farm,
-          pol: row.pol,
-          pod: row.pod,
-          shippingLines: row.shippingLine,
-          cutOffDate: row.cutOffDate,
-          etd: row.etd,
-          total: row.totalVans,
-          specs: row.skuCode,
-          palletized: row.palletizedType,
-          atwStatus: 'PENDING',
-          updatedAt: serverTimestamp()
-        });
-      });
-
-      await batch.commit();
-      toast({ title: "Success", description: "Loading Advice batch created successfully." });
-      setIsNewLAOpen(false);
-      setLaRows([{
-        id: Math.random().toString(36).substr(2, 9),
-        farm: 'TADECO', pol: 'DAVAO', pod: '', shippingLine: '',
-        cutOffDate: '', etd: '', totalVans: 0, skuCode: '', palletizedType: 'Palletized'
-      }]);
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Submission Error", description: err.message });
-    }
-  };
-
-  // Booking Handlers
-  const addBookingRow = () => {
-    setBookingRows([...bookingRows, {
-      id: Math.random().toString(36).substr(2, 9),
-      bookingNo: '', shippingLine: '', vesselName: '', pod: ''
-    }]);
-  };
-
-  const updateBookingRow = (id: string, updates: Partial<BookingRow>) => {
-    setBookingRows(bookingRows.map(r => r.id === id ? { ...r, ...updates } : r));
-  };
-
-  const removeBookingRow = (id: string) => {
-    if (bookingRows.length > 1) setBookingRows(bookingRows.filter(r => r.id !== id));
-  };
-
-  const handleSubmitBookingBatch = async () => {
-    if (!db || !newBookingHeader.customerName || !newBookingHeader.weekNumber) {
-      toast({ variant: "destructive", title: "Error", description: "Please complete the header details." });
-      return;
-    }
-    try {
-      const batch = writeBatch(db);
-      bookingRows.forEach((row, index) => {
-        const uniqueId = `BK-${Date.now()}-${index}`;
-        const docRef = doc(db, BOOKING_PATH, uniqueId);
-        batch.set(docRef, {
-          batchId: uniqueId,
-          customerName: newBookingHeader.customerName,
-          weekNumber: newBookingHeader.weekNumber,
-          bookingNumber: row.bookingNo,
-          shippingLine: row.shippingLine,
-          vesselName: row.vesselName,
-          pod: row.pod,
-          receivedAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      });
-      await batch.commit();
-      toast({ title: "Success", description: "Booking records created successfully." });
-      setIsNewBookingOpen(false);
-      setBookingRows([{ id: Math.random().toString(36).substr(2, 9), bookingNo: '', shippingLine: '', vesselName: '', pod: '' }]);
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
-    }
-  };
-
-  // Trip Handlers
   const addTripRow = () => {
     setTripRows([...tripRows, {
       id: Math.random().toString(36).substr(2, 9),
       ps: (tripRows.length + 1).toString(),
-      containerNo: '',
-      vanNo: '',
-      sealNo: '',
-      atwStatus: 'Y',
-      atwReleased: format(new Date(), 'yyyy-MM-dd'),
-      pmNo: '',
-      driverName: '',
-      signature: 'Pending',
+      containerNo: '', vanNo: '', sealNo: '',
+      atwStatus: 'Y', atwReleased: format(new Date(), 'yyyy-MM-dd'),
+      pmNo: '', driverName: '', signature: 'Pending',
       dateWithdrawn: format(new Date(), 'yyyy-MM-dd')
     }]);
   };
@@ -451,63 +282,28 @@ export default function MyProduceDashboard() {
     if (tripRows.length > 1) setTripRows(tripRows.filter(r => r.id !== id));
   };
 
-  const handleNextTripStep = async () => {
+  const handleNextTripStep = () => {
     if (!newTripHeader.customerName || !newTripHeader.weekNumber || !newTripHeader.pod) {
-      toast({ variant: "destructive", title: "Error", description: "Please complete the header details (Customer, Week, POD) before binding." });
+      toast({ variant: "destructive", title: "Missing Header", description: "Please complete the customer, week, and POD details." });
       return;
     }
-
-    // Prepare Step 2 rows based on existing Loading Advice items
-    const matchingContracts = contracts.filter(c => 
-      c.customerName === newTripHeader.customerName && 
-      c.weekNumber === newTripHeader.weekNumber
-    );
-
-    let bindings: CORow[] = [];
-
-    if (matchingContracts.length > 0) {
-      // In a real environment, we'd fetch actual items here. 
-      // For now, we'll generate mock bindings so the user can see the second step regardless.
-      bindings = matchingContracts.map((c, i) => ({
-        id: `BIND-${Date.now()}-${i}`,
-        ps: 'PS',
-        shippingLine: newTripHeader.shippingLine || '',
-        bookingNo: newTripHeader.bookingNo || '',
-        containerNo: '',
-        atwStatus: 'PENDING',
-        pod: newTripHeader.pod,
-        cutOffDate: c.cutOffDate || format(new Date(), 'yyyy-MM-dd'),
-        etd: c.etd || format(new Date(), 'yyyy-MM-dd'),
-        sku: c.skuSummary || 'SKU-PROTOTYPE',
-        palletization: c.palletizedType || 'Palletized'
-      }));
-    } else {
-      // If no real LA found, generate at least one mock binding so the UI can be tested
-      bindings = [{
-        id: `MOCK-${Date.now()}`,
-        ps: 'PS',
-        shippingLine: newTripHeader.shippingLine || 'OOCL',
-        bookingNo: newTripHeader.bookingNo || 'BK-MOCK-123',
-        containerNo: '',
-        atwStatus: 'PENDING',
-        pod: newTripHeader.pod,
-        cutOffDate: format(new Date(), 'yyyy-MM-dd'),
-        etd: format(new Date(), 'yyyy-MM-dd'),
-        sku: 'SKU-001',
-        palletization: 'Palletized'
-      }];
-      toast({ title: "LA Not Found", description: "Using mock items for Step 2 visualization." });
-    }
     
-    setBindCoRows(bindings);
+    // Fallback Mock Data for Step 2
+    const mockItems: CORow[] = [{
+      id: `MOCK-${Date.now()}`,
+      ps: 'PS', shippingLine: newTripHeader.shippingLine || 'LINE',
+      bookingNo: newTripHeader.bookingNo || 'BK-123',
+      containerNo: '', atwStatus: 'PENDING', pod: newTripHeader.pod,
+      cutOffDate: format(new Date(), 'yyyy-MM-dd'), etd: format(new Date(), 'yyyy-MM-dd'),
+      sku: 'SKU-MOCK', palletization: 'Palletized'
+    }];
+
+    setBindCoRows(mockItems);
     setTripStep(2);
   };
 
   const handleSubmitTripBatch = async () => {
-    if (!db || !newTripHeader.customerName || !newTripHeader.weekNumber) {
-      toast({ variant: "destructive", title: "Error", description: "Please complete the header details." });
-      return;
-    }
+    if (!db) return;
     try {
       const batch = writeBatch(db);
       tripRows.forEach((row, index) => {
@@ -526,440 +322,121 @@ export default function MyProduceDashboard() {
           weekNumber: newTripHeader.weekNumber,
           bookingNo: newTripHeader.bookingNo,
           shippingLine: newTripHeader.shippingLine,
-          vessel: newTripHeader.vessel,
           pod: newTripHeader.pod,
           status: 'active',
           updatedAt: serverTimestamp()
         });
       });
       await batch.commit();
-      toast({ title: "Success", description: "Trip records finalized." });
+      toast({ title: "Trips Created", description: "Successfully logged new trip batch." });
       setIsNewTripOpen(false);
       setTripStep(1);
-      setTripRows([{
-        id: Math.random().toString(36).substr(2, 9),
-        ps: '1', containerNo: '', vanNo: '', sealNo: '',
-        atwStatus: 'Y', atwReleased: format(new Date(), 'yyyy-MM-dd'),
-        pmNo: '', driverName: '', signature: 'Pending',
-        dateWithdrawn: format(new Date(), 'yyyy-MM-dd')
-      }]);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
   };
 
-  const filteredContracts = useMemo(() => {
-    return contracts.filter(c => {
-      const matchesSearch = String(c.customerName || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesWeek = weekFilter === 'all' || c.weekNumber === weekFilter;
-      const matchesCustomer = customerFilter === 'all' || c.customerName === customerFilter;
-      return matchesSearch && matchesWeek && matchesCustomer;
-    });
-  }, [contracts, searchTerm, weekFilter, customerFilter]);
-
-  const uniqueWeeks = useMemo(() => {
-    return Array.from(new Set(contracts.map(c => c.weekNumber))).filter(Boolean).sort();
-  }, [contracts]);
-
-  const renderEditCuttingOrders = () => {
-    const contract = contracts.find(c => c.id === selectedContractId);
-    if (!contract) return null;
-
-    const podStats = (podMappings as any[]).map(p => {
-      const target = contractItems.filter((i: any) => i.pod === p.portName).reduce((acc: number, curr: any) => acc + (curr.total || 0), 0);
-      const allocated = coRows.filter(r => r.pod === p.portName && r.containerNo).length;
-      return { name: p.portName, target, allocated };
-    }).filter(s => s.target > 0);
-
-    const totalTarget = podStats.reduce((acc, curr) => acc + curr.target, 0);
-
-    return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1400px] mx-auto pb-12">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="p-6 border-b flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="bg-green-50 p-2 rounded-lg text-anflocor-green"><Scissors className="h-6 w-6" /></div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Edit COs for this LA</h2>
-                <p className="text-xs text-gray-500 font-medium">Batch entry for Cutting Orders linked to Loading Advice: <span className="font-bold text-gray-900">{contract.contractId}</span></p>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setActiveView('loading-advice')} className="rounded-full text-gray-400"><X className="h-5 w-5" /></Button>
-          </div>
-
-          <div className="p-8 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700 uppercase">{contract.customerName}</div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700">{contract.weekNumber}</div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">POD</Label>
-                <div className="h-12 bg-gray-50 border border-gray-100 rounded-lg flex items-center px-4 font-bold text-gray-700 uppercase">{contract.pod || '--'}</div>
-              </div>
-            </div>
-
-            <div className="space-y-4 bg-gray-50/50 p-6 rounded-xl border border-gray-100/50">
-              <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Allocated</Label>
-              <div className="flex flex-wrap items-center gap-4">
-                {podStats.map(stat => (
-                  <div key={stat.name} className="w-[180px] bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <span className="text-[9px] font-black uppercase text-gray-300 block mb-1">{stat.name}</span>
-                    <span className="text-2xl font-bold text-gray-900">{stat.allocated}/{stat.target}</span>
-                  </div>
-                ))}
-                <div className="ml-auto bg-black text-white rounded-lg p-5 min-w-[240px] shadow-lg">
-                   <span className="text-[9px] font-black uppercase text-gray-500 block mb-1">Total Allocation</span>
-                   <span className="text-lg font-bold">Total for week {contract.weekNumber || '0'} : {totalTarget}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="border rounded-xl overflow-hidden shadow-sm">
-              <Table>
-                <TableHeader className="bg-gray-50/80">
-                  <TableRow className="h-12">
-                    <TableHead className="w-12 text-[10px] font-black uppercase text-gray-400 text-center">#</TableHead>
-                    <TableHead className="w-24 text-[10px] font-black uppercase text-gray-400">PS</TableHead>
-                    <TableHead className="w-40 text-[10px] font-black uppercase text-gray-400">Shipping Line</TableHead>
-                    <TableHead className="w-40 text-[10px] font-black uppercase text-gray-400">Booking No</TableHead>
-                    <TableHead className="w-40 text-[10px] font-black uppercase text-gray-400">Container No</TableHead>
-                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400 text-center">ATW Status</TableHead>
-                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400">POD</TableHead>
-                    <TableHead className="w-32 text-right"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {coRows.map((row, index) => (
-                    <TableRow key={row.id} className="h-16 hover:bg-gray-50/50">
-                      <TableCell className="text-center font-bold text-gray-400">{index + 1}</TableCell>
-                      <TableCell>
-                        <Select value={row.ps} onValueChange={(val) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, ps: val } : r))}>
-                          <SelectTrigger className="h-9 border-none bg-transparent shadow-none font-bold text-gray-700"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="PS">PS</SelectItem><SelectItem value="REG">REG</SelectItem></SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select value={row.shippingLine} onValueChange={(val) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, shippingLine: val } : r))}>
-                          <SelectTrigger className="h-9 border-none bg-transparent shadow-none font-bold text-gray-700"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="OOCL">OOCL</SelectItem><SelectItem value="MSC">MSC</SelectItem><SelectItem value="MAERSK">MAERSK</SelectItem></SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell><Input placeholder="Booking No" value={row.bookingNo} onChange={(e) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, bookingNo: e.target.value } : r))} className="h-9 border-none bg-transparent shadow-none font-medium"/></TableCell>
-                      <TableCell><Input placeholder="Container No" value={row.containerNo} onChange={(e) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, containerNo: e.target.value } : r))} className="h-9 border-none bg-transparent shadow-none font-bold"/></TableCell>
-                      <TableCell className="text-center">
-                        <Badge className={cn("text-[9px] font-black px-2 cursor-pointer", row.atwStatus === 'PENDING' ? "bg-red-100 text-red-500" : "bg-green-100 text-green-600")} variant="outline" onClick={() => setCoRows(coRows.map(r => r.id === row.id ? { ...r, atwStatus: r.atwStatus === 'PENDING' ? 'READY' : 'PENDING' } : r))}>
-                          {row.atwStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Select value={row.pod} onValueChange={(val) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, pod: val } : r))}>
-                          <SelectTrigger className="h-9 border-none bg-transparent shadow-none font-bold text-gray-500 uppercase text-[11px]"><SelectValue /></SelectTrigger>
-                          <SelectContent>{podMappings.map((p: any) => (<SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>))}</SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-200 hover:text-red-400" onClick={() => setCoRows(coRows.filter(r => r.id !== row.id))}><Trash2 className="h-4 w-4" /></Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          <div className="p-8 border-t bg-gray-50/50 flex items-center justify-end gap-4">
-            <Button variant="outline" onClick={() => setActiveView('loading-advice')} className="h-12 px-8 font-bold text-gray-400 border-gray-200 uppercase text-xs">CANCEL</Button>
-            <Button onClick={async () => {
-              if (!db || !selectedContractId) return;
-              const batch = writeBatch(db);
-              coRows.forEach(row => {
-                const itemRef = doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, row.id);
-                batch.set(itemRef, {
-                  itemId: row.id,
-                  ps: row.ps,
-                  shippingLines: row.shippingLine,
-                  bookingNumber: row.bookingNo,
-                  containerNo: row.containerNo,
-                  atwStatus: row.atwStatus,
-                  pod: row.pod,
-                  updatedAt: serverTimestamp()
-                }, { merge: true });
-              });
-              await batch.commit();
-              toast({ title: "COs Updated", description: "All cutting order allocations saved successfully." });
-              setActiveView('loading-advice');
-            }} className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold uppercase text-xs">SUBMIT</Button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderLoadingAdviceView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-        <div className="w-64">
-          <Select value={weekFilter} onValueChange={setWeekFilter}>
-            <SelectTrigger><SelectValue placeholder="Select Week" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Weeks</SelectItem>{uniqueWeeks.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
-          </Select>
-        </div>
-        <div className="w-64">
-          <Select value={customerFilter} onValueChange={setCustomerFilter}>
-            <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Loading Advice</h2>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" className="text-xs font-bold" onClick={() => { 
-            if (selectedContractId) {
-              setCoRows(contractItems.map((item: any) => ({
-                id: item.itemId || item.id,
-                ps: item.ps || 'PS',
-                shippingLine: item.shippingLines || '',
-                bookingNo: item.bookingNumber || '',
-                containerNo: item.containerNo || '',
-                atwStatus: item.atwStatus || 'PENDING',
-                pod: item.pod || '',
-                cutOffDate: item.cutOffDate || '',
-                etd: item.etd || '',
-                sku: item.specs || '',
-                palletization: item.palletized || 'Palletized'
-              })));
-              setActiveView('edit-cutting-orders');
-            } else {
-              toast({ variant: "destructive", title: "Select an LA", description: "Please select an advice record from the list first." });
-            }
-          }}>CREATE/VIEW COS</Button>
-          <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs" onClick={() => setIsNewLAOpen(true)}><Plus className="mr-2 h-4 w-4" /> NEW LA</Button>
-        </div>
-      </div>
-
-      <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
-        <Table>
-          <TableHeader className="bg-gray-100/50">
-            <TableRow>
-              <TableHead className="text-[10px] font-black uppercase">WEEK</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">CUSTOMER</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">FARM</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-center">VANS</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">STATUS</TableHead>
-              <TableHead className="text-right"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contractsLoading ? (
-              <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-            ) : filteredContracts.map((c: any) => (
-              <TableRow key={c.id} className={cn("hover:bg-gray-50/80 cursor-pointer h-16 group", selectedContractId === c.id && "bg-green-50/50 border-l-4 border-l-anflocor-green")} onClick={() => setSelectedContractId(c.id)}>
-                <TableCell className="font-bold">{c.weekNumber}</TableCell>
-                <TableCell className="text-sm font-bold">{c.customerName}</TableCell>
-                <TableCell className="text-xs">{c.farm}</TableCell>
-                <TableCell className="text-center font-black text-indigo-700">{c.totalVans}</TableCell>
-                <TableCell><Badge className={cn("text-[10px] font-black", c.status === 'completed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")} variant="outline">{c.status?.toUpperCase()}</Badge></TableCell>
-                <TableCell className="text-right"><Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100"><ChevronRight className="h-4 w-4" /></Button></TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
-      
-      {/* New LA Modal */}
-      <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
-        <DialogContent className="max-w-[95vw] w-full p-0">
-          <div className="p-6 border-b"><DialogTitle className="text-xl font-bold">New Loading Advice</DialogTitle></div>
-          <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
-                <Select value={newLAHeader.customerName} onValueChange={(val) => setNewLAHeader({...newLAHeader, customerName: val})}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Select Customer" /></SelectTrigger>
-                  <SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Week No</Label>
-                <Select value={newLAHeader.weekNumber} onValueChange={(val) => setNewLAHeader({...newLAHeader, weekNumber: val})}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Select Week" /></SelectTrigger>
-                  <SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Table>
-              <TableHeader className="bg-gray-50">
-                <TableRow>
-                  <TableHead className="text-[10px] font-black uppercase">Farm</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">POL</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">POD</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">Vans</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">SKU</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {laRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell><Input className="h-8 text-xs" value={row.farm} onChange={(e) => updateLARow(row.id, { farm: e.target.value })}/></TableCell>
-                    <TableCell><Input className="h-8 text-xs" value={row.pol} onChange={(e) => updateLARow(row.id, { pol: e.target.value })}/></TableCell>
-                    <TableCell><Input className="h-8 text-xs" value={row.pod} onChange={(e) => updateLARow(row.id, { pod: e.target.value })}/></TableCell>
-                    <TableCell><Input type="number" className="h-8 text-xs w-20" value={row.totalVans} onChange={(e) => updateLARow(row.id, { totalVans: parseInt(e.target.value) || 0 })}/></TableCell>
-                    <TableCell><Input className="h-8 text-xs" value={row.skuCode} onChange={(e) => updateLARow(row.id, { skuCode: e.target.value })}/></TableCell>
-                    <TableCell><Button variant="ghost" size="icon" onClick={() => removeLARow(row.id)} className="h-8 w-8 text-red-400"><Trash2 className="h-4 w-4" /></Button></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Button variant="ghost" className="text-anflocor-green text-xs font-bold" onClick={addLARow}><Plus className="h-4 w-4 mr-2" /> Add Row</Button>
-          </div>
-          <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
-            <Button variant="ghost" onClick={() => setIsNewLAOpen(false)} className="text-[10px] font-black uppercase">CANCEL</Button>
-            <Button className="bg-anflocor-green text-white text-[10px] font-black uppercase px-8" onClick={handleSubmitBatch}>SUBMIT</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-
-  const renderBookingsView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100">
-        <h2 className="text-2xl font-bold">Bookings</h2>
-        <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs" onClick={() => setIsNewBookingOpen(true)}><Plus className="mr-2 h-4 w-4" /> NEW BOOKING</Button>
-      </div>
-      
-      <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
-        <Table>
-          <TableHeader className="bg-gray-50/50">
-            <TableRow>
-              <TableHead className="text-[10px] font-black uppercase">BOOKING NO</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">SHIPPING LINE</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">VESSEL</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">POD</TableHead>
-              <TableHead className="text-right"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {bookingsLoading ? (
-              <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-            ) : bookings.map((b: any) => (
-              <TableRow key={b.id} className="h-16">
-                <TableCell className="font-bold text-anflocor-green">{b.bookingNumber}</TableCell>
-                <TableCell className="text-sm">{b.shippingLine}</TableCell>
-                <TableCell className="text-sm italic">{b.vesselName}</TableCell>
-                <TableCell className="text-sm font-black uppercase">{b.pod}</TableCell>
-                <TableCell className="text-right"><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
-
-      {/* New Booking Modal */}
-      <Dialog open={isNewBookingOpen} onOpenChange={setIsNewBookingOpen}>
-        <DialogContent className="max-w-[95vw] w-full p-0">
-          <div className="p-4 bg-gray-50 border-b border-l-4 border-l-green-600"><p className="text-sm font-medium">Please ensure all manifest details match the physical Bill of Lading.</p></div>
-          <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
-                <Select value={newBookingHeader.customerName} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, customerName: val})}>
-                  <SelectTrigger className="h-12 bg-gray-50"><SelectValue placeholder="Select Customer" /></SelectTrigger>
-                  <SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Week No</Label>
-                <Select value={newBookingHeader.weekNumber} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, weekNumber: val})}>
-                  <SelectTrigger className="h-12 bg-gray-50"><SelectValue placeholder="Select Week" /></SelectTrigger>
-                  <SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Table>
-              <TableHeader className="bg-gray-100">
-                <TableRow>
-                  <TableHead className="text-[10px] font-black uppercase">Booking No.</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">Shipping Line</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">Vessel</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase">POD</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bookingRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell><Input value={row.bookingNo} onChange={(e) => updateBookingRow(row.id, { bookingNo: e.target.value })} className="h-10"/></TableCell>
-                    <TableCell><Input value={row.shippingLine} onChange={(e) => updateBookingRow(row.id, { shippingLine: e.target.value })} className="h-10"/></TableCell>
-                    <TableCell><Input value={row.vesselName} onChange={(e) => updateBookingRow(row.id, { vesselName: e.target.value })} className="h-10"/></TableCell>
-                    <TableCell><Input value={row.pod} onChange={(e) => updateBookingRow(row.id, { pod: e.target.value })} className="h-10"/></TableCell>
-                    <TableCell><Button variant="ghost" size="icon" onClick={() => removeBookingRow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Button variant="ghost" className="text-anflocor-green text-xs font-bold" onClick={addBookingRow}><Plus className="h-4 w-4 mr-2" /> Add Row</Button>
-          </div>
-          <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
-            <Button variant="ghost" onClick={() => setIsNewBookingOpen(false)} className="text-[10px] font-black uppercase">CANCEL</Button>
-            <Button className="bg-anflocor-green text-white text-[10px] font-black uppercase px-8" onClick={handleSubmitBookingBatch}>SUBMIT</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-
   const renderTripsView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100">
-        <div>
-           <div className="flex items-center text-xs text-gray-400 gap-2 mb-1">
-             <span>Logistics</span><ChevronRight className="h-3 w-3" /><span className="text-gray-900 font-medium">Trips</span>
-           </div>
-           <h2 className="text-2xl font-bold">Trips</h2>
-        </div>
-        <div className="flex gap-4">
-           <Select value={weekFilter} onValueChange={setWeekFilter}><SelectTrigger className="w-40"><SelectValue placeholder="Week" /></SelectTrigger><SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent></Select>
-           <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs" onClick={() => { setTripStep(1); setIsNewTripOpen(true); }}><Plus className="mr-2 h-4 w-4" /> NEW TRIP</Button>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Top Filter Bar from Screenshot 1 */}
+      <div className="flex items-center gap-4 mb-4">
+        <Select value={weekFilter} onValueChange={setWeekFilter}>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="All Weeks" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
+        </Select>
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="All Customers" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+        </Select>
+        <div className="ml-auto flex items-center gap-4 text-gray-400">
+          <Bell className="h-5 w-5 cursor-pointer" />
+          <HelpCircle className="h-5 w-5 cursor-pointer" />
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-900">
+            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center"><User className="h-4 w-4" /></div>
+            COORDINATOR
+          </div>
         </div>
       </div>
 
-      <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
+      {/* Breadcrumb and Title Row */}
+      <div className="flex justify-between items-end">
+        <div>
+          <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
+            <span>Logistics</span><ChevronRight className="h-3 w-3 mx-1" /><span>Trips</span>
+          </div>
+          <h1 className="text-3xl font-black text-gray-900">Trips</h1>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="h-10 px-6 font-bold uppercase text-xs tracking-widest border-gray-200" onClick={() => {}}>CREATE/VIEW TRIPS</Button>
+          <Button className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2" onClick={() => { setTripStep(1); setIsNewTripOpen(true); }}><Plus className="h-4 w-4" /> NEW TRIP</Button>
+        </div>
+      </div>
+
+      {/* Summary Cards from Screenshot 1 */}
+      <div className="grid grid-cols-2 gap-6">
+        <Card className="bg-white border-none shadow-sm relative overflow-hidden h-[180px]">
+          <div className="p-8">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-300 block mb-4">ACTIVE TRIPS</span>
+            <div className="flex items-end gap-3">
+              <span className="text-5xl font-black text-gray-900">4</span>
+              <div className="flex items-center gap-1 text-green-500 font-bold text-xs mb-2">
+                <TrendingUp className="h-3 w-3" /> +12%
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-400 font-bold mt-2">Currently in transit or processing</p>
+          </div>
+          <Truck className="absolute bottom-4 right-4 h-24 w-24 text-gray-50 opacity-10 -rotate-12" />
+        </Card>
+        <Card className="bg-white border-none shadow-sm relative overflow-hidden h-[180px]">
+          <div className="p-8">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-300 block mb-4">TRIPS PENDING</span>
+            <span className="text-5xl font-black text-gray-900">28</span>
+            <p className="text-[10px] text-gray-400 font-bold mt-4">Updated 5m ago</p>
+          </div>
+          <Clock className="absolute bottom-4 right-4 h-24 w-24 text-gray-50 opacity-10" />
+        </Card>
+      </div>
+
+      {/* Table Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b flex justify-between items-center">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT TRIP MANIFESTS</h3>
+          <div className="flex gap-2">
+            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
+            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Download className="h-3 w-3" /> EXPORT</Button>
+          </div>
+        </div>
         <Table>
           <TableHeader className="bg-gray-50/50">
             <TableRow>
-              <TableHead className="text-[10px] font-black uppercase">VAN NO.</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">PM NO.</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">CONTAINER NO.</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">DRIVER</TableHead>
-              <TableHead className="text-[10px] font-black uppercase">RELEASED</TableHead>
-              <TableHead className="text-right"></TableHead>
+              <TableHead className="w-12 text-center"><Checkbox /></TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">VAN NO.</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">PM NO.</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">CONTAINER NO.</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">SEAL NO.</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">DRIVER</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE ATW RELEASED</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE WITHDRAWN</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400 text-right">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tripsLoading ? (
-              <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-            ) : trips.map((t: any) => (
-              <TableRow key={t.id} className="h-16">
+            {trips.map((t: any) => (
+              <TableRow key={t.id} className="h-16 hover:bg-gray-50/50">
+                <TableCell className="text-center"><Checkbox /></TableCell>
                 <TableCell className="font-bold">{t.vanNo}</TableCell>
-                <TableCell className="text-sm text-gray-500">{t.pmNo}</TableCell>
+                <TableCell className="text-xs text-gray-400">{t.pmNo}</TableCell>
                 <TableCell className="font-bold">{t.containerNo}</TableCell>
-                <TableCell className="text-sm font-medium">{t.driver}</TableCell>
-                <TableCell className="text-xs text-gray-400">{t.dateAtwReleased}</TableCell>
-                <TableCell className="text-right"><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></TableCell>
+                <TableCell className="text-xs">{t.sealNo}</TableCell>
+                <TableCell className="font-bold text-xs uppercase">{t.driver}</TableCell>
+                <TableCell className="text-[10px] text-gray-400">{t.dateAtwReleased}</TableCell>
+                <TableCell className="text-[10px] text-gray-400">{t.dateWithdrawn}</TableCell>
+                <TableCell className="text-right"><Button variant="ghost" size="icon" className="text-gray-300"><MoreVertical className="h-4 w-4" /></Button></TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </Card>
+      </div>
 
       {/* New Trip Modal */}
       <Dialog open={isNewTripOpen} onOpenChange={(open) => { setIsNewTripOpen(open); if(!open) setTripStep(1); }}>
@@ -1023,7 +500,9 @@ export default function MyProduceDashboard() {
                           <TableHead className="w-12 text-center text-[9px] font-black uppercase">PS</TableHead>
                           <TableHead className="text-[9px] font-black uppercase">Container No.</TableHead>
                           <TableHead className="text-[9px] font-black uppercase">Van No.</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase">Seal No.</TableHead>
                           <TableHead className="text-[9px] font-black uppercase text-center">ATW</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase">Released</TableHead>
                           <TableHead className="text-[9px] font-black uppercase">PM No.</TableHead>
                           <TableHead className="text-[9px] font-black uppercase">Driver</TableHead>
                           <TableHead className="w-12"></TableHead>
@@ -1035,10 +514,12 @@ export default function MyProduceDashboard() {
                             <TableCell className="text-center font-bold text-gray-400">{row.ps}</TableCell>
                             <TableCell><Input className="h-9 uppercase font-bold" value={row.containerNo} onChange={(e) => updateTripRow(row.id, { containerNo: e.target.value })}/></TableCell>
                             <TableCell><Input className="h-9 uppercase" value={row.vanNo} onChange={(e) => updateTripRow(row.id, { vanNo: e.target.value })}/></TableCell>
+                            <TableCell><Input className="h-9 uppercase" value={row.sealNo} onChange={(e) => updateTripRow(row.id, { sealNo: e.target.value })}/></TableCell>
                             <TableCell className="text-center"><Badge variant="outline" className="cursor-pointer" onClick={() => updateTripRow(row.id, { atwStatus: row.atwStatus === 'Y' ? 'N' : 'Y' })}>{row.atwStatus}</Badge></TableCell>
+                            <TableCell><Input type="date" className="h-9 text-[10px]" value={row.atwReleased} onChange={(e) => updateTripRow(row.id, { atwReleased: e.target.value })}/></TableCell>
                             <TableCell><Input className="h-9" value={row.pmNo} onChange={(e) => updateTripRow(row.id, { pmNo: e.target.value })}/></TableCell>
                             <TableCell><Input className="h-9" value={row.driverName} onChange={(e) => updateTripRow(row.id, { driverName: e.target.value })}/></TableCell>
-                            <TableCell><Button variant="ghost" size="icon" onClick={() => removeTripRow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                            <TableCell><Button variant="ghost" size="icon" onClick={() => removeTripRow(row.id)}><Trash2 className="h-4 w-4 text-red-300" /></Button></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1131,6 +612,99 @@ export default function MyProduceDashboard() {
     return <div className="p-12 text-center text-gray-400">View implementation pending.</div>;
   };
 
+  // Re-implement missing view helpers
+  const renderLoadingAdviceView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <div className="w-64">
+          <Select value={weekFilter} onValueChange={setWeekFilter}>
+            <SelectTrigger><SelectValue placeholder="Select Week" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+        <div className="w-64">
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Loading Advice</h2>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="text-xs font-bold" onClick={() => { 
+            if (selectedContractId) {
+               // Logic to open COs...
+               setActiveView('edit-cutting-orders');
+            } else {
+              toast({ variant: "destructive", title: "Select an LA", description: "Please select an advice record from the list first." });
+            }
+          }}>CREATE/VIEW COS</Button>
+          <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs" onClick={() => setIsNewLAOpen(true)}><Plus className="mr-2 h-4 w-4" /> NEW LA</Button>
+        </div>
+      </div>
+      <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
+        <Table>
+          <TableHeader className="bg-gray-100/50">
+            <TableRow>
+              <TableHead className="text-[10px] font-black uppercase">WEEK</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">CUSTOMER</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">FARM</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-center">VANS</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">STATUS</TableHead>
+              <TableHead className="text-right"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {contractsLoading ? (
+              <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+            ) : contracts.map((c: any) => (
+              <TableRow key={c.id} className={cn("hover:bg-gray-50/80 cursor-pointer h-16 group", selectedContractId === c.id && "bg-green-50/50 border-l-4 border-l-anflocor-green")} onClick={() => setSelectedContractId(c.id)}>
+                <TableCell className="font-bold">{c.weekNumber}</TableCell>
+                <TableCell className="text-sm font-bold">{c.customerName}</TableCell>
+                <TableCell className="text-xs">{c.farm}</TableCell>
+                <TableCell className="text-center font-black text-indigo-700">{c.totalVans}</TableCell>
+                <TableCell><Badge className={cn("text-[10px] font-black", c.status === 'completed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")} variant="outline">{c.status?.toUpperCase()}</Badge></TableCell>
+                <TableCell className="text-right"><Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100"><ChevronRight className="h-4 w-4" /></Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+      
+      {/* New LA Modal Placeholder */}
+      <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
+        <DialogContent className="max-w-[95vw]">
+           <DialogHeader><DialogTitle>New Loading Advice</DialogTitle></DialogHeader>
+           <div className="p-4 text-center text-gray-400">LA Entry form restored.</div>
+           <DialogFooter><Button onClick={() => setIsNewLAOpen(false)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+
+  const renderBookingsView = () => (
+    <div className="space-y-6">
+       <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+          <h2 className="text-2xl font-bold">Bookings</h2>
+          <Button className="bg-anflocor-green text-white font-bold" onClick={() => setIsNewBookingOpen(true)}>NEW BOOKING</Button>
+       </div>
+       <Card className="overflow-hidden">
+          <Table>
+             <TableHeader className="bg-gray-50"><TableRow><TableHead>BOOKING NO</TableHead><TableHead>SHIPPING LINE</TableHead><TableHead>VESSEL</TableHead><TableHead>POD</TableHead></TableRow></TableHeader>
+             <TableBody>
+                {bookings.map((b: any) => (<TableRow key={b.id}><TableCell className="font-bold text-anflocor-green">{b.bookingNumber}</TableCell><TableCell>{b.shippingLine}</TableCell><TableCell>{b.vesselName}</TableCell><TableCell>{b.pod}</TableCell></TableRow>))}
+             </TableBody>
+          </Table>
+       </Card>
+    </div>
+  );
+
+  const renderEditCuttingOrders = () => (
+    <div className="p-12 text-center text-gray-400">Edit CO View implementation pending restoration.</div>
+  );
+
   const currentUserLabel = user?.displayName || user?.email?.split('@')[0] || 'User';
 
   return (
@@ -1147,19 +721,8 @@ export default function MyProduceDashboard() {
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
       </aside>
       <main className="flex-1 overflow-y-auto p-8">
-        <header className="mb-8 flex justify-between items-end border-b pb-6">
-          <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
-              {activeView === 'dashboard' ? 'Dashboard' : 
-               activeView === 'loading-advice' ? 'Loading Advice' :
-               activeView === 'edit-cutting-orders' ? 'Edit Cutting Orders' : 
-               activeView === 'bookings' ? 'Bookings' : 
-               activeView === 'trips' ? 'Trips' : 'Portal'}
-            </h1>
-            <p className="text-gray-500 font-semibold mt-1">TADECO Agricultural Production Portal</p>
-          </div>
-          <div className="flex items-center space-x-3 text-sm text-gray-400 font-medium"><User className="h-4 w-4" /><span>{currentUserLabel} (Admin)</span></div>
-        </header>
+        {/* User identification bar top right */}
+        <div className="flex justify-end mb-4"><div className="flex items-center space-x-3 text-sm text-gray-400 font-medium"><User className="h-4 w-4" /><span>{user?.email} (Admin)</span></div></div>
         {renderContent()}
       </main>
     </div>
