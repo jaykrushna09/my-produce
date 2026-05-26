@@ -378,38 +378,29 @@ export default function MyProduceDashboard() {
 
     try {
       const batch = writeBatch(db);
-      const batchId = `BK-${Date.now()}`;
-      const batchRef = doc(db, BOOKING_PATH, batchId);
 
-      const firstRow = bookingRows[0];
-
-      batch.set(batchRef, {
-        batchId,
-        customerName: newBookingHeader.customerName,
-        weekNumber: newBookingHeader.weekNumber,
-        receivedAt: serverTimestamp(),
-        // Denormalize summary data for the dashboard list
-        bookingNumber: firstRow.bookingNo,
-        shippingLine: firstRow.shippingLine,
-        vesselName: firstRow.vesselName,
-        pod: firstRow.pod,
-        totalVans: 0 
-      });
-
-      bookingRows.forEach(row => {
-        const rowRef = doc(db, `${BOOKING_PATH}/${batchId}/rows`, row.id);
-        batch.set(rowRef, {
-          bookingId: row.id,
+      // Create a unique top-level document for EACH row in the form
+      // This ensures multiple records appear in the manifest table list
+      bookingRows.forEach((row, index) => {
+        const uniqueId = `BK-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
+        const docRef = doc(db, BOOKING_PATH, uniqueId);
+        
+        batch.set(docRef, {
+          batchId: uniqueId,
+          customerName: newBookingHeader.customerName,
+          weekNumber: newBookingHeader.weekNumber,
+          receivedAt: serverTimestamp(),
           bookingNumber: row.bookingNo,
           shippingLine: row.shippingLine,
           vesselName: row.vesselName,
           pod: row.pod,
+          totalVans: 1, // Defaulting to 1 per row for the dashboard list
           updatedAt: serverTimestamp()
         });
       });
 
       await batch.commit();
-      toast({ title: "Success", description: "Booking batch created successfully." });
+      toast({ title: "Success", description: "All booking records created successfully." });
       setIsNewBookingOpen(false);
       setBookingRows([{
         id: Math.random().toString(36).substr(2, 9),
@@ -1093,7 +1084,7 @@ export default function MyProduceDashboard() {
               <div className="bg-gray-50 p-2 rounded-lg"><Ship className="h-5 w-5 text-gray-300" /></div>
             </div>
             <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-black text-gray-900">142</span>
+              <span className="text-4xl font-black text-gray-900">{bookings.length}</span>
               <span className="text-xs font-bold text-green-500 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> ~12%</span>
             </div>
             <p className="text-xs text-gray-500 font-medium mt-2">Currently in transit or processing</p>
@@ -1142,11 +1133,11 @@ export default function MyProduceDashboard() {
             ) : bookings.map((b: any) => (
               <TableRow key={b.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group">
                 <TableCell className="font-bold text-[#1B4D3E] underline decoration-transparent hover:decoration-[#1B4D3E] transition-all">
-                  {b.bookingNumber || b.batchId || 'N/A'}
+                  {b.bookingNumber || 'N/A'}
                 </TableCell>
                 <TableCell className="text-sm font-medium text-gray-700">{b.shippingLine || '--'}</TableCell>
                 <TableCell className="text-sm text-gray-600 italic">{b.vesselName || '--'}</TableCell>
-                <TableCell className="text-sm font-black text-gray-800 uppercase tracking-tight">{b.pod || 'VARIOUS'}</TableCell>
+                <TableCell className="text-sm font-black text-gray-800 uppercase tracking-tight">{b.pod || '--'}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900"><MoreVertical className="h-4 w-4" /></Button>
                 </TableCell>
