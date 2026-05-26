@@ -381,12 +381,19 @@ export default function MyProduceDashboard() {
       const batchId = `BK-${Date.now()}`;
       const batchRef = doc(db, BOOKING_PATH, batchId);
 
+      const firstRow = bookingRows[0];
+
       batch.set(batchRef, {
         batchId,
         customerName: newBookingHeader.customerName,
         weekNumber: newBookingHeader.weekNumber,
         receivedAt: serverTimestamp(),
-        totalVans: 0 // Will be derived from rows if needed
+        // Denormalize summary data for the dashboard list
+        bookingNumber: firstRow.bookingNo,
+        shippingLine: firstRow.shippingLine,
+        vesselName: firstRow.vesselName,
+        pod: firstRow.pod,
+        totalVans: 0 
       });
 
       bookingRows.forEach(row => {
@@ -1134,10 +1141,12 @@ export default function MyProduceDashboard() {
               <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No booking manifests found.</TableCell></TableRow>
             ) : bookings.map((b: any) => (
               <TableRow key={b.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group">
-                <TableCell className="font-bold text-[#1B4D3E] underline decoration-transparent hover:decoration-[#1B4D3E] transition-all">{b.batchId || 'N/A'}</TableCell>
-                <TableCell className="text-sm font-medium text-gray-700">{b.shippingLine}</TableCell>
-                <TableCell className="text-sm text-gray-600 italic">{b.vesselName}</TableCell>
-                <TableCell className="text-sm font-black text-gray-800 uppercase tracking-tight">VARIOUS</TableCell>
+                <TableCell className="font-bold text-[#1B4D3E] underline decoration-transparent hover:decoration-[#1B4D3E] transition-all">
+                  {b.bookingNumber || b.batchId || 'N/A'}
+                </TableCell>
+                <TableCell className="text-sm font-medium text-gray-700">{b.shippingLine || '--'}</TableCell>
+                <TableCell className="text-sm text-gray-600 italic">{b.vesselName || '--'}</TableCell>
+                <TableCell className="text-sm font-black text-gray-800 uppercase tracking-tight">{b.pod || 'VARIOUS'}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900"><MoreVertical className="h-4 w-4" /></Button>
                 </TableCell>
