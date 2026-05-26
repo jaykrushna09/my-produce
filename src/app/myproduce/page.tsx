@@ -151,13 +151,16 @@ interface BookingRow {
 
 interface TripRow {
   id: string;
-  vanNo: string;
-  pmNo: string;
+  ps: string;
   containerNo: string;
+  vanNo: string;
   sealNo: string;
-  driver: string;
+  atwStatus: 'Y' | 'N';
   atwReleased: string;
-  withdrawn: string;
+  pmNo: string;
+  driverName: string;
+  signature: 'Pending' | 'Signed';
+  dateWithdrawn: string;
 }
 
 export default function MyProduceDashboard() {
@@ -200,16 +203,26 @@ export default function MyProduceDashboard() {
   }]);
 
   const [isNewTripOpen, setIsNewTripOpen] = useState(false);
-  const [newTripHeader, setNewTripHeader] = useState({ customerName: '', weekNumber: '' });
+  const [newTripHeader, setNewTripHeader] = useState({ 
+    customerName: '', 
+    weekNumber: '',
+    bookingNo: '',
+    shippingLine: '',
+    vessel: '',
+    pod: ''
+  });
   const [tripRows, setTripRows] = useState<TripRow[]>([{
     id: Math.random().toString(36).substr(2, 9),
-    vanNo: '',
-    pmNo: '',
+    ps: '1',
     containerNo: '',
+    vanNo: '',
     sealNo: '',
-    driver: '',
-    atwReleased: '',
-    withdrawn: ''
+    atwStatus: 'Y',
+    atwReleased: format(new Date(), 'yyyy-MM-dd'),
+    pmNo: '',
+    driverName: '',
+    signature: 'Pending',
+    dateWithdrawn: format(new Date(), 'yyyy-MM-dd')
   }]);
 
   const [coRows, setCoRows] = useState<CORow[]>([]);
@@ -413,7 +426,16 @@ export default function MyProduceDashboard() {
   const addTripRow = () => {
     setTripRows([...tripRows, {
       id: Math.random().toString(36).substr(2, 9),
-      vanNo: '', pmNo: '', containerNo: '', sealNo: '', driver: '', atwReleased: '', withdrawn: ''
+      ps: (tripRows.length + 1).toString(),
+      containerNo: '',
+      vanNo: '',
+      sealNo: '',
+      atwStatus: 'Y',
+      atwReleased: format(new Date(), 'yyyy-MM-dd'),
+      pmNo: '',
+      driverName: '',
+      signature: 'Pending',
+      dateWithdrawn: format(new Date(), 'yyyy-MM-dd')
     }]);
   };
 
@@ -441,11 +463,15 @@ export default function MyProduceDashboard() {
           pmNo: row.pmNo,
           containerNo: row.containerNo,
           sealNo: row.sealNo,
-          driver: row.driver,
+          driver: row.driverName,
           dateAtwReleased: row.atwReleased,
-          dateWithdrawn: row.withdrawn,
+          dateWithdrawn: row.dateWithdrawn,
           customerName: newTripHeader.customerName,
           weekNumber: newTripHeader.weekNumber,
+          bookingNo: newTripHeader.bookingNo,
+          shippingLine: newTripHeader.shippingLine,
+          vessel: newTripHeader.vessel,
+          pod: newTripHeader.pod,
           status: 'active',
           updatedAt: serverTimestamp()
         });
@@ -453,7 +479,13 @@ export default function MyProduceDashboard() {
       await batch.commit();
       toast({ title: "Success", description: "Trip records created successfully." });
       setIsNewTripOpen(false);
-      setTripRows([{ id: Math.random().toString(36).substr(2, 9), vanNo: '', pmNo: '', containerNo: '', sealNo: '', driver: '', atwReleased: '', withdrawn: '' }]);
+      setTripRows([{
+        id: Math.random().toString(36).substr(2, 9),
+        ps: '1', containerNo: '', vanNo: '', sealNo: '',
+        atwStatus: 'Y', atwReleased: format(new Date(), 'yyyy-MM-dd'),
+        pmNo: '', driverName: '', signature: 'Pending',
+        dateWithdrawn: format(new Date(), 'yyyy-MM-dd')
+      }]);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
@@ -888,10 +920,21 @@ export default function MyProduceDashboard() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm no-print">
         <div className="w-64">
-          <Select value={weekFilter} onValueChange={setWeekFilter}><SelectTrigger><SelectValue placeholder="Select Week Number" /></SelectTrigger><SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent></Select>
+          <Select value={weekFilter} onValueChange={setWeekFilter}>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Weeks</SelectItem>
+              {weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="w-64">
-          <Select value={customerFilter} onValueChange={setCustomerFilter}><SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger><SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent></Select>
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
+              {customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+          </Select>
         </div>
         <div className="ml-auto flex items-center gap-4">
           <Bell className="h-5 w-5 text-gray-400 cursor-pointer" /><HelpCircle className="h-5 w-5 text-gray-400 cursor-pointer" />
@@ -920,11 +963,26 @@ export default function MyProduceDashboard() {
           <div className="bg-white">
             <div className="p-4 border-b">
                <div className="flex items-start gap-3 bg-gray-50 p-4 border-l-4 border-green-600 rounded-r-md">
-                 <Info className="h-5 w-5 text-green-700 shrink-0 mt-0.5" /><p className="text-sm font-medium text-gray-600">Please ensure all manifest details match the physical delivery receipt for verification.</p>
+                 <Info className="h-5 w-5 text-green-700 shrink-0 mt-0.5" /><p className="text-sm font-medium text-gray-600">Please ensure all trip details match the physical manifest for verification.</p>
                </div>
             </div>
-            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <div className="p-8 space-y-8 max-h-[80vh] overflow-y-auto">
+              {/* Stepper */}
+              <div className="flex items-center justify-center max-w-2xl mx-auto mb-8">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-anflocor-green text-white flex items-center justify-center font-bold mb-2">1</div>
+                  <span className="text-[10px] font-black uppercase text-anflocor-green tracking-widest">Containers</span>
+                </div>
+                <div className="w-24 h-[2px] bg-gray-100 mx-4 mb-6"></div>
+                <div className="flex flex-col items-center opacity-30">
+                  <div className="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold mb-2">2</div>
+                  <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Bind Cutting Order</span>
+                </div>
+              </div>
+
+              {/* Header Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b pb-8">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
                   <Select value={newTripHeader.customerName} onValueChange={(val) => setNewTripHeader({...newTripHeader, customerName: val})}>
@@ -933,48 +991,99 @@ export default function MyProduceDashboard() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
-                  <Select value={newTripHeader.weekNumber} onValueChange={(val) => setNewTripHeader({...newTripHeader, weekNumber: val})}>
-                    <SelectTrigger className="h-12 bg-gray-50 border-gray-200"><SelectValue placeholder="Select Week" /></SelectTrigger>
-                    <SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
-                  </Select>
+                  <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week Number</Label>
+                  <Input 
+                    placeholder="e.g. 42" 
+                    className="h-12 bg-gray-50 border-gray-200"
+                    value={newTripHeader.weekNumber}
+                    onChange={(e) => setNewTripHeader({...newTripHeader, weekNumber: e.target.value})}
+                  />
                 </div>
               </div>
-              <Table>
-                <TableHeader className="bg-gray-100/80">
-                  <TableRow>
-                    <TableHead className="w-12 text-[10px] font-black uppercase text-gray-400">#</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Van No.</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">PM No.</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Container No.</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Seal No.</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Driver</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">ATW Released</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Withdrawn</TableHead>
-                    <TableHead className="w-12 text-right"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tripRows.map((row, index) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="text-center font-bold text-gray-400">{index + 1}</TableCell>
-                      <TableCell><Input value={row.vanNo} onChange={(e) => updateTripRow(row.id, { vanNo: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell><Input value={row.pmNo} onChange={(e) => updateTripRow(row.id, { pmNo: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell><Input value={row.containerNo} onChange={(e) => updateTripRow(row.id, { containerNo: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell><Input value={row.sealNo} onChange={(e) => updateTripRow(row.id, { sealNo: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell><Input value={row.driver} onChange={(e) => updateTripRow(row.id, { driver: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell><Input value={row.atwReleased} onChange={(e) => updateTripRow(row.id, { atwReleased: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell><Input value={row.withdrawn} onChange={(e) => updateTripRow(row.id, { withdrawn: e.target.value })} className="h-10"/></TableCell>
-                      <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => removeTripRow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+
+              {/* Logistical Info */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-300">Booking No</Label>
+                  <Select value={newTripHeader.bookingNo} onValueChange={(val) => setNewTripHeader({...newTripHeader, bookingNo: val})}>
+                    <SelectTrigger className="h-10 border-gray-200"><SelectValue placeholder="--Select--" /></SelectTrigger>
+                    <SelectContent>{bookings.map((b: any) => (<SelectItem key={b.id} value={b.bookingNumber}>{b.bookingNumber}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-300">Shipping Line</Label>
+                  <Input className="h-10 border-gray-200 bg-white" value={newTripHeader.shippingLine} onChange={(e) => setNewTripHeader({...newTripHeader, shippingLine: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-300">Vessel</Label>
+                  <Input className="h-10 border-gray-200 bg-white" value={newTripHeader.vessel} onChange={(e) => setNewTripHeader({...newTripHeader, vessel: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-300">POD</Label>
+                  <Input className="h-10 border-gray-200 bg-white" value={newTripHeader.pod} onChange={(e) => setNewTripHeader({...newTripHeader, pod: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-gray-100/80 border-b">
+                    <TableRow className="h-12">
+                      <TableHead className="w-12 text-[9px] font-black uppercase text-gray-400 text-center">PS</TableHead>
+                      <TableHead className="w-32 text-[9px] font-black uppercase text-gray-400">Container No.</TableHead>
+                      <TableHead className="w-24 text-[9px] font-black uppercase text-gray-400">Van No.</TableHead>
+                      <TableHead className="w-24 text-[9px] font-black uppercase text-gray-400">Seal No.</TableHead>
+                      <TableHead className="w-20 text-[9px] font-black uppercase text-gray-400 text-center">ATW Status</TableHead>
+                      <TableHead className="w-32 text-[9px] font-black uppercase text-gray-400">ATW Released</TableHead>
+                      <TableHead className="w-24 text-[9px] font-black uppercase text-gray-400">PM No.</TableHead>
+                      <TableHead className="w-40 text-[9px] font-black uppercase text-gray-400">Driver Name</TableHead>
+                      <TableHead className="w-24 text-[9px] font-black uppercase text-gray-400">Signature</TableHead>
+                      <TableHead className="w-32 text-[9px] font-black uppercase text-gray-400">Date Withdrawn</TableHead>
+                      <TableHead className="w-24 text-[9px] font-black uppercase text-gray-400">Attachments</TableHead>
+                      <TableHead className="w-12 text-right"></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2" onClick={addTripRow}><Plus className="h-4 w-4" /> Add Row</Button>
+                  </TableHeader>
+                  <TableBody>
+                    {tripRows.map((row, index) => (
+                      <TableRow key={row.id} className="h-14 hover:bg-gray-50/50">
+                        <TableCell className="text-center font-bold text-gray-400">{row.ps}</TableCell>
+                        <TableCell><Input className="h-9 text-xs border-gray-200 uppercase font-bold" value={row.containerNo} onChange={(e) => updateTripRow(row.id, { containerNo: e.target.value })}/></TableCell>
+                        <TableCell><Input className="h-9 text-xs border-gray-200 uppercase" value={row.vanNo} onChange={(e) => updateTripRow(row.id, { vanNo: e.target.value })}/></TableCell>
+                        <TableCell><Input className="h-9 text-xs border-gray-200 uppercase" value={row.sealNo} onChange={(e) => updateTripRow(row.id, { sealNo: e.target.value })}/></TableCell>
+                        <TableCell className="text-center">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-[10px] font-black px-3 cursor-pointer select-none",
+                              row.atwStatus === 'Y' ? "text-green-600 bg-green-50 border-green-200" : "text-red-500 bg-red-50 border-red-200"
+                            )}
+                            onClick={() => updateTripRow(row.id, { atwStatus: row.atwStatus === 'Y' ? 'N' : 'Y' })}
+                          >
+                            {row.atwStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell><Input type="date" className="h-9 text-xs border-gray-200" value={row.atwReleased} onChange={(e) => updateTripRow(row.id, { atwReleased: e.target.value })}/></TableCell>
+                        <TableCell><Input className="h-9 text-xs border-gray-200 placeholder:text-gray-300" placeholder="PM No." value={row.pmNo} onChange={(e) => updateTripRow(row.id, { pmNo: e.target.value })}/></TableCell>
+                        <TableCell><Input className="h-9 text-xs border-gray-200 placeholder:text-gray-300" placeholder="Driver Name" value={row.driverName} onChange={(e) => updateTripRow(row.id, { driverName: e.target.value })}/></TableCell>
+                        <TableCell className="text-[10px] font-medium text-gray-400 italic">{row.signature}</TableCell>
+                        <TableCell><Input type="date" className="h-9 text-xs border-gray-200" value={row.dateWithdrawn} onChange={(e) => updateTripRow(row.id, { dateWithdrawn: e.target.value })}/></TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" className="h-8 text-[9px] font-black text-green-700 border-green-200 hover:bg-green-50 uppercase gap-1">
+                             <Upload className="h-3 w-3" /> Upload
+                          </Button>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => removeTripRow(row.id)} className="h-8 w-8 text-red-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto hover:bg-transparent" onClick={addTripRow}><Plus className="h-4 w-4" /> Add Row</Button>
             </div>
             <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3">
               <Button variant="ghost" onClick={() => setIsNewTripOpen(false)} className="text-gray-400 font-bold uppercase text-[10px]">CANCEL</Button>
-              <Button className="bg-[#1B4D3E] text-white font-bold uppercase text-[10px] px-8" onClick={handleSubmitTripBatch}>SUBMIT BATCH</Button>
+              <Button className="bg-[#1B4D3E] text-white font-bold uppercase text-[10px] px-8 h-10 shadow-sm" onClick={handleSubmitTripBatch}>SUBMIT BATCH</Button>
             </div>
           </div>
         </DialogContent>
@@ -1112,3 +1221,4 @@ export default function MyProduceDashboard() {
     </div>
   );
 }
+
