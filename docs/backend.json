@@ -138,6 +138,26 @@
         "sku": { "type": "string" }
       },
       "required": ["bookingId", "pod", "bookingNumber"]
+    },
+    "Trip": {
+      "title": "Truck Trip",
+      "description": "Individual truck trip record for delivery tracking.",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "vanNo": { "type": "string" },
+        "pmNo": { "type": "string" },
+        "containerNo": { "type": "string" },
+        "sealNo": { "type": "string" },
+        "driver": { "type": "string" },
+        "dateAtwReleased": { "type": "string" },
+        "dateWithdrawn": { "type": "string" },
+        "customerName": { "type": "string" },
+        "weekNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "pending", "completed"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tripId", "vanNo", "containerNo"]
     }
   },
   "auth": {
@@ -176,6 +196,10 @@
     "/app_data/bookings/booking_saving/{batchId}/rows/{bookingId}": {
       "schema": { "$ref": "#/backend/entities/BookingRow" },
       "description": "Individual booking details"
+    },
+    "/app_data/trips/trip_saving/{tripId}": {
+      "schema": { "$ref": "#/backend/entities/Trip" },
+      "description": "Individual truck trip records"
     }
   }
 }

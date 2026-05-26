@@ -53,7 +53,9 @@ import {
   Info,
   Scissors,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  History,
+  Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -109,7 +111,7 @@ import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
 
-type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings';
+type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips';
 
 interface LARow {
   id: string;
@@ -147,6 +149,17 @@ interface BookingRow {
   attachmentUrl?: string;
 }
 
+interface TripRow {
+  id: string;
+  vanNo: string;
+  pmNo: string;
+  containerNo: string;
+  sealNo: string;
+  driver: string;
+  atwReleased: string;
+  withdrawn: string;
+}
+
 export default function MyProduceDashboard() {
   const router = useRouter();
   const db = useFirestore();
@@ -160,12 +173,9 @@ export default function MyProduceDashboard() {
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
   
-  // New LA Form State
+  // State for forms
   const [isNewLAOpen, setIsNewLAOpen] = useState(false);
-  const [newLAHeader, setNewLAHeader] = useState({
-    customerName: '',
-    weekNumber: ''
-  });
+  const [newLAHeader, setNewLAHeader] = useState({ customerName: '', weekNumber: '' });
   const [laRows, setLaRows] = useState<LARow[]>([{
     id: Math.random().toString(36).substr(2, 9),
     farm: 'TADECO',
@@ -179,12 +189,8 @@ export default function MyProduceDashboard() {
     palletizedType: 'Palletized'
   }]);
 
-  // New Booking State
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
-  const [newBookingHeader, setNewBookingHeader] = useState({
-    customerName: '',
-    weekNumber: ''
-  });
+  const [newBookingHeader, setNewBookingHeader] = useState({ customerName: '', weekNumber: '' });
   const [bookingRows, setBookingRows] = useState<BookingRow[]>([{
     id: Math.random().toString(36).substr(2, 9),
     bookingNo: '',
@@ -193,7 +199,19 @@ export default function MyProduceDashboard() {
     pod: ''
   }]);
 
-  // Cutting Order Rows State
+  const [isNewTripOpen, setIsNewTripOpen] = useState(false);
+  const [newTripHeader, setNewTripHeader] = useState({ customerName: '', weekNumber: '' });
+  const [tripRows, setTripRows] = useState<TripRow[]>([{
+    id: Math.random().toString(36).substr(2, 9),
+    vanNo: '',
+    pmNo: '',
+    containerNo: '',
+    sealNo: '',
+    driver: '',
+    atwReleased: '',
+    withdrawn: ''
+  }]);
+
   const [coRows, setCoRows] = useState<CORow[]>([]);
 
   const CUSTOMER_PATH = 'app_configuration/customer_mapping/customer_saving';
@@ -202,17 +220,13 @@ export default function MyProduceDashboard() {
   const POD_PATH = 'app_configuration/pod_mapping/pod_saving';
   const CONTRACT_PATH = 'app_data/contracts/contract_saving';
   const BOOKING_PATH = 'app_data/bookings/booking_saving';
+  const TRIP_PATH = 'app_data/trips/trip_saving';
 
   const customerMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, CUSTOMER_PATH), orderBy('Customer', 'asc'));
   }, [db]);
   
-  const materialMappingsQuery = useMemoFirebase(() => {
-    if (!db) return null;
-    return query(collection(db, MATERIAL_PATH), orderBy('SAPC_Code', 'asc'));
-  }, [db]);
-
   const polMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, POL_PATH), orderBy('portName', 'asc'));
@@ -228,33 +242,43 @@ export default function MyProduceDashboard() {
     return query(collection(db, CONTRACT_PATH), orderBy('receivedAt', 'desc'));
   }, [db]);
 
+  const bookingsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, BOOKING_PATH), orderBy('receivedAt', 'desc'));
+  }, [db]);
+
+  const tripsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, TRIP_PATH), orderBy('updatedAt', 'desc'));
+  }, [db]);
+
   const contractItemsQuery = useMemoFirebase(() => {
     if (!db || !selectedContractId) return null;
     return query(collection(db, `${CONTRACT_PATH}/${selectedContractId}/items`));
   }, [db, selectedContractId]);
 
-  const bookingsQuery = useMemoFirebase(() => {
-    if (!db) return null;
-    return query(collection(db, BOOKING_PATH), orderBy('receivedAt', 'desc'));
-  }, [db]);
-  
   const { data: customerMappings } = useCollection(customerMappingsQuery);
-  const { data: materialMappings } = useCollection(materialMappingsQuery);
   const { data: polMappings } = useCollection(polMappingsQuery);
   const { data: podMappings } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
   const { data: contractItems } = useCollection(contractItemsQuery);
   const { data: bookings, loading: bookingsLoading } = useCollection(bookingsQuery);
+  const { data: trips, loading: tripsLoading } = useCollection(tripsQuery);
 
   const weekOptions = useMemo(() => {
     const options = [];
-    for (let i = 1; i <= 52; i++) {
-      options.push(i.toString());
-    }
+    for (let i = 1; i <= 52; i++) options.push(i.toString());
     return options;
   }, []);
 
-  // New LA Helpers
+  const handleSignOut = async () => {
+    if (auth) {
+      await signOut(auth);
+      router.push('/');
+    }
+  };
+
+  // LA Handlers
   const addLARow = () => {
     setLaRows([...laRows, {
       id: Math.random().toString(36).substr(2, 9),
@@ -275,22 +299,18 @@ export default function MyProduceDashboard() {
   };
 
   const removeLARow = (id: string) => {
-    if (laRows.length > 1) {
-      setLaRows(laRows.filter(r => r.id !== id));
-    }
+    if (laRows.length > 1) setLaRows(laRows.filter(r => r.id !== id));
   };
 
   const handleSubmitBatch = async () => {
     if (!db || !newLAHeader.customerName || !newLAHeader.weekNumber) {
-      toast({ variant: "destructive", title: "Error", description: "Please select customer and week number." });
+      toast({ variant: "destructive", title: "Error", description: "Please complete the header details." });
       return;
     }
-
     try {
       const batch = writeBatch(db);
       const contractId = `LA-${Date.now()}`;
       const contractRef = doc(db, CONTRACT_PATH, contractId);
-
       const totalVans = laRows.reduce((acc, curr) => acc + (curr.totalVans || 0), 0);
       const firstRow = laRows[0];
 
@@ -334,29 +354,19 @@ export default function MyProduceDashboard() {
       setIsNewLAOpen(false);
       setLaRows([{
         id: Math.random().toString(36).substr(2, 9),
-        farm: 'TADECO',
-        pol: 'DAVAO',
-        pod: '',
-        shippingLine: '',
-        cutOffDate: '',
-        etd: '',
-        totalVans: 0,
-        skuCode: '',
-        palletizedType: 'Palletized'
+        farm: 'TADECO', pol: 'DAVAO', pod: '', shippingLine: '',
+        cutOffDate: '', etd: '', totalVans: 0, skuCode: '', palletizedType: 'Palletized'
       }]);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Submission Error", description: err.message });
     }
   };
 
-  // Booking Batch Helpers
+  // Booking Handlers
   const addBookingRow = () => {
     setBookingRows([...bookingRows, {
       id: Math.random().toString(36).substr(2, 9),
-      bookingNo: '',
-      shippingLine: '',
-      vesselName: '',
-      pod: ''
+      bookingNo: '', shippingLine: '', vesselName: '', pod: ''
     }]);
   };
 
@@ -365,9 +375,7 @@ export default function MyProduceDashboard() {
   };
 
   const removeBookingRow = (id: string) => {
-    if (bookingRows.length > 1) {
-      setBookingRows(bookingRows.filter(r => r.id !== id));
-    }
+    if (bookingRows.length > 1) setBookingRows(bookingRows.filter(r => r.id !== id));
   };
 
   const handleSubmitBookingBatch = async () => {
@@ -375,70 +383,85 @@ export default function MyProduceDashboard() {
       toast({ variant: "destructive", title: "Error", description: "Please complete the header details." });
       return;
     }
-
     try {
       const batch = writeBatch(db);
-
-      // Create a unique top-level document for EACH row in the form
-      // This ensures multiple records appear in the manifest table list
       bookingRows.forEach((row, index) => {
-        const uniqueId = `BK-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
+        const uniqueId = `BK-${Date.now()}-${index}`;
         const docRef = doc(db, BOOKING_PATH, uniqueId);
-        
         batch.set(docRef, {
           batchId: uniqueId,
           customerName: newBookingHeader.customerName,
           weekNumber: newBookingHeader.weekNumber,
-          receivedAt: serverTimestamp(),
           bookingNumber: row.bookingNo,
           shippingLine: row.shippingLine,
           vesselName: row.vesselName,
           pod: row.pod,
-          totalVans: 1, // Defaulting to 1 per row for the dashboard list
+          receivedAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
       });
-
       await batch.commit();
-      toast({ title: "Success", description: "All booking records created successfully." });
+      toast({ title: "Success", description: "Booking records created successfully." });
       setIsNewBookingOpen(false);
-      setBookingRows([{
-        id: Math.random().toString(36).substr(2, 9),
-        bookingNo: '',
-        shippingLine: '',
-        vesselName: '',
-        pod: ''
-      }]);
+      setBookingRows([{ id: Math.random().toString(36).substr(2, 9), bookingNo: '', shippingLine: '', vesselName: '', pod: '' }]);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     }
   };
 
-  // Initialize CO Rows when entering edit mode
-  useEffect(() => {
-    if (activeView === 'edit-cutting-orders' && contractItems.length > 0) {
-      setCoRows(contractItems.map((item: any) => ({
-        id: item.itemId || item.id || Math.random().toString(36).substr(2, 9),
-        ps: item.ps || 'PS',
-        shippingLine: item.shippingLines || '',
-        bookingNo: item.bookingNumber || '',
-        containerNo: item.containerNo || '',
-        atwStatus: item.atwStatus || 'PENDING',
-        pod: item.pod || '',
-        cutOffDate: item.cutOffDate || '',
-        etd: item.etd || '',
-        sku: item.specs || '',
-        palletization: item.palletized || 'Palletized'
-      })));
-    }
-  }, [activeView, contractItems]);
+  // Trip Handlers
+  const addTripRow = () => {
+    setTripRows([...tripRows, {
+      id: Math.random().toString(36).substr(2, 9),
+      vanNo: '', pmNo: '', containerNo: '', sealNo: '', driver: '', atwReleased: '', withdrawn: ''
+    }]);
+  };
 
-  const filteredData = useMemo(() => {
-    const term = searchTerm.toLowerCase();
+  const updateTripRow = (id: string, updates: Partial<TripRow>) => {
+    setTripRows(tripRows.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const removeTripRow = (id: string) => {
+    if (tripRows.length > 1) setTripRows(tripRows.filter(r => r.id !== id));
+  };
+
+  const handleSubmitTripBatch = async () => {
+    if (!db || !newTripHeader.customerName || !newTripHeader.weekNumber) {
+      toast({ variant: "destructive", title: "Error", description: "Please complete the header details." });
+      return;
+    }
+    try {
+      const batch = writeBatch(db);
+      tripRows.forEach((row, index) => {
+        const uniqueId = `TRIP-${Date.now()}-${index}`;
+        const docRef = doc(db, TRIP_PATH, uniqueId);
+        batch.set(docRef, {
+          tripId: uniqueId,
+          vanNo: row.vanNo,
+          pmNo: row.pmNo,
+          containerNo: row.containerNo,
+          sealNo: row.sealNo,
+          driver: row.driver,
+          dateAtwReleased: row.atwReleased,
+          dateWithdrawn: row.withdrawn,
+          customerName: newTripHeader.customerName,
+          weekNumber: newTripHeader.weekNumber,
+          status: 'active',
+          updatedAt: serverTimestamp()
+        });
+      });
+      await batch.commit();
+      toast({ title: "Success", description: "Trip records created successfully." });
+      setIsNewTripOpen(false);
+      setTripRows([{ id: Math.random().toString(36).substr(2, 9), vanNo: '', pmNo: '', containerNo: '', sealNo: '', driver: '', atwReleased: '', withdrawn: '' }]);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    }
+  };
+
+  const filteredContracts = useMemo(() => {
     return contracts.filter(c => {
-      const matchesSearch = String(c.customerName || '').toLowerCase().includes(term) ||
-        String(c.contractId || '').toLowerCase().includes(term) ||
-        String(c.weekNumber || '').toLowerCase().includes(term);
+      const matchesSearch = String(c.customerName || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesWeek = weekFilter === 'all' || c.weekNumber === weekFilter;
       const matchesCustomer = customerFilter === 'all' || c.customerName === customerFilter;
       return matchesSearch && matchesWeek && matchesCustomer;
@@ -446,70 +469,8 @@ export default function MyProduceDashboard() {
   }, [contracts, searchTerm, weekFilter, customerFilter]);
 
   const uniqueWeeks = useMemo(() => {
-    const weeks = Array.from(new Set(contracts.map(c => c.weekNumber))).filter(Boolean);
-    return weeks.sort();
+    return Array.from(new Set(contracts.map(c => c.weekNumber))).filter(Boolean).sort();
   }, [contracts]);
-
-  const handleSignOut = async () => {
-    if (auth) {
-      await signOut(auth);
-      router.push('/');
-    }
-  };
-
-  const addCORow = () => {
-    const firstRow = coRows[0];
-    setCoRows([...coRows, {
-      id: Math.random().toString(36).substr(2, 9),
-      ps: 'PS',
-      shippingLine: firstRow?.shippingLine || '',
-      bookingNo: '',
-      containerNo: '',
-      atwStatus: 'PENDING',
-      pod: firstRow?.pod || '',
-      cutOffDate: firstRow?.cutOffDate || '',
-      etd: firstRow?.etd || '',
-      sku: firstRow?.sku || '',
-      palletization: firstRow?.palletization || 'Palletized'
-    }]);
-  };
-
-  const updateCORow = (id: string, updates: Partial<CORow>) => {
-    setCoRows(coRows.map(r => r.id === id ? { ...r, ...updates } : r));
-  };
-
-  const removeCORow = (id: string) => {
-    setCoRows(coRows.filter(r => r.id !== id));
-  };
-
-  const handleSubmitCOs = async () => {
-    if (!db || !selectedContractId) return;
-    try {
-      const batch = writeBatch(db);
-      coRows.forEach(row => {
-        const itemRef = doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, row.id);
-        batch.set(itemRef, {
-          itemId: row.id,
-          ps: row.ps,
-          shippingLines: row.shippingLine,
-          bookingNumber: row.bookingNo,
-          containerNo: row.containerNo,
-          atwStatus: row.atwStatus,
-          pod: row.pod,
-          cutOffDate: row.cutOffDate,
-          etd: row.etd,
-          specs: row.sku,
-          palletized: row.palletization,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      });
-      await batch.commit();
-      toast({ title: "COs Updated", description: "All cutting order allocations saved successfully." });
-      setActiveView('loading-advice');
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
-    }
-  };
 
   const renderEditCuttingOrders = () => {
     const contract = contracts.find(c => c.id === selectedContractId);
@@ -583,11 +544,7 @@ export default function MyProduceDashboard() {
                     <TableHead className="w-40 text-[10px] font-black uppercase text-gray-400">Container No</TableHead>
                     <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400 text-center">ATW Status</TableHead>
                     <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400">POD</TableHead>
-                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400">Cut-off Date</TableHead>
-                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400">ETD</TableHead>
-                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400">SKU</TableHead>
-                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400">Palletization</TableHead>
-                    <TableHead className="w-12 text-[10px] font-black uppercase text-gray-400 text-right"></TableHead>
+                    <TableHead className="w-32 text-[10px] font-black uppercase text-gray-400 text-right"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -595,50 +552,41 @@ export default function MyProduceDashboard() {
                     <TableRow key={row.id} className="h-16 hover:bg-gray-50/50">
                       <TableCell className="text-center font-bold text-gray-400">{index + 1}</TableCell>
                       <TableCell>
-                        <Select value={row.ps} onValueChange={(val) => updateCORow(row.id, { ps: val })}>
+                        <Select value={row.ps} onValueChange={(val) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, ps: val } : r))}>
                           <SelectTrigger className="h-9 border-none bg-transparent shadow-none font-bold text-gray-700"><SelectValue /></SelectTrigger>
                           <SelectContent><SelectItem value="PS">PS</SelectItem><SelectItem value="REG">REG</SelectItem></SelectContent>
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Select value={row.shippingLine} onValueChange={(val) => updateCORow(row.id, { shippingLine: val })}>
+                        <Select value={row.shippingLine} onValueChange={(val) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, shippingLine: val } : r))}>
                           <SelectTrigger className="h-9 border-none bg-transparent shadow-none font-bold text-gray-700"><SelectValue /></SelectTrigger>
                           <SelectContent><SelectItem value="OOCL">OOCL</SelectItem><SelectItem value="MSC">MSC</SelectItem><SelectItem value="MAERSK">MAERSK</SelectItem></SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell><Input placeholder="Booking No" value={row.bookingNo} onChange={(e) => updateCORow(row.id, { bookingNo: e.target.value })} className="h-9 border-none bg-transparent shadow-none placeholder:text-gray-200 font-medium"/></TableCell>
-                      <TableCell><Input placeholder="Container No" value={row.containerNo} onChange={(e) => updateCORow(row.id, { containerNo: e.target.value })} className="h-9 border-none bg-transparent shadow-none placeholder:text-gray-200 font-bold"/></TableCell>
+                      <TableCell><Input placeholder="Booking No" value={row.bookingNo} onChange={(e) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, bookingNo: e.target.value } : r))} className="h-9 border-none bg-transparent shadow-none placeholder:text-gray-200 font-medium"/></TableCell>
+                      <TableCell><Input placeholder="Container No" value={row.containerNo} onChange={(e) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, containerNo: e.target.value } : r))} className="h-9 border-none bg-transparent shadow-none placeholder:text-gray-200 font-bold"/></TableCell>
                       <TableCell className="text-center">
                         <Badge className={cn(
                           "text-[9px] font-black px-2 cursor-pointer",
                           row.atwStatus === 'PENDING' ? "bg-red-100 text-red-500" : "bg-green-100 text-green-600"
-                        )} variant="outline" onClick={() => updateCORow(row.id, { atwStatus: row.atwStatus === 'PENDING' ? 'READY' : 'PENDING' })}>
+                        )} variant="outline" onClick={() => setCoRows(coRows.map(r => r.id === row.id ? { ...r, atwStatus: r.atwStatus === 'PENDING' ? 'READY' : 'PENDING' } : r))}>
                           {row.atwStatus}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Select value={row.pod} onValueChange={(val) => updateCORow(row.id, { pod: val })}>
+                        <Select value={row.pod} onValueChange={(val) => setCoRows(coRows.map(r => r.id === row.id ? { ...r, pod: val } : r))}>
                           <SelectTrigger className="h-9 border-none bg-transparent shadow-none font-bold text-gray-500 uppercase text-[11px] tracking-tight"><SelectValue /></SelectTrigger>
                           <SelectContent>{podMappings.map((p: any) => (<SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>))}</SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell><Input type="date" value={row.cutOffDate} onChange={(e) => updateCORow(row.id, { cutOffDate: e.target.value })} className="h-9 border-none bg-transparent shadow-none text-[11px] font-medium text-gray-400"/></TableCell>
-                      <TableCell><Input type="date" value={row.etd} onChange={(e) => updateCORow(row.id, { etd: e.target.value })} className="h-9 border-none bg-transparent shadow-none text-[11px] font-medium text-gray-400"/></TableCell>
-                      <TableCell><Input value={row.sku} onChange={(e) => updateCORow(row.id, { sku: e.target.value })} placeholder="SKU" className="h-9 border-none bg-transparent shadow-none text-[11px] font-bold text-gray-400"/></TableCell>
-                      <TableCell>
-                        <Select value={row.palletization} onValueChange={(val) => updateCORow(row.id, { palletization: val })}>
-                          <SelectTrigger className="h-9 border-none bg-transparent shadow-none text-[11px] font-medium text-gray-500"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="Palletized">Palletized</SelectItem><SelectItem value="Non-Palletized">Non-Palletized</SelectItem></SelectContent>
-                        </Select>
-                      </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-200 hover:text-red-400" onClick={() => removeCORow(row.id)}><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-200 hover:text-red-400" onClick={() => setCoRows(coRows.filter(r => r.id !== row.id))}><Trash2 className="h-4 w-4" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="h-16 hover:bg-transparent">
-                    <TableCell colSpan={11}>
-                      <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto hover:bg-transparent" onClick={addCORow}>
+                    <TableCell colSpan={8}>
+                      <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto hover:bg-transparent" onClick={() => setCoRows([...coRows, { id: Math.random().toString(36).substr(2, 9), ps: 'PS', shippingLine: '', bookingNo: '', containerNo: '', atwStatus: 'PENDING', pod: '', cutOffDate: '', etd: '', sku: '', palletization: 'Palletized' }])}>
                         <Plus className="h-4 w-4" /> Add Row
                       </Button>
                     </TableCell>
@@ -650,7 +598,26 @@ export default function MyProduceDashboard() {
 
           <div className="p-8 border-t bg-gray-50/50 flex items-center justify-end gap-4">
             <Button variant="outline" onClick={() => setActiveView('loading-advice')} className="h-12 px-8 font-bold text-gray-400 border-gray-200 uppercase tracking-widest text-xs">CANCEL</Button>
-            <Button onClick={handleSubmitCOs} className="h-12 px-12 bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase tracking-widest text-xs">SUBMIT</Button>
+            <Button onClick={async () => {
+              if (!db || !selectedContractId) return;
+              const batch = writeBatch(db);
+              coRows.forEach(row => {
+                const itemRef = doc(db, `${CONTRACT_PATH}/${selectedContractId}/items`, row.id);
+                batch.set(itemRef, {
+                  itemId: row.id,
+                  ps: row.ps,
+                  shippingLines: row.shippingLine,
+                  bookingNumber: row.bookingNo,
+                  containerNo: row.containerNo,
+                  atwStatus: row.atwStatus,
+                  pod: row.pod,
+                  updatedAt: serverTimestamp()
+                }, { merge: true });
+              });
+              await batch.commit();
+              toast({ title: "COs Updated", description: "All cutting order allocations saved successfully." });
+              setActiveView('loading-advice');
+            }} className="h-12 px-12 bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase tracking-widest text-xs">SUBMIT</Button>
           </div>
         </div>
       </div>
@@ -662,39 +629,26 @@ export default function MyProduceDashboard() {
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm no-print">
         <div className="w-64">
           <Select value={weekFilter} onValueChange={setWeekFilter}>
-            <SelectTrigger className="bg-gray-50/50 border-gray-100">
-              <SelectValue placeholder="Select Week Number" />
-            </SelectTrigger>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Weeks</SelectItem>
-              {uniqueWeeks.map(w => (
-                <SelectItem key={w} value={w}>{w}</SelectItem>
-              ))}
+              {uniqueWeeks.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}
             </SelectContent>
           </Select>
         </div>
         <div className="w-64">
           <Select value={customerFilter} onValueChange={setCustomerFilter}>
-            <SelectTrigger className="bg-gray-50/50 border-gray-100">
-              <SelectValue placeholder="Select Customer" />
-            </SelectTrigger>
+            <SelectTrigger className="bg-gray-50/50 border-gray-100"><SelectValue placeholder="Select Customer" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Customers</SelectItem>
-              {customerMappings.map((c: any) => (
-                <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-              ))}
+              {customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}
             </SelectContent>
           </Select>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Bell className="h-5 w-5 text-gray-400 cursor-pointer" />
-          <HelpCircle className="h-5 w-5 text-gray-400 cursor-pointer" />
-          <div className="h-8 w-[1px] bg-gray-100 mx-2" />
+        <div className="ml-auto flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <div className="h-8 w-8 rounded-full bg-anflocor-green/10 flex items-center justify-center text-anflocor-green">
-              <User className="h-4 w-4" />
-            </div>
-            <span>COORDINATOR</span>
+            <div className="h-8 w-8 rounded-full bg-anflocor-green/10 flex items-center justify-center text-anflocor-green"><User className="h-4 w-4" /></div>
+            <span className="uppercase tracking-tight">COORDINATOR</span>
           </div>
         </div>
       </div>
@@ -702,61 +656,54 @@ export default function MyProduceDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center text-xs text-gray-400 gap-2 mb-1">
-            <span>Logistics</span>
-            <ChevronRight className="h-3 w-3" />
-            <span className="text-gray-900 font-medium">Loading Advice</span>
+            <span>Logistics</span><ChevronRight className="h-3 w-3" /><span className="text-gray-900 font-medium">Loading Advice</span>
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Loading Advice</h2>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" className="text-xs font-bold border-gray-200" onClick={() => { 
-            if (selectedContractId) setActiveView('edit-cutting-orders');
-            else toast({ variant: "destructive", title: "Select an LA", description: "Please open an advice record first." });
+            if (selectedContractId) {
+              setCoRows(contractItems.map((item: any) => ({
+                id: item.itemId || item.id,
+                ps: item.ps || 'PS',
+                shippingLine: item.shippingLines || '',
+                bookingNo: item.bookingNumber || '',
+                containerNo: item.containerNo || '',
+                atwStatus: item.atwStatus || 'PENDING',
+                pod: item.pod || '',
+                cutOffDate: item.cutOffDate || '',
+                etd: item.etd || '',
+                sku: item.specs || '',
+                palletization: item.palletized || 'Palletized'
+              })));
+              setActiveView('edit-cutting-orders');
+            } else {
+              toast({ variant: "destructive", title: "Select an LA", description: "Please select an advice record from the list first." });
+            }
           }}>CREATE/VIEW COS</Button>
           
           <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> NEW LA</Button>
-            </DialogTrigger>
+            <DialogTrigger asChild><Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> NEW LA</Button></DialogTrigger>
             <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden">
-              <div className="bg-white rounded-lg shadow-xl">
-                <div className="p-6 border-b">
-                  <DialogTitle className="text-xl font-bold">New Loading Advice</DialogTitle>
-                  <DialogDescription className="text-gray-500 mt-1 flex items-center gap-2">
-                    <Info className="h-4 w-4" /> Define customer details and multiple loading requirements below.
-                  </DialogDescription>
-                </div>
-
+              <div className="bg-white">
+                <div className="p-6 border-b"><DialogTitle className="text-xl font-bold">New Loading Advice</DialogTitle></div>
                 <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
                       <Select value={newLAHeader.customerName} onValueChange={(val) => setNewLAHeader({...newLAHeader, customerName: val})}>
-                        <SelectTrigger className="h-10">
-                          <SelectValue placeholder="Select Customer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customerMappings.map((c: any) => (
-                            <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-                          ))}
-                        </SelectContent>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+                        <SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-gray-400">Week No</Label>
                       <Select value={newLAHeader.weekNumber} onValueChange={(val) => setNewLAHeader({...newLAHeader, weekNumber: val})}>
-                        <SelectTrigger className="h-10">
-                          <SelectValue placeholder="Select Week" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {weekOptions.map(w => (
-                            <SelectItem key={w} value={w}>{w}</SelectItem>
-                          ))}
-                        </SelectContent>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Select Week" /></SelectTrigger>
+                        <SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
                   </div>
-
                   <div className="border rounded-lg overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-gray-50">
@@ -765,12 +712,9 @@ export default function MyProduceDashboard() {
                           <TableHead className="text-[10px] font-black uppercase">POL</TableHead>
                           <TableHead className="text-[10px] font-black uppercase">POD</TableHead>
                           <TableHead className="text-[10px] font-black uppercase">Shipping Line</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase">Cut-off</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase">ETD</TableHead>
                           <TableHead className="text-[10px] font-black uppercase text-center">Vans</TableHead>
                           <TableHead className="text-[10px] font-black uppercase">SKU</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase">Palletization</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase text-right w-[50px]">Actions</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -778,52 +722,36 @@ export default function MyProduceDashboard() {
                           <TableRow key={row.id}>
                             <TableCell className="p-2">
                               <Select value={row.farm} onValueChange={(val) => updateLARow(row.id, { farm: val })}>
-                                <SelectTrigger className="h-8 text-xs min-w-[100px] border-gray-200"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-8 text-xs min-w-[100px]"><SelectValue /></SelectTrigger>
                                 <SelectContent><SelectItem value="TADECO">TADECO</SelectItem><SelectItem value="ANFLOCOR">ANFLOCOR</SelectItem></SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell className="p-2">
                               <Select value={row.pol} onValueChange={(val) => updateLARow(row.id, { pol: val })}>
-                                <SelectTrigger className="h-8 text-xs min-w-[120px] border-gray-200"><SelectValue placeholder="POL" /></SelectTrigger>
+                                <SelectTrigger className="h-8 text-xs min-w-[120px]"><SelectValue /></SelectTrigger>
                                 <SelectContent>{polMappings.map((p: any) => (<SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>))}</SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell className="p-2">
                               <Select value={row.pod} onValueChange={(val) => updateLARow(row.id, { pod: val })}>
-                                <SelectTrigger className="h-8 text-xs min-w-[120px] border-gray-200"><SelectValue placeholder="POD" /></SelectTrigger>
+                                <SelectTrigger className="h-8 text-xs min-w-[120px]"><SelectValue /></SelectTrigger>
                                 <SelectContent>{podMappings.map((p: any) => (<SelectItem key={p.id} value={p.portName}>{p.portName}</SelectItem>))}</SelectContent>
                               </Select>
                             </TableCell>
-                            <TableCell className="p-2">
-                              <Input className="h-8 text-xs border-gray-200 min-w-[100px]" placeholder="SL" value={row.shippingLine} onChange={(e) => updateLARow(row.id, { shippingLine: e.target.value })}/>
-                            </TableCell>
-                            <TableCell className="p-2"><Input type="date" className="h-8 text-xs border-gray-200" value={row.cutOffDate} onChange={(e) => updateLARow(row.id, { cutOffDate: e.target.value })}/></TableCell>
-                            <TableCell className="p-2"><Input type="date" className="h-8 text-xs border-gray-200" value={row.etd} onChange={(e) => updateLARow(row.id, { etd: e.target.value })}/></TableCell>
+                            <TableCell className="p-2"><Input className="h-8 text-xs border-gray-200" value={row.shippingLine} onChange={(e) => updateLARow(row.id, { shippingLine: e.target.value })}/></TableCell>
                             <TableCell className="p-2"><Input type="number" className="h-8 text-xs border-gray-200 w-16 text-center" value={row.totalVans} onChange={(e) => updateLARow(row.id, { totalVans: parseInt(e.target.value) || 0 })}/></TableCell>
-                            <TableCell className="p-2"><Input className="h-8 text-xs border-gray-200 min-w-[100px]" placeholder="SKU" value={row.skuCode} onChange={(e) => updateLARow(row.id, { skuCode: e.target.value })}/></TableCell>
-                            <TableCell className="p-2">
-                              <Select value={row.palletizedType} onValueChange={(val: any) => updateLARow(row.id, { palletizedType: val })}>
-                                <SelectTrigger className="h-8 text-xs min-w-[120px] border-gray-200"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="Palletized">Palletized</SelectItem><SelectItem value="Non Palletized">Non Palletized</SelectItem></SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="p-2 text-right">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => removeLARow(row.id)}><Trash2 className="h-4 w-4" /></Button>
-                            </TableCell>
+                            <TableCell className="p-2"><Input className="h-8 text-xs border-gray-200" value={row.skuCode} onChange={(e) => updateLARow(row.id, { skuCode: e.target.value })}/></TableCell>
+                            <TableCell className="p-2 text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => removeLARow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
-
-                  <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto" onClick={addLARow}>
-                    <Plus className="h-4 w-4" /> Add Row
-                  </Button>
+                  <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto" onClick={addLARow}><Plus className="h-4 w-4" /> Add Row</Button>
                 </div>
-
-                <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3 rounded-b-lg">
-                  <Button variant="ghost" onClick={() => setIsNewLAOpen(false)} className="text-gray-400 font-bold uppercase text-[10px] tracking-wider">CANCEL</Button>
-                  <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase text-[10px] tracking-widest px-8" onClick={handleSubmitBatch}>SUBMIT BATCH</Button>
+                <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setIsNewLAOpen(false)} className="text-gray-400 font-bold uppercase text-[10px]">CANCEL</Button>
+                  <Button className="bg-anflocor-green text-white font-bold uppercase text-[10px] px-8" onClick={handleSubmitBatch}>SUBMIT BATCH</Button>
                 </div>
               </div>
             </DialogContent>
@@ -832,59 +760,35 @@ export default function MyProduceDashboard() {
       </div>
 
       <Card className="border-gray-200 shadow-sm overflow-hidden bg-white">
-        <CardHeader className="bg-white border-b py-3 px-6 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Loading Advice Manifests</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs font-bold gap-1"><Filter className="h-3 w-3" /> Filter</Button>
-          </div>
-        </CardHeader>
+        <CardHeader className="bg-white border-b py-3 px-6"><CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Loading Advice Manifests</CardTitle></CardHeader>
         <Table>
           <TableHeader className="bg-gray-100/50">
-            <TableRow className="h-10 hover:bg-transparent">
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">WEEK NO.</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">CUSTOMER</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">FARM</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">POL</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">POD</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">SL</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">CUT-OFF</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">ETD</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500 text-center">VANS</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">SKU</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">PALLETIZED</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500">STATUS</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-500 text-right">ACTIONS</TableHead>
+            <TableRow>
+              <TableHead className="text-[10px] font-black uppercase">WEEK</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">CUSTOMER</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">FARM</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">POL</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">POD</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-center">VANS</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">STATUS</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-right">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contractsLoading ? (
-              <TableRow><TableCell colSpan={13} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-            ) : filteredData.length === 0 ? (
-              <TableRow><TableCell colSpan={13} className="h-48 text-center text-gray-400 font-medium">No records found.</TableCell></TableRow>
-            ) : filteredData.map((c: any) => (
-              <TableRow key={c.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group" onClick={() => { setSelectedContractId(c.id); setActiveView('loading-advice'); }}>
-                <TableCell className="font-bold text-gray-900">{c.weekNumber || 'N/A'}</TableCell>
+              <TableRow><TableCell colSpan={8} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+            ) : filteredContracts.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="h-48 text-center text-gray-400">No records found.</TableCell></TableRow>
+            ) : filteredContracts.map((c: any) => (
+              <TableRow key={c.id} className={cn("hover:bg-gray-50/80 cursor-pointer h-16 group", selectedContractId === c.id && "bg-green-50/50 border-l-4 border-l-anflocor-green")} onClick={() => setSelectedContractId(c.id)}>
+                <TableCell className="font-bold text-gray-900">{c.weekNumber}</TableCell>
                 <TableCell className="text-sm font-bold text-gray-700">{c.customerName}</TableCell>
-                <TableCell className="text-xs font-medium text-gray-600">{c.farm || 'TADECO'}</TableCell>
-                <TableCell className="text-xs text-gray-600">{c.pol || '--'}</TableCell>
-                <TableCell className="text-xs font-bold text-gray-900">{c.pod || '--'}</TableCell>
-                <TableCell className="text-xs text-gray-500 font-medium">{c.shippingLine || 'TBA'}</TableCell>
-                <TableCell className="text-[10px] text-gray-400">{c.cutOffDate || '--'}</TableCell>
-                <TableCell className="text-[10px] text-gray-900 font-medium">{c.etd || 'TBA'}</TableCell>
-                <TableCell className="text-sm font-black text-center text-indigo-700">{c.totalVans || 0}</TableCell>
-                <TableCell className="text-[10px] font-bold text-gray-500">{c.skuSummary || '--'}</TableCell>
-                <TableCell><Badge variant="outline" className="text-[9px] px-1 h-4">{c.palletizedType || 'Palletized'}</Badge></TableCell>
-                <TableCell>
-                  <Badge className={cn(
-                    "text-[10px] font-black",
-                    c.status === 'completed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                  )} variant="outline">
-                    {c.status?.toUpperCase()}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"><ChevronRight className="h-4 w-4" /></Button>
-                </TableCell>
+                <TableCell className="text-xs font-medium text-gray-600">{c.farm}</TableCell>
+                <TableCell className="text-xs text-gray-600">{c.pol}</TableCell>
+                <TableCell className="text-xs font-bold text-gray-900">{c.pod}</TableCell>
+                <TableCell className="text-sm font-black text-center text-indigo-700">{c.totalVans}</TableCell>
+                <TableCell><Badge className={cn("text-[10px] font-black", c.status === 'completed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")} variant="outline">{c.status?.toUpperCase()}</Badge></TableCell>
+                <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"><ChevronRight className="h-4 w-4" /></Button></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -897,40 +801,103 @@ export default function MyProduceDashboard() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm no-print">
         <div className="w-64">
-          <Select value={weekFilter} onValueChange={setWeekFilter}>
-            <SelectTrigger className="bg-gray-50/50 border-gray-100">
-              <SelectValue placeholder="Select Week Number" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Weeks</SelectItem>
-              {weekOptions.map(w => (
-                <SelectItem key={w} value={w}>{w}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Select value={weekFilter} onValueChange={setWeekFilter}><SelectTrigger><SelectValue placeholder="Week" /></SelectTrigger><SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent></Select>
+        </div>
+        <div className="ml-auto"><Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold text-xs" onClick={() => setIsNewBookingOpen(true)}><Plus className="mr-2 h-4 w-4" /> NEW BOOKING</Button></div>
+      </div>
+
+      <Dialog open={isNewBookingOpen} onOpenChange={setIsNewBookingOpen}>
+        <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden">
+          <div className="bg-white">
+            <div className="p-4 border-b">
+               <div className="flex items-start gap-3 bg-gray-50 p-4 border-l-4 border-green-600 rounded-r-md">
+                 <Info className="h-5 w-5 text-green-700 shrink-0 mt-0.5" /><p className="text-sm font-medium text-gray-600">Please ensure all manifest details match the physical Bill of Lading for verification.</p>
+               </div>
+            </div>
+            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
+                  <Select value={newBookingHeader.customerName} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, customerName: val})}>
+                    <SelectTrigger className="h-12 bg-gray-50 border-gray-200"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+                    <SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
+                  <Select value={newBookingHeader.weekNumber} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, weekNumber: val})}>
+                    <SelectTrigger className="h-12 bg-gray-50 border-gray-200"><SelectValue placeholder="Select Week" /></SelectTrigger>
+                    <SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Table>
+                <TableHeader className="bg-gray-100/80">
+                  <TableRow><TableHead className="w-12 text-[10px] font-black uppercase text-gray-400">#</TableHead><TableHead className="text-[10px] font-black uppercase text-gray-400">Booking No.</TableHead><TableHead className="text-[10px] font-black uppercase text-gray-400">Shipping Line</TableHead><TableHead className="text-[10px] font-black uppercase text-gray-400">Vessel</TableHead><TableHead className="text-[10px] font-black uppercase text-gray-400">POD</TableHead><TableHead className="w-12 text-right"></TableHead></TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bookingRows.map((row, index) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="text-center font-bold text-gray-400">{index + 1}</TableCell>
+                      <TableCell><Input placeholder="Booking #" value={row.bookingNo} onChange={(e) => updateBookingRow(row.id, { bookingNo: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input placeholder="Line" value={row.shippingLine} onChange={(e) => updateBookingRow(row.id, { shippingLine: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input placeholder="Vessel" value={row.vesselName} onChange={(e) => updateBookingRow(row.id, { vesselName: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input placeholder="POD" value={row.pod} onChange={(e) => updateBookingRow(row.id, { pod: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => removeBookingRow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2" onClick={addBookingRow}><Plus className="h-4 w-4" /> Add Row</Button>
+            </div>
+            <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3">
+              <Button variant="ghost" onClick={() => setIsNewBookingOpen(false)} className="text-gray-400 font-bold uppercase text-[10px]">CANCEL</Button>
+              <Button className="bg-[#1B4D3E] text-white font-bold uppercase text-[10px] px-8" onClick={handleSubmitBookingBatch}>SUBMIT BATCH</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Card className="border-gray-200 shadow-sm overflow-hidden bg-white">
+        <CardHeader className="bg-white border-b py-3 px-6"><CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Booking Manifests</CardTitle></CardHeader>
+        <Table>
+          <TableHeader className="bg-gray-50/50">
+            <TableRow><TableHead className="text-[10px] font-black uppercase">Booking No</TableHead><TableHead className="text-[10px] font-black uppercase">Shipping Line</TableHead><TableHead className="text-[10px] font-black uppercase">Vessel</TableHead><TableHead className="text-[10px] font-black uppercase">POD</TableHead><TableHead className="text-right"></TableHead></TableRow>
+          </TableHeader>
+          <TableBody>
+            {bookingsLoading ? (
+              <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+            ) : bookings.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400">No bookings found.</TableCell></TableRow>
+            ) : bookings.map((b: any) => (
+              <TableRow key={b.id} className="h-16">
+                <TableCell className="font-bold text-[#1B4D3E]">{b.bookingNumber}</TableCell>
+                <TableCell className="text-sm font-medium text-gray-700">{b.shippingLine}</TableCell>
+                <TableCell className="text-sm text-gray-600 italic">{b.vesselName}</TableCell>
+                <TableCell className="text-sm font-black text-gray-800 uppercase">{b.pod}</TableCell>
+                <TableCell className="text-right"><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+
+  const renderTripsView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm no-print">
+        <div className="w-64">
+          <Select value={weekFilter} onValueChange={setWeekFilter}><SelectTrigger><SelectValue placeholder="Select Week Number" /></SelectTrigger><SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent></Select>
         </div>
         <div className="w-64">
-          <Select value={customerFilter} onValueChange={setCustomerFilter}>
-            <SelectTrigger className="bg-gray-50/50 border-gray-100">
-              <SelectValue placeholder="Select Customer" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Customers</SelectItem>
-              {customerMappings.map((c: any) => (
-                <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Select value={customerFilter} onValueChange={setCustomerFilter}><SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger><SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent></Select>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Bell className="h-5 w-5 text-gray-400 cursor-pointer" />
-          <HelpCircle className="h-5 w-5 text-gray-400 cursor-pointer" />
-          <div className="h-8 w-[1px] bg-gray-100 mx-2" />
+        <div className="ml-auto flex items-center gap-4">
+          <Bell className="h-5 w-5 text-gray-400 cursor-pointer" /><HelpCircle className="h-5 w-5 text-gray-400 cursor-pointer" />
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <div className="h-8 w-8 rounded-full bg-anflocor-green/10 flex items-center justify-center text-anflocor-green">
-              <User className="h-4 w-4" />
-            </div>
-            <span>COORDINATOR</span>
+            <div className="h-8 w-8 rounded-full bg-anflocor-green/10 flex items-center justify-center text-anflocor-green"><User className="h-4 w-4" /></div>
+            <span className="uppercase tracking-tight">COORDINATOR</span>
           </div>
         </div>
       </div>
@@ -938,209 +905,149 @@ export default function MyProduceDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center text-xs text-gray-400 gap-2 mb-1">
-            <span>Logistics</span>
-            <ChevronRight className="h-3 w-3" />
-            <span className="text-gray-900 font-medium">Bookings</span>
+            <span>Logistics</span><ChevronRight className="h-3 w-3" /><span className="text-gray-900 font-medium">Trips</span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900">Bookings</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Trips</h2>
         </div>
         <div className="flex items-center gap-3">
-          <Dialog open={isNewBookingOpen} onOpenChange={setIsNewBookingOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> NEW BOOKING</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden">
-              <div className="bg-white">
-                <div className="p-4 border-b">
-                   <div className="flex items-start gap-3 bg-gray-50 p-4 border-l-4 border-green-600 rounded-r-md">
-                     <Info className="h-5 w-5 text-green-700 shrink-0 mt-0.5" />
-                     <p className="text-sm font-medium text-gray-600">Please ensure all manifest details match the physical Bill of Lading for verification.</p>
-                   </div>
-                </div>
-
-                <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
-                      <Select value={newBookingHeader.customerName} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, customerName: val})}>
-                        <SelectTrigger className="h-12 bg-gray-50 border-gray-200">
-                          <SelectValue placeholder="Select Customer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customerMappings.map((c: any) => (
-                            <SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
-                      <Select value={newBookingHeader.weekNumber} onValueChange={(val) => setNewBookingHeader({...newBookingHeader, weekNumber: val})}>
-                        <SelectTrigger className="h-12 bg-gray-50 border-gray-200">
-                          <SelectValue placeholder="Select Week" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {weekOptions.map(w => (
-                            <SelectItem key={w} value={w}>{w}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="border rounded-xl overflow-hidden shadow-sm">
-                    <Table>
-                      <TableHeader className="bg-gray-100/80">
-                        <TableRow className="h-12">
-                          <TableHead className="w-12 text-[10px] font-black uppercase text-gray-400 text-center">#</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase text-gray-400">Booking No.</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase text-gray-400">Shipping Line</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase text-gray-400">Vessel</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase text-gray-400">POD</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase text-gray-400">Attachments</TableHead>
-                          <TableHead className="w-12 text-[10px] font-black uppercase text-gray-400 text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {bookingRows.map((row, index) => (
-                          <TableRow key={row.id} className="h-16 border-b border-gray-100">
-                            <TableCell className="text-center font-bold text-gray-400">{index + 1}</TableCell>
-                            <TableCell>
-                              <Input 
-                                placeholder="Enter #" 
-                                value={row.bookingNo} 
-                                onChange={(e) => updateBookingRow(row.id, { bookingNo: e.target.value })}
-                                className="h-10 border border-gray-200 bg-white placeholder:text-gray-300 font-medium"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Select value={row.shippingLine} onValueChange={(val) => updateBookingRow(row.id, { shippingLine: val })}>
-                                <SelectTrigger className="h-10 border border-gray-200 bg-white text-gray-700 font-medium">
-                                  <SelectValue placeholder="Select" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Maersk">Maersk</SelectItem>
-                                  <SelectItem value="CMA CGM">CMA CGM</SelectItem>
-                                  <SelectItem value="MSC">MSC</SelectItem>
-                                  <SelectItem value="OOCL">OOCL</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                               <Select value={row.vesselName} onValueChange={(val) => updateBookingRow(row.id, { vesselName: val })}>
-                                <SelectTrigger className="h-10 border border-gray-200 bg-white text-gray-700 font-medium">
-                                  <SelectValue placeholder="Select" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="V-MSC-99">V-MSC-99</SelectItem>
-                                  <SelectItem value="HG SKYLINE / 0XWBFN1NC">HG SKYLINE / 0XWBFN1NC</SelectItem>
-                                  <SelectItem value="V-MAERSK-A1">V-MAERSK-A1</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                               <Input 
-                                placeholder="Port" 
-                                value={row.pod} 
-                                onChange={(e) => updateBookingRow(row.id, { pod: e.target.value })}
-                                className="h-10 border border-gray-200 bg-white placeholder:text-gray-300 font-medium"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="sm" className="text-green-700 font-bold text-[10px] flex items-center gap-1 uppercase hover:bg-green-50">
-                                <Upload className="h-3 w-3" /> Upload
-                              </Button>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => removeBookingRow(row.id)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2 p-0 h-auto hover:bg-transparent" onClick={addBookingRow}>
-                    <Plus className="h-4 w-4" /> Add Row
-                  </Button>
-                </div>
-
-                <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3">
-                  <Button variant="ghost" onClick={() => setIsNewBookingOpen(false)} className="text-gray-400 font-bold uppercase text-[10px] tracking-wider">CANCEL</Button>
-                  <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold uppercase text-[10px] tracking-widest px-8" onClick={handleSubmitBookingBatch}>SUBMIT BATCH</Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" className="text-xs font-bold border-gray-200">CREATE/VIEW TRIPS</Button>
+          <Button className="bg-[#1B4D3E] hover:bg-[#163a2f] text-white font-bold text-xs" onClick={() => setIsNewTripOpen(true)}><Plus className="mr-2 h-4 w-4" /> NEW TRIP</Button>
         </div>
       </div>
+
+      <Dialog open={isNewTripOpen} onOpenChange={setIsNewTripOpen}>
+        <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden">
+          <div className="bg-white">
+            <div className="p-4 border-b">
+               <div className="flex items-start gap-3 bg-gray-50 p-4 border-l-4 border-green-600 rounded-r-md">
+                 <Info className="h-5 w-5 text-green-700 shrink-0 mt-0.5" /><p className="text-sm font-medium text-gray-600">Please ensure all manifest details match the physical delivery receipt for verification.</p>
+               </div>
+            </div>
+            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</Label>
+                  <Select value={newTripHeader.customerName} onValueChange={(val) => setNewTripHeader({...newTripHeader, customerName: val})}>
+                    <SelectTrigger className="h-12 bg-gray-50 border-gray-200"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+                    <SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Week No</Label>
+                  <Select value={newTripHeader.weekNumber} onValueChange={(val) => setNewTripHeader({...newTripHeader, weekNumber: val})}>
+                    <SelectTrigger className="h-12 bg-gray-50 border-gray-200"><SelectValue placeholder="Select Week" /></SelectTrigger>
+                    <SelectContent>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Table>
+                <TableHeader className="bg-gray-100/80">
+                  <TableRow>
+                    <TableHead className="w-12 text-[10px] font-black uppercase text-gray-400">#</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Van No.</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">PM No.</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Container No.</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Seal No.</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Driver</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">ATW Released</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase text-gray-400">Withdrawn</TableHead>
+                    <TableHead className="w-12 text-right"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tripRows.map((row, index) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="text-center font-bold text-gray-400">{index + 1}</TableCell>
+                      <TableCell><Input value={row.vanNo} onChange={(e) => updateTripRow(row.id, { vanNo: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input value={row.pmNo} onChange={(e) => updateTripRow(row.id, { pmNo: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input value={row.containerNo} onChange={(e) => updateTripRow(row.id, { containerNo: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input value={row.sealNo} onChange={(e) => updateTripRow(row.id, { sealNo: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input value={row.driver} onChange={(e) => updateTripRow(row.id, { driver: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input value={row.atwReleased} onChange={(e) => updateTripRow(row.id, { atwReleased: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell><Input value={row.withdrawn} onChange={(e) => updateTripRow(row.id, { withdrawn: e.target.value })} className="h-10"/></TableCell>
+                      <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => removeTripRow(row.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Button variant="ghost" className="text-anflocor-green text-xs font-bold gap-2" onClick={addTripRow}><Plus className="h-4 w-4" /> Add Row</Button>
+            </div>
+            <div className="p-6 border-t bg-gray-50 flex items-center justify-end gap-3">
+              <Button variant="ghost" onClick={() => setIsNewTripOpen(false)} className="text-gray-400 font-bold uppercase text-[10px]">CANCEL</Button>
+              <Button className="bg-[#1B4D3E] text-white font-bold uppercase text-[10px] px-8" onClick={handleSubmitTripBatch}>SUBMIT BATCH</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="bg-white border-gray-100 shadow-sm relative overflow-hidden group">
           <CardContent className="p-8">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Active Bookings</span>
-              <div className="bg-gray-50 p-2 rounded-lg"><Ship className="h-5 w-5 text-gray-300" /></div>
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Active Trips</span>
+              <div className="bg-gray-50 p-2 rounded-lg"><Truck className="h-5 w-5 text-gray-300" /></div>
             </div>
             <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-black text-gray-900">{bookings.length}</span>
-              <span className="text-xs font-bold text-green-500 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> ~12%</span>
+              <span className="text-4xl font-black text-gray-900">{trips.length}</span>
+              <span className="text-xs font-bold text-green-500 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> +12%</span>
             </div>
             <p className="text-xs text-gray-500 font-medium mt-2">Currently in transit or processing</p>
           </CardContent>
-          <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] rotate-[15deg] transition-transform group-hover:scale-110 duration-500"><Ship className="h-32 w-32" /></div>
+          <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] rotate-[15deg] transition-transform group-hover:scale-110 duration-500"><Truck className="h-32 w-32" /></div>
         </Card>
         <Card className="bg-white border-gray-100 shadow-sm relative overflow-hidden group">
           <CardContent className="p-8">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Containers Pending</span>
-              <div className="bg-gray-50 p-2 rounded-lg"><Box className="h-5 w-5 text-gray-300" /></div>
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Trips Pending</span>
+              <div className="bg-gray-50 p-2 rounded-lg"><Clock className="h-5 w-5 text-gray-300" /></div>
             </div>
             <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-black text-gray-900">89</span>
-              <span className="text-[10px] font-black px-2 py-0.5 bg-red-100 text-red-600 rounded-full flex items-center gap-1"><AlertCircle className="h-3 w-3" /> CRITICAL</span>
+              <span className="text-4xl font-black text-gray-900">28</span>
             </div>
-            <p className="text-xs text-gray-500 font-medium mt-2">Awaiting port assignment</p>
+            <p className="text-xs text-gray-500 font-medium mt-2">Updated 5m ago</p>
           </CardContent>
-          <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] rotate-[15deg] transition-transform group-hover:scale-110 duration-500"><Box className="h-32 w-32" /></div>
+          <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] rotate-[15deg] transition-transform group-hover:scale-110 duration-500"><History className="h-32 w-32" /></div>
         </Card>
       </div>
 
       <Card className="border-gray-200 shadow-sm overflow-hidden bg-white">
         <CardHeader className="bg-white border-b py-3 px-6 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Booking Manifests</CardTitle>
+          <CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Recent Trip Manifests</CardTitle>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black gap-1 uppercase tracking-wider"><Filter className="h-3 w-3" /> Filter</Button>
-            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black gap-1 uppercase tracking-wider"><Download className="h-3 w-3" /> Export</Button>
+            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase"><Filter className="h-3 w-3 mr-1" /> Filter</Button>
+            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase"><Download className="h-3 w-3 mr-1" /> Export</Button>
           </div>
         </CardHeader>
         <Table>
           <TableHeader className="bg-gray-50/50">
-            <TableRow className="h-10 hover:bg-transparent">
-              <TableHead className="text-[10px] font-black uppercase text-gray-400">Booking No</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400">Shipping Line</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400">Vessel</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400">POD</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 text-right">Actions</TableHead>
+            <TableRow>
+              <TableHead className="w-12"><Checkbox /></TableHead>
+              <TableHead className="text-[10px] font-black uppercase">VAN NO.</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">PM NO.</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">CONTAINER NO.</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">SEAL NO.</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">DRIVER</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">DATE ATW RELEASED</TableHead>
+              <TableHead className="text-[10px] font-black uppercase">DATE WITHDRAWN</TableHead>
+              <TableHead className="w-12 text-right">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {bookingsLoading ? (
-              <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-            ) : bookings.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="h-48 text-center text-gray-400 font-medium">No booking manifests found.</TableCell></TableRow>
-            ) : bookings.map((b: any) => (
-              <TableRow key={b.id} className="hover:bg-gray-50/80 cursor-pointer h-16 group">
-                <TableCell className="font-bold text-[#1B4D3E] underline decoration-transparent hover:decoration-[#1B4D3E] transition-all">
-                  {b.bookingNumber || 'N/A'}
-                </TableCell>
-                <TableCell className="text-sm font-medium text-gray-700">{b.shippingLine || '--'}</TableCell>
-                <TableCell className="text-sm text-gray-600 italic">{b.vesselName || '--'}</TableCell>
-                <TableCell className="text-sm font-black text-gray-800 uppercase tracking-tight">{b.pod || '--'}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900"><MoreVertical className="h-4 w-4" /></Button>
-                </TableCell>
+            {tripsLoading ? (
+              <TableRow><TableCell colSpan={9} className="h-48 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
+            ) : trips.length === 0 ? (
+              <TableRow><TableCell colSpan={9} className="h-48 text-center text-gray-400">No trip manifests found.</TableCell></TableRow>
+            ) : trips.map((t: any) => (
+              <TableRow key={t.id} className="h-16 group hover:bg-gray-50/50">
+                <TableCell><Checkbox /></TableCell>
+                <TableCell className="font-bold text-gray-900">{t.vanNo}</TableCell>
+                <TableCell className="text-sm text-gray-500">{t.pmNo}</TableCell>
+                <TableCell className="font-bold text-gray-900">{t.containerNo}</TableCell>
+                <TableCell className="text-sm text-gray-500">{t.sealNo}</TableCell>
+                <TableCell className="text-sm font-medium text-gray-700">{t.driver}</TableCell>
+                <TableCell className="text-xs text-gray-400 font-medium">{t.dateAtwReleased}</TableCell>
+                <TableCell className="text-xs text-gray-400 font-medium">{t.dateWithdrawn || '--'}</TableCell>
+                <TableCell className="text-right"><Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -1153,38 +1060,21 @@ export default function MyProduceDashboard() {
     if (activeView === 'dashboard') {
       return (
         <section className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="flex items-center space-x-2 mb-6">
-            <div className="h-8 w-1 bg-anflocor-green rounded-full" />
-            <h2 className="text-xl font-bold text-gray-800">Production Overview</h2>
-          </div>
+          <div className="flex items-center space-x-2 mb-6"><div className="h-8 w-1 bg-anflocor-green rounded-full" /><h2 className="text-xl font-bold text-gray-800">Production Overview</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card className="bg-white border-l-4 border-l-indigo-700">
-              <CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Pending manifests</CardDescription></CardHeader>
-              <CardContent><p className="text-3xl font-black text-gray-900">{contracts.filter(c => c.status === 'pending').length}</p></CardContent>
-            </Card>
-            <Card className="bg-white border-l-4 border-l-emerald-600">
-              <CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Mappings</CardDescription></CardHeader>
-              <CardContent><p className="text-3xl font-black text-gray-900">{materialMappings.length + customerMappings.length}</p></CardContent>
-            </Card>
-            <Card className="bg-white border-l-4 border-l-amber-600">
-              <CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Weeks</CardDescription></CardHeader>
-              <CardContent><p className="text-3xl font-black text-gray-900">{uniqueWeeks.length}</p></CardContent>
-            </Card>
+            <Card className="bg-white border-l-4 border-l-indigo-700"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Pending manifests</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{contracts.filter(c => c.status === 'pending').length}</p></CardContent></Card>
+            <Card className="bg-white border-l-4 border-l-emerald-600"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Bookings</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{bookings.length}</p></CardContent></Card>
+            <Card className="bg-white border-l-4 border-l-amber-600"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Trips</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{trips.length}</p></CardContent></Card>
           </div>
-          <Card className="border-gray-200 shadow-sm bg-white overflow-hidden">
-            <CardContent className="p-12 flex flex-col items-center justify-center text-gray-400"><BarChart3 className="h-16 w-16 opacity-10 mb-4" /><p className="text-sm font-medium">Production statistics will appear here.</p></CardContent>
-          </Card>
+          <Card className="border-gray-200 shadow-sm bg-white overflow-hidden"><CardContent className="p-12 flex flex-col items-center justify-center text-gray-400"><BarChart3 className="h-16 w-16 opacity-10 mb-4" /><p className="text-sm font-medium">Production statistics will appear here.</p></CardContent></Card>
         </section>
       );
     }
-
     if (activeView === 'loading-advice') return renderLoadingAdviceView();
     if (activeView === 'edit-cutting-orders') return renderEditCuttingOrders();
     if (activeView === 'bookings') return renderBookingsView();
-
-    return (
-      <div className="p-12 text-center text-gray-400">View implementation pending.</div>
-    );
+    if (activeView === 'trips') return renderTripsView();
+    return <div className="p-12 text-center text-gray-400">View implementation pending.</div>;
   };
 
   const currentUserLabel = user?.displayName || user?.email?.split('@')[0] || 'User';
@@ -1194,12 +1084,13 @@ export default function MyProduceDashboard() {
       <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0 shadow-xl no-print">
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
-          <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", (activeView === 'loading-advice' || activeView === 'edit-cutting-orders') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
-          <Button variant="ghost" onClick={() => setActiveView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'bookings' && "bg-white/10 shadow-inner")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
-          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10 transition-all", activeView === 'configuration' && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
+          <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10 shadow-inner")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
+          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", (activeView === 'loading-advice' || activeView === 'edit-cutting-orders') && "bg-white/10 shadow-inner")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
+          <Button variant="ghost" onClick={() => setActiveView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10 shadow-inner")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
+          <Button variant="ghost" onClick={() => setActiveView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10 shadow-inner")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
+          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'configuration' && "bg-white/10 shadow-inner")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
-        <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400 transition-colors"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
+        <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
       </aside>
       <main className="flex-1 overflow-y-auto p-8 print:p-0">
         <header className="mb-8 flex justify-between items-end border-b pb-6 no-print">
@@ -1208,7 +1099,8 @@ export default function MyProduceDashboard() {
               {activeView === 'dashboard' ? 'Dashboard' : 
                activeView === 'loading-advice' ? 'Loading Advice' :
                activeView === 'edit-cutting-orders' ? 'Edit Cutting Orders' : 
-               activeView === 'bookings' ? 'Bookings' : 'System Overview'}
+               activeView === 'bookings' ? 'Bookings' : 
+               activeView === 'trips' ? 'Trips' : 'System Overview'}
             </h1>
             <p className="text-gray-500 font-semibold mt-1">TADECO Agricultural Production Portal</p>
           </div>
