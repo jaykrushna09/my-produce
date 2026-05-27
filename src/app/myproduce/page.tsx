@@ -166,11 +166,6 @@ interface PalletItem {
   qty: string;
 }
 
-interface VerificationPerson {
-  name: string;
-  role: string;
-}
-
 export default function MyProduceDashboard() {
   const router = useRouter();
   const db = useFirestore();
@@ -517,64 +512,96 @@ export default function MyProduceDashboard() {
         </Table>
       </div>
 
-      {/* Start Transfer Modal */}
+      {/* Start Transfer Modal Redesigned */}
       <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
-        <DialogContent className="max-w-[500px] p-0 overflow-hidden bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-[700px] p-0 overflow-hidden bg-white border-none shadow-2xl">
           <div className="p-6 flex justify-between items-center border-b">
-            <div>
-              <DialogTitle className="text-lg font-bold text-gray-900">Start Transfer</DialogTitle>
-              <DialogDescription className="text-xs font-medium text-gray-400 mt-0.5">Initiating container movement to port</DialogDescription>
-            </div>
+            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">
+              Start Transfer - {selectedTripForTransfer?.vanNo || 'N/A'}
+            </DialogTitle>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsTransferModalOpen(false)}>
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </Button>
           </div>
           
-          <div className="p-8 space-y-6">
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-               <div>
-                  <Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">CONTAINER NO</Label>
-                  <span className="text-sm font-black text-gray-900 uppercase">{selectedTripForTransfer?.containerNo || 'N/A'}</span>
-               </div>
-               <div className="text-right">
-                  <Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">POD</Label>
-                  <Badge className="bg-anflocor-green text-white font-bold">{selectedTripForTransfer?.pod || 'SHA'}</Badge>
-               </div>
+          <div className="p-8 grid grid-cols-2 gap-10">
+            {/* Left Column */}
+            <div className="space-y-8">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">INBOUND DRIVER NAME</Label>
+                <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-200" />
+              </div>
+
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">INSPECTION CHECKLIST</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center space-x-3">
+                    <Checkbox id="temp" className="border-gray-300" />
+                    <label htmlFor="temp" className="text-sm font-medium text-gray-600">Temperature</label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Checkbox id="leaks" className="border-gray-300" />
+                    <label htmlFor="leaks" className="text-sm font-medium text-gray-600">No Leaks</label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Checkbox id="drain" className="border-gray-300" />
+                    <label htmlFor="drain" className="text-sm font-medium text-gray-600">Check Drain Plug</label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Checkbox id="odor" className="border-gray-300" />
+                    <label htmlFor="odor" className="text-sm font-medium text-gray-600">No Odor</label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">OUTBOUND DRIVER NAME</Label>
+                <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-200" />
+              </div>
+
+              <div className="space-y-4 pt-4 border-t">
+                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">DOCUMENT ACTIONS</Label>
+                <div className="flex gap-4">
+                  <Button 
+                    className="flex-1 h-12 bg-black text-white font-bold text-xs uppercase tracking-widest gap-2"
+                    onClick={() => { setIsTransferModalOpen(false); setIsVlsModalOpen(true); }}
+                  >
+                    <Plus className="h-4 w-4" /> CREATE VLS
+                  </Button>
+                  <Button variant="outline" className="flex-1 h-12 border-gray-200 font-bold text-xs uppercase tracking-widest gap-2">
+                    <Plus className="h-4 w-4" /> CREATE DR
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-4">
-               <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">GATE PASS NUMBER</Label>
-                  <Input placeholder="Enter GP-XXXXX" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
-               </div>
-
-               <div className="space-y-3">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">SEAL VERIFICATION</Label>
-                  <div className="flex items-center space-x-3 p-3 bg-gray-50/50 border border-gray-100 rounded-lg">
-                    <Checkbox id="sealVerify" className="border-gray-300 h-4 w-4 rounded-sm" />
-                    <label htmlFor="sealVerify" className="text-sm font-medium text-gray-600 cursor-pointer">I confirm the seal is intact and matches the manifest.</label>
+            {/* Right Column */}
+            <div className="space-y-6">
+              <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PHOTO CONFIRMATION</Label>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="aspect-square rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors">
+                  <Camera className="h-6 w-6 text-gray-400" />
+                  <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">UPLOAD</span>
+                </div>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="aspect-square rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center">
+                    <ImageIcon className="h-6 w-6 text-gray-200" />
                   </div>
-               </div>
-
-               <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">DISPATCHER ID</Label>
-                  <Input placeholder="Enter your employee ID" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
-               </div>
-
-               <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">ADDITIONAL NOTES</Label>
-                  <Textarea placeholder="Any observations during gate out..." className="bg-gray-50/50 border-gray-100 resize-none min-h-[100px]" />
-               </div>
+                ))}
+              </div>
+              <p className="text-[10px] font-medium text-gray-400">Up to 5 photos can be uploaded for loading verification.</p>
             </div>
           </div>
           
-          <div className="p-6 bg-gray-50/50 border-t flex justify-end gap-3">
-            <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest text-gray-400" onClick={() => setIsTransferModalOpen(false)}>CANCEL</Button>
-            <Button className="h-12 px-8 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs tracking-widest gap-2 shadow-sm rounded-sm uppercase" onClick={() => { 
-              toast({ title: "Movement Started", description: "Container transfer has been logged in the system." });
-              setIsTransferModalOpen(false);
-            }}>
-              CONFIRM TRANSFER
+          <div className="p-6 bg-gray-50 border-t flex justify-end">
+            <Button 
+              className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-black text-xs tracking-widest gap-3 shadow-lg uppercase" 
+              onClick={() => { 
+                toast({ title: "Manifest Saved", description: "Transfer initiation data has been recorded." });
+                setIsTransferModalOpen(false);
+              }}
+            >
+              <Truck className="h-4 w-4" /> SAVE
             </Button>
           </div>
         </DialogContent>
@@ -854,7 +881,7 @@ export default function MyProduceDashboard() {
                       </Table>
                     </div>
 
-                    {/* Verification Section - Redesigned to match Attachment 1 */}
+                    {/* Verification Section */}
                     <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm space-y-8">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
