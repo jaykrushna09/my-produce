@@ -83,7 +83,7 @@
         "etd": { "type": "string", "format": "date" },
         "cutOffDate": { "type": "string", "format": "date" },
         "shippingLine": { "type": "string" },
-        "palletizedType": { "type": "string", "enum": ["Palletized", "Non Palletized"] }
+        "palletizedType": { "type": "string", "enum": ["Palletized", "Non-Palletized"] }
       },
       "required": ["contractId", "customerName", "status"]
     },
@@ -101,7 +101,7 @@
         "ps": { "type": "string", "description": "Production Specification/Segment" },
         "containerNo": { "type": "string", "description": "Specific container number" },
         "atwStatus": { "type": "string", "enum": ["PENDING", "READY", "LOADED"], "default": "PENDING" },
-        "palletized": { "type": "string", "enum": ["Palletized", "Breakbulk", "Non-Palletized"] },
+        "palletized": { "type": "string", "enum": ["Palletized", "Non-Palletized"] },
         "shippingLines": { "type": "string" },
         "etd": { "type": "string" },
         "cutOffDate": { "type": "string" },

@@ -63,7 +63,7 @@ import {
   LayoutGrid,
   Signature
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -76,12 +76,13 @@ import {
   TableFooter
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { 
+import {
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
   DialogTrigger,
+  DialogClose,
   DialogFooter,
   DialogDescription
 } from '@/components/ui/dialog';
@@ -135,6 +136,8 @@ import { format } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips';
 
+type CuttingOrderStatus = 'PENDING' | 'IN-PROCESS' | 'AVAILABLE' | 'DEPART';
+
 interface TripRow {
   id: string;
   ps: string;
@@ -171,6 +174,41 @@ type ShippingDocType =
   | 'Packing List';
 
 type ShippingDocAction = 'generate' | 'upload' | 'view' | 'download';
+
+interface ShippingDocDraft {
+  title: string;
+  referenceNo: string;
+  issueDate: string;
+  preparedBy: string;
+  recipient: string;
+  body: string;
+  shipperName: string;
+  shipperAddress: string;
+  consigneeName: string;
+  consigneeAddress: string;
+  notifyPartyName: string;
+  notifyPartyAddress: string;
+  releaseText: string;
+  bookingReference: string;
+  freightTerm: string;
+  vesselName: string;
+  voyageNo: string;
+  portOfLoading: string;
+  portOfDischarge: string;
+  shippingMarks: string;
+  description: string;
+  cartons: string;
+  volume: string;
+  grossWeight: string;
+  exporter: string;
+  exporterAddress: string;
+  soldTo: string;
+  soldToAddress: string;
+  vesselVoyage: string;
+  departureDate: string;
+  destination: string;
+  termsOfDelivery: string;
+}
 
 interface PalletItem {
   packType: string;
@@ -216,6 +254,24 @@ interface LoadingAdviceListRow {
   palletization: string;
 }
 
+interface CuttingOrderListRow {
+  id: string;
+  contractId: string;
+  customerName: string;
+  weekNumber: string;
+  ps: string;
+  shippingLine: string;
+  bookingNo: string;
+  containerNo: string;
+  atwStatus: string;
+  status: CuttingOrderStatus;
+  pod: string;
+  cutOffDate: string;
+  etd: string;
+  sku: string;
+  palletization: string;
+}
+
 interface BookingListRow {
   id: string;
   batchId: string;
@@ -254,6 +310,7 @@ interface COSRow {
 
 export default function MyProduceDashboard() {
   const router = useRouter();
+  const pathname = usePathname();
   const db = useFirestore();
   const auth = useAuth();
   const { user } = useUser();
@@ -273,18 +330,94 @@ export default function MyProduceDashboard() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isDrModalOpen, setIsDrModalOpen] = useState(false);
   const [selectedTripForTransfer, setSelectedTripForTransfer] = useState<any>(null);
+  const [expandedTripIds, setExpandedTripIds] = useState<string[]>([]);
   const [isShippingDocsModalOpen, setIsShippingDocsModalOpen] = useState(false);
   const [isShippingDocEditorOpen, setIsShippingDocEditorOpen] = useState(false);
   const [selectedTripForDocs, setSelectedTripForDocs] = useState<any>(null);
   const [selectedShippingDocType, setSelectedShippingDocType] = useState<ShippingDocType>('Shipping Instruction');
-  const [shippingDocDraft, setShippingDocDraft] = useState({
+  const [shippingDocDraft, setShippingDocDraft] = useState<ShippingDocDraft>({
     title: 'Shipping Instruction',
     referenceNo: '',
     issueDate: format(new Date(), 'yyyy-MM-dd'),
     preparedBy: 'Operations Team',
     recipient: 'Carrier / Terminal',
     body: 'This shipping document is a draft preview. Edit the fields and body content as needed before export.',
+    shipperName: '',
+    shipperAddress: '',
+    consigneeName: '',
+    consigneeAddress: '',
+    notifyPartyName: '',
+    notifyPartyAddress: '',
+    releaseText: '',
+    bookingReference: '',
+    freightTerm: '',
+    vesselName: '',
+    voyageNo: '',
+    portOfLoading: '',
+    portOfDischarge: '',
+    shippingMarks: '',
+    description: '',
+    cartons: '',
+    volume: '',
+    grossWeight: '',
+    exporter: '',
+    exporterAddress: '',
+    soldTo: '',
+    soldToAddress: '',
+    vesselVoyage: '',
+    departureDate: '',
+    destination: '',
+    termsOfDelivery: '',
   });
+
+  const viewToPath = (view: ViewState) => {
+    switch (view) {
+      case 'trips':
+        return '/myproduce/trip';
+      case 'bookings':
+        return '/myproduce/bookings';
+      case 'loading-advice':
+        return '/myproduce/loading-advice';
+      case 'cutting-order':
+        return '/myproduce/cutting-orders';
+      case 'configuration':
+        return '/myproduce/configuration';
+      default:
+        return '/myproduce';
+    }
+  };
+
+  const pathToView = (path: string): ViewState => {
+    const slug = path.split('/')[2] || '';
+    switch (slug) {
+      case 'trip':
+      case 'trips':
+        return 'trips';
+      case 'bookings':
+        return 'bookings';
+      case 'loading-advice':
+        return 'loading-advice';
+      case 'cutting-orders':
+      case 'cutting-order':
+        return 'cutting-order';
+      case 'configuration':
+        return 'configuration';
+      default:
+        return 'dashboard';
+    }
+  };
+
+  const navigateToView = (view: ViewState) => {
+    setActiveView(view);
+    router.push(viewToPath(view));
+  };
+
+  useEffect(() => {
+    const nextView = pathToView(pathname);
+    if (nextView !== activeView) {
+      setActiveView(nextView);
+    }
+  }, [pathname, activeView]);
 
   // Loading Advice State
   const [isExtracting, setIsExtracting] = useState(false);
@@ -602,6 +735,82 @@ export default function MyProduceDashboard() {
     return rows;
   }, [contracts]);
 
+  const cuttingOrderRows = useMemo<CuttingOrderListRow[]>(() => {
+    const rows: CuttingOrderListRow[] = [];
+
+    (contracts || []).forEach((contract: any) => {
+      const contractItems = Array.isArray(contract.cuttingOrders) && contract.cuttingOrders.length > 0
+        ? contract.cuttingOrders
+        : Array.isArray(contract.items) && contract.items.length > 0
+          ? contract.items
+          : [{
+              itemId: contract.id,
+              ps: '1',
+              shippingLine: contract.shippingLine,
+              bookingNo: contract.bookingNo,
+              containerNo: '',
+              atwStatus: 'PENDING',
+              pod: contract.pod,
+              cutOffDate: contract.cutOffDate,
+              etd: contract.etd,
+              sku: Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0 ? contract.selectedSKUs[0] : contract.sku,
+              palletization: contract.palletizedType,
+            }];
+
+      contractItems.forEach((item: any, index: number) => {
+        const normalizedStatus = String(item.status || '').toUpperCase();
+        const fallbackStatus =
+          normalizedStatus === 'DEPART'
+            ? 'DEPART'
+            : item.atwStatus === 'LOADED'
+              ? 'AVAILABLE'
+              : item.atwStatus === 'READY'
+                ? 'IN-PROCESS'
+                : 'PENDING';
+
+        rows.push({
+          id: item.itemId || item.id || `${contract.id}-${index}`,
+          contractId: contract.id,
+          customerName: contract.customerName || '--',
+          weekNumber: String(contract.weekNumber || '--'),
+          ps: String(item.ps || index + 1),
+          shippingLine: item.shippingLine || contract.shippingLine || '--',
+          bookingNo: item.bookingNo || contract.bookingNo || '--',
+          containerNo: item.containerNo || '--',
+          atwStatus: item.atwStatus || 'PENDING',
+          status: fallbackStatus as CuttingOrderStatus,
+          pod: item.pod || contract.pod || '--',
+          cutOffDate: formatDisplayDate(item.cutOffDate || contract.cutOffDate),
+          etd: formatDisplayDate(item.etd || contract.etd),
+          sku: item.sku || contract.sku || '--',
+          palletization: item.palletization || contract.palletizedType || '--',
+        });
+      });
+    });
+
+    return rows;
+  }, [contracts]);
+
+  const cuttingOrderStatusCounts = useMemo(() => {
+    return {
+      active: cuttingOrderRows.filter((row) => row.status !== 'DEPART').length,
+      depart: cuttingOrderRows.filter((row) => row.status === 'DEPART').length,
+      total: cuttingOrderRows.length,
+    };
+  }, [cuttingOrderRows]);
+
+  const totalTonnageScheduled = useMemo(() => {
+    return cuttingOrderRows.reduce((acc, row: any) => acc + (Number(row.totalVans ?? row.qty ?? 0) || 0), 0);
+  }, [cuttingOrderRows]);
+
+  const filteredCuttingOrderRows = useMemo(() => {
+    return cuttingOrderRows.filter((row) => {
+      const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
+      const matchesCustomer = customerFilter === 'all' || row.customerName === customerFilter;
+      return matchesWeek && matchesCustomer;
+    });
+  }, [cuttingOrderRows, weekFilter, customerFilter]);
+
   const selectedContract = useMemo(() => {
     return (contracts || []).find((contract: any) => contract.id === selectedContractId) || null;
   }, [contracts, selectedContractId]);
@@ -740,8 +949,8 @@ export default function MyProduceDashboard() {
     return cosAllocationRows.reduce((acc: number, row: any) => acc + (Number(row.totalVans ?? row.total ?? 0) || 0), 0);
   }, [cosAllocationRows]);
 
-  const openCosModal = () => {
-    if (!selectedContract) {
+  const openCosModal = (sourceContract: any = selectedContract) => {
+    if (!sourceContract) {
       toast({
         variant: 'destructive',
         title: 'Select an LA',
@@ -750,12 +959,16 @@ export default function MyProduceDashboard() {
       return;
     }
 
-    const sourceRows = selectedCosSourceRows.length > 0 ? selectedCosSourceRows : [null];
+    const sourceRows = Array.isArray(sourceContract.cuttingOrders) && sourceContract.cuttingOrders.length > 0
+      ? sourceContract.cuttingOrders
+      : Array.isArray(sourceContract.items) && sourceContract.items.length > 0
+        ? sourceContract.items
+        : [null];
     setCosHeader({
-      customerName: selectedContract.customerName || '',
-      weekNumber: String(selectedContract.weekNumber || ''),
-      pod: selectedContract.pod || '',
-      laId: selectedContract.contractId || selectedContract.id,
+      customerName: sourceContract.customerName || '',
+      weekNumber: String(sourceContract.weekNumber || ''),
+      pod: sourceContract.pod || '',
+      laId: sourceContract.contractId || sourceContract.id,
     });
     setCosRows(
       sourceRows.map((row: any, index: number) =>
@@ -763,17 +976,17 @@ export default function MyProduceDashboard() {
           ? {
               id: row.id || row.itemId || Math.random().toString(36).substr(2, 9),
               ps: String(row.ps || index + 1),
-              shippingLine: row.shippingLine || selectedContract.shippingLine || '',
+              shippingLine: row.shippingLine || sourceContract.shippingLine || '',
               bookingNumber: row.bookingNumber || '',
               containerNo: row.containerNo || '',
               atwStatus: (row.atwStatus || 'PENDING') as 'PENDING' | 'READY' | 'LOADED',
-              pod: row.pod || selectedContract.pod || '',
-              cutOffDate: row.cutOffDate || selectedContract.cutOffDate || '',
-              etd: row.etd || selectedContract.etd || '',
-              sku: row.sku || (Array.isArray(selectedContract.selectedSKUs) ? selectedContract.selectedSKUs[0] : '') || '',
-              palletization: row.palletization || selectedContract.palletizedType || 'Palletized',
+              pod: row.pod || sourceContract.pod || '',
+              cutOffDate: row.cutOffDate || sourceContract.cutOffDate || '',
+              etd: row.etd || sourceContract.etd || '',
+              sku: row.sku || (Array.isArray(sourceContract.selectedSKUs) ? sourceContract.selectedSKUs[0] : '') || '',
+              palletization: row.palletization || sourceContract.palletizedType || 'Palletized',
             }
-          : createEmptyCOSRow(String(index + 1), selectedContract.pod || '')
+          : createEmptyCOSRow(String(index + 1), sourceContract.pod || '')
       )
     );
     setIsCosModalOpen(true);
@@ -1123,6 +1336,92 @@ export default function MyProduceDashboard() {
     }
   };
 
+  const toggleTripExpanded = (tripId: string) => {
+    setExpandedTripIds((current) =>
+      current.includes(tripId) ? current.filter((id) => id !== tripId) : [...current, tripId]
+    );
+  };
+
+  const getTripCuttingOrders = (trip: any) => {
+    return Array.isArray(trip?.cuttingOrders) && trip.cuttingOrders.length > 0
+      ? trip.cuttingOrders
+      : [];
+  };
+
+  const getNextTripOrderStatus = (status: string) => {
+    const normalized = String(status || '').toUpperCase();
+    if (normalized === 'PENDING') return 'IN-PROCESS';
+    if (normalized === 'IN-PROCESS') return 'AVAILABLE';
+    if (normalized === 'AVAILABLE') return 'DEPART';
+    return 'PENDING';
+  };
+
+  const handleChangeTripOrderStatus = async (trip: any, order: any) => {
+    const nextStatus = getNextTripOrderStatus(order.status);
+    const updatedOrders = getTripCuttingOrders(trip).map((item: any) =>
+      (item.itemId || item.id) === (order.itemId || order.id)
+        ? { ...item, status: nextStatus }
+        : item
+    );
+
+    try {
+      if (db) {
+        const batch = writeBatch(db);
+        const tripRef = doc(db, TRIP_PATH, trip.id);
+        batch.update(tripRef, {
+          cuttingOrders: updatedOrders,
+          cuttingOrdersUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        const rowQuery = await getDocs(collection(db, `${TRIP_PATH}/${trip.id}/cutting_orders`));
+        rowQuery.docs.forEach((snapshot) => {
+          const snapshotData = snapshot.data() as any;
+          if ((snapshotData.itemId || snapshotData.id) === (order.itemId || order.id)) {
+            batch.update(snapshot.ref, {
+              status: nextStatus,
+              updatedAt: serverTimestamp(),
+            });
+          }
+        });
+
+        await batch.commit();
+      }
+
+      toast({
+        title: 'Status Updated',
+        description: `Associated cutting order moved to ${nextStatus}.`,
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Update Failed', description: err.message });
+    }
+  };
+
+  const clearDialogBodyLocks = () => {
+    if (typeof document === 'undefined') return;
+    document.body.style.pointerEvents = 'auto';
+    document.body.style.overflow = 'auto';
+    document.body.removeAttribute('data-scroll-locked');
+    Array.from(document.body.classList)
+      .filter((className) => className.startsWith('block-interactivity-') || className.startsWith('allow-interactivity-'))
+      .forEach((className) => document.body.classList.remove(className));
+  };
+
+  const closeTransferModal = () => {
+    setIsTransferModalOpen(false);
+    setSelectedTripForTransfer(null);
+    requestAnimationFrame(() => {
+      clearDialogBodyLocks();
+      setTimeout(clearDialogBodyLocks, 50);
+    });
+  };
+
+  useEffect(() => {
+    if (!isTransferModalOpen) {
+      clearDialogBodyLocks();
+    }
+  }, [isTransferModalOpen]);
+
   const openShippingDocs = (trip: any) => {
     setSelectedTripForDocs(trip);
     setIsShippingDocsModalOpen(true);
@@ -1130,15 +1429,176 @@ export default function MyProduceDashboard() {
 
   const openShippingDocEditor = (docType: ShippingDocType) => {
     setSelectedShippingDocType(docType);
-    setShippingDocDraft({
+    const baseDraft: ShippingDocDraft = {
       title: docType,
       referenceNo: selectedTripForDocs?.tripId || selectedTripForDocs?.id || '',
       issueDate: format(new Date(), 'yyyy-MM-dd'),
       preparedBy: selectedTripForDocs?.driver || 'Operations Team',
       recipient: selectedTripForDocs?.customerName || 'Carrier / Terminal',
       body: `Editable draft for ${docType}. Use this area to prepare the document before printing or exporting.`,
+      shipperName: '',
+      shipperAddress: '',
+      consigneeName: '',
+      consigneeAddress: '',
+      notifyPartyName: '',
+      notifyPartyAddress: '',
+      releaseText: '',
+      bookingReference: '',
+      freightTerm: '',
+      vesselName: selectedTripForDocs?.shippingLine || '',
+      voyageNo: selectedTripForDocs?.tripId || '',
+      portOfLoading: selectedTripForDocs?.pod || '',
+      portOfDischarge: selectedTripForDocs?.pod || '',
+      shippingMarks: '',
+      description: '',
+      cartons: '',
+      volume: '',
+      grossWeight: '',
+      exporter: '',
+      exporterAddress: '',
+      soldTo: '',
+      soldToAddress: '',
+      vesselVoyage: '',
+      departureDate: format(new Date(), 'yyyy-MM-dd'),
+      destination: selectedTripForDocs?.pod || '',
+      termsOfDelivery: '',
+    };
+
+    if (docType === 'Shipping Instruction') {
+      setShippingDocDraft({
+        ...baseDraft,
+        shipperName: 'TAGUM AGRICULTURAL DEVELOPMENT CO., INC.',
+        shipperAddress: 'Purok 18 A.O. Florendo, City of Panabo, Davao del Norte, Philippines 8105',
+        consigneeName: selectedTripForDocs?.customerName || 'SHANGHAI GOODFARMER BANANA CO., LTD.',
+        consigneeAddress: 'Room 1211, Building 2, No. 1800, Xinyang Road, Fengxian District, Shanghai, P.R. China',
+        notifyPartyName: selectedTripForDocs?.customerName || 'SHANGHAI GOODFARMER BANANA CO., LTD.',
+        notifyPartyAddress: 'Room 1211, Building 2, No. 1800, Xinyang Road, Fengxian District, Shanghai, P.R. China',
+        releaseText: 'BL TYPE RELEASE',
+        bookingReference: selectedTripForDocs?.bookingNo || '',
+        freightTerm: 'Freight Collect',
+        vesselName: selectedTripForDocs?.vessel || selectedTripForDocs?.shippingLine || 'SITC HANSHIN',
+        voyageNo: selectedTripForDocs?.vanNo || 'V-2611N',
+        portOfLoading: selectedTripForDocs?.shippingLine || 'DAWAO, KTC',
+        portOfDischarge: selectedTripForDocs?.pod || 'SHANGHAI, CHINA',
+        shippingMarks: 'GOODFARMER',
+        description: 'Fresh Cavendish Bananas',
+        cartons: '13,860',
+        volume: '450',
+        grossWeight: '200,970.00',
+      });
+      setIsShippingDocEditorOpen(true);
+      return;
+    }
+
+    if (docType === "Mate's Receipt") {
+      setShippingDocDraft({
+        ...baseDraft,
+        shipperName: 'SHANGHAI GOODFARMER BANANA CO., LTD.',
+        shipperAddress: 'Room 1211, Building 2, No. 1800, Xinyang Road, Fengxian District, Shanghai, P.R. China',
+        consigneeName: 'SITC HANSHIN V-2611N',
+        consigneeAddress: '',
+        notifyPartyName: 'SHANGHAI, CHINA',
+        notifyPartyAddress: '',
+        destination: 'SHANGHAI, CHINA',
+        shippingMarks: 'GOODFARMER',
+        description: 'Fresh Cavendish Bananas',
+        cartons: '13,860',
+        volume: '450',
+        grossWeight: '200,970.00',
+      });
+      setIsShippingDocEditorOpen(true);
+      return;
+    }
+
+    setShippingDocDraft({
+      ...baseDraft,
+      exporter: 'TAGUM AGRICULTURAL DEVELOPMENT COMPANY INC.',
+      exporterAddress: 'Purok 18 A.O. Florendo, City of Panabo, Davao del Norte, Philippines 8105',
+      soldTo: selectedTripForDocs?.customerName || 'SHANGHAI GOODFARMER BANANA CO., LTD.',
+      soldToAddress: 'Room 1211, Building 2, No.1800, Xinyang Road, Fengxian District, Shanghai, P.R. China',
+      vesselVoyage: `${selectedTripForDocs?.shippingLine || 'MV SITC HANSHIN'} ${selectedTripForDocs?.voyage || selectedTripForDocs?.tripId || 'V-2611N'}`,
+      departureDate: format(new Date(), 'yyyy-MM-dd'),
+      portOfLoading: selectedTripForDocs?.pod || 'KTC WHARF',
+      portOfDischarge: selectedTripForDocs?.pod || 'SHANGHAI, CHINA',
+      termsOfDelivery: 'FREE ON BOARD',
+      shippingMarks: 'GOODFARMER',
+      description: 'FRESH CAVENDISH BANANAS',
+      cartons: '13,860',
+      volume: '450',
+      grossWeight: '200,970.00',
     });
     setIsShippingDocEditorOpen(true);
+  };
+
+  const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
+    if (status === 'PENDING') return 'IN-PROCESS';
+    if (status === 'IN-PROCESS') return 'AVAILABLE';
+    if (status === 'AVAILABLE') return 'DEPART';
+    return 'PENDING';
+  };
+
+  const handleChangeCuttingOrderStatus = async (row: CuttingOrderListRow) => {
+    const nextStatus = getNextCuttingOrderStatus(row.status);
+    const updatedRows = cuttingOrderRows.map((item) =>
+      item.id === row.id && item.contractId === row.contractId
+        ? { ...item, status: nextStatus }
+        : item
+    );
+
+    try {
+      if (db) {
+        const contractRows = updatedRows.filter((item) => item.contractId === row.contractId);
+        const batch = writeBatch(db);
+        const contractRef = doc(db, CONTRACT_PATH, row.contractId);
+        batch.update(contractRef, {
+          cuttingOrders: contractRows.map((item) => ({
+            itemId: item.id,
+            ps: item.ps,
+            shippingLine: item.shippingLine,
+            bookingNo: item.bookingNo,
+            containerNo: item.containerNo,
+            atwStatus: item.atwStatus,
+            status: item.status,
+            pod: item.pod,
+            cutOffDate: item.cutOffDate,
+            etd: item.etd,
+            sku: item.sku,
+            palletization: item.palletization,
+          })),
+          cuttingOrdersUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        const existingRows = await getDocs(collection(db, `${CONTRACT_PATH}/${row.contractId}/cutting_orders`));
+        existingRows.docs.forEach((snapshot) => batch.delete(snapshot.ref));
+        contractRows.forEach((item) => {
+          const rowRef = doc(collection(db, `${CONTRACT_PATH}/${row.contractId}/cutting_orders`));
+          batch.set(rowRef, {
+            itemId: rowRef.id,
+            ps: item.ps,
+            shippingLine: item.shippingLine,
+            bookingNo: item.bookingNo,
+            containerNo: item.containerNo,
+            atwStatus: item.atwStatus,
+            status: item.status,
+            pod: item.pod,
+            cutOffDate: item.cutOffDate,
+            etd: item.etd,
+            sku: item.sku,
+            palletization: item.palletization,
+            updatedAt: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+
+      toast({
+        title: 'Status Updated',
+        description: `Cutting order moved to ${nextStatus}.`,
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Status Update Failed', description: err.message });
+    }
   };
 
   const shippingDocRows: Array<{
@@ -1185,6 +1645,514 @@ export default function MyProduceDashboard() {
       }
     });
     return Object.entries(summary).map(([packType, qty]) => ({ packType, qty }));
+  };
+
+  const renderCuttingOrdersView = () => (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex items-center gap-4 mb-4">
+        <Select value={weekFilter} onValueChange={setWeekFilter}>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
+        </Select>
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings?.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+        </Select>
+        <div className="ml-auto flex items-center gap-4 text-gray-400">
+          <Bell className="h-5 w-5 cursor-pointer" />
+          <HelpCircle className="h-5 w-5 cursor-pointer" />
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-900">
+            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center"><User className="h-4 w-4" /></div>
+            COORDINATOR
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-end">
+        <div>
+          <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
+            <span>Operations</span><ChevronRight className="h-3 w-3 mx-1" /><span>Cutting Orders</span>
+          </div>
+          <h1 className="text-3xl font-black text-gray-900">Cutting Orders</h1>
+          <p className="text-sm text-gray-500 max-w-xl">Manage and monitor production cutting requirements and inventory allocations.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="h-10 px-6 font-bold uppercase text-xs tracking-widest border-gray-200" onClick={() => navigateToView('trips')}>Create/View Trips</Button>
+          <Button variant="outline" className="h-10 px-6 font-bold uppercase text-xs tracking-widest border-gray-200" onClick={() => navigateToView('bookings')}>Create/View Bookings</Button>
+          <Button className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2" onClick={() => {
+            const sourceContract = selectedContract || contracts?.[0] || null;
+            if (sourceContract) {
+              setSelectedContractId(sourceContract.id);
+              openCosModal(sourceContract);
+            } else {
+              toast({ variant: 'destructive', title: 'No Loading Advice', description: 'Please create a loading advice record first.' });
+            }
+          }}>
+            <Plus className="h-4 w-4" /> New Cutting Order
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+        <Card className="bg-white border-none shadow-sm relative overflow-hidden h-[140px]">
+          <div className="p-6">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-300 block mb-3">ACTIVE ORDERS</span>
+            <span className="text-5xl font-black text-gray-900">{cuttingOrderStatusCounts.active}</span>
+            <p className="text-[10px] text-emerald-700 font-bold mt-3">+8% from last week</p>
+          </div>
+        </Card>
+        <Card className="bg-white border-none shadow-sm relative overflow-hidden h-[140px]">
+          <div className="p-6">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-300 block mb-3">TONNAGE SCHEDULED</span>
+            <span className="text-5xl font-black text-gray-900">{totalTonnageScheduled.toLocaleString()} kg</span>
+            <p className="text-[10px] text-gray-500 font-bold mt-3">Capacity Utilization: 82%</p>
+          </div>
+        </Card>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b flex justify-between items-center">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
+          <div className="flex gap-2">
+            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
+            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Download className="h-3 w-3" /> EXPORT</Button>
+          </div>
+        </div>
+        <Table>
+          <TableHeader className="bg-gray-50/50">
+            <TableRow>
+              <TableHead className="w-12 text-center"><Checkbox /></TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">PS</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Shipping Line</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Booking No</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Container No</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">ATW Status</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">POD</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Cut-Off Date</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">ETD</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-right text-gray-400">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredCuttingOrderRows.map((row) => (
+              <TableRow key={`${row.contractId}-${row.id}`} className="h-16 hover:bg-gray-50/50">
+                <TableCell className="text-center"><Checkbox /></TableCell>
+                <TableCell className="font-bold text-xs">{row.ps}</TableCell>
+                <TableCell className="text-xs font-bold uppercase">{row.shippingLine}</TableCell>
+                <TableCell className="text-xs text-gray-500 font-semibold">{row.bookingNo}</TableCell>
+                <TableCell className="font-bold text-xs">{row.containerNo}</TableCell>
+                <TableCell className="text-center">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'font-bold uppercase tracking-wider text-[10px]',
+                      row.atwStatus === 'PENDING'
+                        ? 'border-red-200 bg-red-50 text-red-600'
+                        : row.atwStatus === 'READY'
+                          ? 'border-amber-200 bg-amber-50 text-amber-600'
+                          : row.atwStatus === 'LOADED'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-600'
+                    )}
+                  >
+                    {row.atwStatus}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs uppercase">{row.pod}</TableCell>
+                <TableCell className="text-xs text-gray-500">{row.cutOffDate}</TableCell>
+                <TableCell className="text-xs text-gray-500">{row.etd}</TableCell>
+                <TableCell className="text-xs font-bold">{row.sku}</TableCell>
+                <TableCell className="text-xs">{row.palletization}</TableCell>
+                <TableCell className="text-center">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'font-bold uppercase tracking-wider text-[10px]',
+                      row.status === 'DEPART'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : row.status === 'AVAILABLE'
+                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                          : row.status === 'IN-PROCESS'
+                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            : 'border-red-200 bg-red-50 text-red-600'
+                    )}
+                  >
+                    {row.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-gray-400">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem
+                        className="gap-3 py-2.5 cursor-pointer font-medium"
+                        onClick={() => handleChangeCuttingOrderStatus(row)}
+                      >
+                        <RefreshCcw className="h-4 w-4 text-gray-500" /> Change Status
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="gap-3 py-2.5 cursor-pointer font-medium"
+                        onClick={() => toast({ title: 'Export queued', description: 'Cutting order details export has been prepared.' })}
+                      >
+                        <Download className="h-4 w-4 text-gray-500" /> Export Details
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <div className="flex items-center justify-between border-t px-5 py-4 text-sm text-gray-500">
+          <div>
+            Showing <span className="font-semibold text-gray-900">1-4</span> of <span className="font-semibold text-gray-900">{filteredCuttingOrderRows.length}</span> cutting orders
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" className="h-8 w-8"><ChevronLeft className="h-4 w-4" /></Button>
+            <Button className="h-8 w-8 bg-emerald-700 text-white hover:bg-emerald-800">1</Button>
+            <Button variant="outline" className="h-8 w-8">2</Button>
+            <Button variant="outline" className="h-8 w-8">3</Button>
+            <Button variant="outline" size="icon" className="h-8 w-8"><ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderShippingDocFields = () => {
+    if (selectedShippingDocType === 'Shipping Instruction') {
+      return (
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Shipping Instruction Fields</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Shipper</Label>
+              <Input value={shippingDocDraft.shipperName} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, shipperName: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Booking Reference</Label>
+              <Input value={shippingDocDraft.bookingReference} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, bookingReference: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Shipper Address</Label>
+              <Textarea value={shippingDocDraft.shipperAddress} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, shipperAddress: e.target.value })} className="min-h-20 bg-slate-50 text-sm" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Consignee</Label>
+              <Input value={shippingDocDraft.consigneeName} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, consigneeName: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Notify Party</Label>
+              <Input value={shippingDocDraft.notifyPartyName} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, notifyPartyName: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Consignee Address</Label>
+              <Textarea value={shippingDocDraft.consigneeAddress} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, consigneeAddress: e.target.value })} className="min-h-20 bg-slate-50 text-sm" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Notify Party Address</Label>
+              <Textarea value={shippingDocDraft.notifyPartyAddress} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, notifyPartyAddress: e.target.value })} className="min-h-20 bg-slate-50 text-sm" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Vessel</Label>
+              <Input value={shippingDocDraft.vesselName} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, vesselName: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Voyage</Label>
+              <Input value={shippingDocDraft.voyageNo} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, voyageNo: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Port of Loading</Label>
+              <Input value={shippingDocDraft.portOfLoading} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, portOfLoading: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Port of Discharge</Label>
+              <Input value={shippingDocDraft.portOfDischarge} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, portOfDischarge: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Freight Term</Label>
+              <Input value={shippingDocDraft.freightTerm} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, freightTerm: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Release Text</Label>
+              <Input value={shippingDocDraft.releaseText} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, releaseText: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedShippingDocType === "Mate's Receipt") {
+      return (
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Mate's Receipt Fields</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Date</Label>
+              <Input type="date" value={shippingDocDraft.issueDate} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, issueDate: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Vessel</Label>
+              <Input value={shippingDocDraft.consigneeName} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, consigneeName: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Consignee / Shipper</Label>
+              <Textarea value={shippingDocDraft.shipperAddress} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, shipperAddress: e.target.value })} className="min-h-20 bg-slate-50 text-sm" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Destination</Label>
+              <Input value={shippingDocDraft.destination} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, destination: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Shipping Marks</Label>
+              <Input value={shippingDocDraft.shippingMarks} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, shippingMarks: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Description</Label>
+              <Input value={shippingDocDraft.description} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, description: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">No. of Cartons</Label>
+              <Input value={shippingDocDraft.cartons} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, cartons: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Volume (m3)</Label>
+              <Input value={shippingDocDraft.volume} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, volume: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Gross Weight</Label>
+              <Input value={shippingDocDraft.grossWeight} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, grossWeight: e.target.value })} className="h-10 bg-slate-50" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Packing List Fields</div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Exporter</Label>
+            <Input value={shippingDocDraft.exporter} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, exporter: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Date</Label>
+            <Input type="date" value={shippingDocDraft.departureDate} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, departureDate: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Exporter Address</Label>
+            <Textarea value={shippingDocDraft.exporterAddress} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, exporterAddress: e.target.value })} className="min-h-20 bg-slate-50 text-sm" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Sold To</Label>
+            <Input value={shippingDocDraft.soldTo} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, soldTo: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Terms of Delivery</Label>
+            <Input value={shippingDocDraft.termsOfDelivery} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, termsOfDelivery: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Sold To Address</Label>
+            <Textarea value={shippingDocDraft.soldToAddress} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, soldToAddress: e.target.value })} className="min-h-20 bg-slate-50 text-sm" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Vessel & Voyage</Label>
+            <Input value={shippingDocDraft.vesselVoyage} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, vesselVoyage: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Port of Loading</Label>
+            <Input value={shippingDocDraft.portOfLoading} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, portOfLoading: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[9px] font-black uppercase text-slate-400">Port of Discharge</Label>
+            <Input value={shippingDocDraft.portOfDischarge} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, portOfDischarge: e.target.value })} className="h-10 bg-slate-50" />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderShippingDocPreview = () => {
+    if (selectedShippingDocType === 'Shipping Instruction') {
+      return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mx-auto max-w-[760px] border-2 border-slate-300 bg-white">
+            <div className="border-b border-slate-300 bg-slate-50 py-2 text-center text-[15px] font-bold uppercase tracking-[0.16em] text-slate-700">
+              Shipping Instruction
+            </div>
+            <div className="grid grid-cols-2">
+              <div className="border-r border-slate-300 p-0 text-[10px]">
+                <div className="border-b border-slate-300 bg-yellow-50 px-2 py-1 font-bold uppercase text-slate-700">Shipper</div>
+                <div className="px-2 py-2">
+                  <div className="font-bold text-red-600">{shippingDocDraft.shipperName}</div>
+                  <div className="whitespace-pre-wrap">{shippingDocDraft.shipperAddress}</div>
+                </div>
+                <div className="border-y border-slate-300 bg-yellow-50 px-2 py-1 font-bold uppercase text-slate-700">Consignee</div>
+                <div className="px-2 py-2">
+                  <div className="font-bold text-red-600">{shippingDocDraft.consigneeName}</div>
+                  <div className="whitespace-pre-wrap">{shippingDocDraft.consigneeAddress}</div>
+                </div>
+                <div className="border-y border-slate-300 bg-yellow-50 px-2 py-1 font-bold uppercase text-slate-700">Notify Party</div>
+                <div className="px-2 py-2">
+                  <div className="font-bold text-red-600">{shippingDocDraft.notifyPartyName}</div>
+                  <div className="whitespace-pre-wrap">{shippingDocDraft.notifyPartyAddress}</div>
+                </div>
+              </div>
+              <div className="p-0 text-[10px]">
+                <div className="grid grid-cols-2">
+                  <div className="border-b border-r border-slate-300 bg-yellow-50 px-2 py-1 font-bold uppercase">BL Type Release</div>
+                  <div className="border-b border-slate-300 px-2 py-1 font-bold text-red-600">{shippingDocDraft.releaseText}</div>
+                  <div className="border-b border-r border-slate-300 bg-yellow-50 px-2 py-1 font-bold uppercase">Booking Reference</div>
+                  <div className="border-b border-slate-300 px-2 py-1">{shippingDocDraft.bookingReference}</div>
+                  <div className="border-b border-r border-slate-300 bg-yellow-50 px-2 py-1 font-bold uppercase">Freight Term</div>
+                  <div className="border-b border-slate-300 px-2 py-1 font-bold text-red-600">{shippingDocDraft.freightTerm}</div>
+                </div>
+                <div className="p-2 text-[10px]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><span className="font-bold uppercase text-slate-500">Vessel: </span>{shippingDocDraft.vesselName}</div>
+                    <div><span className="font-bold uppercase text-slate-500">Voyage: </span>{shippingDocDraft.voyageNo}</div>
+                    <div><span className="font-bold uppercase text-slate-500">Port of Loading: </span>{shippingDocDraft.portOfLoading}</div>
+                    <div><span className="font-bold uppercase text-slate-500">Port of Discharge: </span>{shippingDocDraft.portOfDischarge}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-slate-300">
+              <table className="w-full border-collapse text-[10px]">
+                <thead className="bg-slate-50">
+                  <tr>
+                    {['Container No.', 'Seal No.', 'No. of Pcs.', 'Description', 'Gross Weight', 'Measurement'].map((head) => (
+                      <th key={head} className="border-r border-slate-300 px-2 py-1 text-left font-bold uppercase">{head}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3, 4].map((idx) => (
+                    <tr key={idx}>
+                      <td className="border-r border-t border-slate-300 px-2 py-1">{selectedTripForDocs?.containerNo || `SEKU ${idx}`}</td>
+                      <td className="border-r border-t border-slate-300 px-2 py-1">{selectedTripForDocs?.sealNo || '--'}</td>
+                      <td className="border-r border-t border-slate-300 px-2 py-1">1540</td>
+                      <td className="border-r border-t border-slate-300 px-2 py-1">{shippingDocDraft.description}</td>
+                      <td className="border-r border-t border-slate-300 px-2 py-1">{shippingDocDraft.grossWeight}</td>
+                      <td className="border-t border-slate-300 px-2 py-1">50.000</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedShippingDocType === "Mate's Receipt") {
+      return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mx-auto max-w-[720px] bg-white p-6">
+            <div className="text-center text-3xl font-black uppercase tracking-[0.2em] text-slate-900">Mate's Receipt</div>
+            <div className="mt-8 border-t border-slate-400 pt-4 text-center text-lg font-medium">{shippingDocDraft.issueDate}</div>
+            <div className="mt-8 grid grid-cols-[170px_1fr] gap-4 text-[12px]">
+              <div className="font-bold leading-6">
+                Received on board of commanded by consignnment to Shipper
+              </div>
+              <div className="space-y-2">
+                <div className="border-b border-slate-400 pb-1 font-bold">{shippingDocDraft.consigneeName}</div>
+                <div className="border-b border-slate-400 pb-1">{shippingDocDraft.consigneeAddress}</div>
+                <div className="border-b border-slate-400 pb-1">Destination: {shippingDocDraft.destination}</div>
+              </div>
+            </div>
+            <div className="mt-8 overflow-hidden border border-slate-400">
+              <table className="w-full border-collapse text-[12px]">
+                <thead>
+                  <tr className="bg-slate-50">
+                    {['Shipping Marks', 'Description', 'No. of Cartons/Crates', 'Volume (m3)', 'Gr. Weight (Kilos)'].map((head) => (
+                      <th key={head} className="border-r border-slate-400 px-2 py-2 text-left font-bold">{head}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="h-44">
+                    <td className="border-r border-t border-slate-400 px-2 py-2 align-middle text-center">{shippingDocDraft.shippingMarks}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2 align-middle text-center">{shippingDocDraft.description}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2 align-middle text-right">{shippingDocDraft.cartons}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2 align-middle text-right">{shippingDocDraft.volume}</td>
+                    <td className="border-t border-slate-400 px-2 py-2 align-middle text-right">{shippingDocDraft.grossWeight}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mx-auto max-w-[780px] bg-white p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-4xl font-black uppercase tracking-[0.2em] text-sky-700">TADECO</div>
+              <div className="text-[12px] text-slate-500">Tagum Agricultural Development Company Inc.</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-black uppercase tracking-[0.18em] text-slate-900">Packing List</div>
+              <div className="mt-2 text-[12px]">
+                <div><span className="font-bold">Date:</span> {shippingDocDraft.departureDate}</div>
+                <div><span className="font-bold">Invoice No.:</span> {shippingDocDraft.referenceNo || 'GF00553'}</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-0 border border-slate-400 text-[11px]">
+            <div className="border-r border-slate-400 p-2">
+              <div><span className="font-bold">Exporter:</span> {shippingDocDraft.exporter}</div>
+              <div className="mt-1 whitespace-pre-wrap">{shippingDocDraft.exporterAddress}</div>
+              <div className="mt-3"><span className="font-bold">Sold to:</span> {shippingDocDraft.soldTo}</div>
+              <div className="mt-1 whitespace-pre-wrap">{shippingDocDraft.soldToAddress}</div>
+            </div>
+            <div className="p-2">
+              <div><span className="font-bold">Vessel & Voyage:</span> {shippingDocDraft.vesselVoyage}</div>
+              <div className="mt-1"><span className="font-bold">Departure Date:</span> {shippingDocDraft.departureDate}</div>
+              <div className="mt-1"><span className="font-bold">Port of Loading:</span> {shippingDocDraft.portOfLoading}</div>
+              <div className="mt-1"><span className="font-bold">Port of Discharge:</span> {shippingDocDraft.portOfDischarge}</div>
+              <div className="mt-1"><span className="font-bold">Terms of Delivery:</span> {shippingDocDraft.termsOfDelivery}</div>
+            </div>
+          </div>
+          <div className="mt-4 overflow-hidden border border-slate-400">
+            <table className="w-full border-collapse text-[11px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  {['Container #', 'Marks / Brands', 'Type of Packages', 'Commodity', 'Quantity (Cartons)', 'Gross Weight (Kg)', 'Net Weight (Kg)'].map((head) => (
+                    <th key={head} className="border-r border-slate-400 px-2 py-2 text-left font-bold">{head}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[1, 2, 3, 4].map((row) => (
+                  <tr key={row}>
+                    <td className="border-r border-t border-slate-400 px-2 py-2">{selectedTripForDocs?.containerNo || `SEKU ${row}`}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2">{shippingDocDraft.shippingMarks}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2">RH A</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2">{shippingDocDraft.description}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2 text-right">{shippingDocDraft.cartons}</td>
+                    <td className="border-r border-t border-slate-400 px-2 py-2 text-right">{shippingDocDraft.grossWeight}</td>
+                    <td className="border-t border-slate-400 px-2 py-2 text-right">187,110.00</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderTripsView = () => (
@@ -1277,6 +2245,7 @@ export default function MyProduceDashboard() {
         <Table>
           <TableHeader className="bg-gray-50/50">
             <TableRow>
+              <TableHead className="w-10 text-center"></TableHead>
               <TableHead className="w-12 text-center"><Checkbox /></TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">VAN NO.</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">PM NO.</TableHead>
@@ -1290,7 +2259,18 @@ export default function MyProduceDashboard() {
           </TableHeader>
           <TableBody>
             {filteredTrips.map((t: any) => (
-              <TableRow key={t.id} className="h-16 hover:bg-gray-50/50">
+              <React.Fragment key={t.id}>
+              <TableRow className="h-16 hover:bg-gray-50/50">
+                <TableCell className="text-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-500"
+                    onClick={() => toggleTripExpanded(t.id)}
+                  >
+                    {expandedTripIds.includes(t.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </TableCell>
                 <TableCell className="text-center"><Checkbox /></TableCell>
                 <TableCell className="font-bold">{t.vanNo}</TableCell>
                 <TableCell className="text-xs text-gray-400">{t.pmNo}</TableCell>
@@ -1321,14 +2301,18 @@ export default function MyProduceDashboard() {
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuItem 
                         className="gap-3 py-2.5 cursor-pointer font-medium"
-                        onClick={() => { setSelectedTripForTransfer(t); setIsTransferModalOpen(true); }}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          setSelectedTripForTransfer(t);
+                          requestAnimationFrame(() => setIsTransferModalOpen(true));
+                        }}
                       >
-                        <Truck className="h-4 w-4 text-gray-500" /> Start Transfer
+                        <Truck className="h-4 w-4 text-gray-500" /> Edit Transfer
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium">
+                      {/* <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium">
                         <FileText className="h-4 w-4 text-gray-500" /> Check Docs
-                      </DropdownMenuItem>
+                      </DropdownMenuItem> */}
                       <DropdownMenuItem
                         className="gap-3 py-2.5 cursor-pointer font-medium"
                         onClick={() => openShippingDocs(t)}
@@ -1345,19 +2329,136 @@ export default function MyProduceDashboard() {
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
+              {expandedTripIds.includes(t.id) && (
+                <TableRow className="bg-slate-50/60">
+                  <TableCell colSpan={10} className="p-4">
+                    <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+                      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Associated Cutting Orders</div>
+                        <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-200 gap-2">
+                          <Settings className="h-3.5 w-3.5" />
+                          Actions
+                        </Button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader className="bg-slate-50">
+                            <TableRow>
+                              <TableHead className="w-10 text-center"></TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Customer</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">SKU</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Quantity</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Booking No.</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Week No.</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">ATW Status</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Vessel</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">ETD</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Cut Off</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-slate-500">Status</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-right text-slate-500">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {getTripCuttingOrders(t).length > 0 ? getTripCuttingOrders(t).map((order: any, idx: number) => (
+                              <TableRow key={order.itemId || order.id || idx} className="hover:bg-slate-50">
+                                <TableCell className="text-center"><Checkbox /></TableCell>
+                                <TableCell className="text-xs text-slate-700">{t.customerName || '--'}</TableCell>
+                                <TableCell className="text-xs font-semibold">{order.sku || '--'}</TableCell>
+                                <TableCell className="text-xs">{order.total || order.qty || '1,200'}</TableCell>
+                                <TableCell className="text-xs">{order.bookingNo || '--'}</TableCell>
+                                <TableCell className="text-xs">{t.weekNumber || '--'}</TableCell>
+                                <TableCell className="text-center">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      'font-bold uppercase tracking-wider text-[10px]',
+                                      String(order.atwStatus || 'PENDING').toUpperCase() === 'LOADED'
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                        : String(order.atwStatus || 'PENDING').toUpperCase() === 'READY'
+                                          ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                          : 'border-red-200 bg-red-50 text-red-600'
+                                    )}
+                                  >
+                                    {String(order.atwStatus || 'PENDING').toUpperCase()}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs">{order.vessel || t.shippingLine || '--'}</TableCell>
+                                <TableCell className="text-xs">{order.etd || '--'}</TableCell>
+                                <TableCell className="text-xs">{order.cutOffDate || '--'}</TableCell>
+                                <TableCell className="text-center">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      'font-bold uppercase tracking-wider text-[10px]',
+                                      String(order.status || 'PENDING').toUpperCase() === 'DEPART'
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                        : String(order.status || 'PENDING').toUpperCase() === 'AVAILABLE'
+                                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                          : String(order.status || 'PENDING').toUpperCase() === 'IN-PROCESS'
+                                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                            : 'border-red-200 bg-red-50 text-red-600'
+                                    )}
+                                  >
+                                    {String(order.status || 'PENDING').toUpperCase()}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="text-gray-400">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-48">
+                                      <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium" onClick={() => handleChangeTripOrderStatus(t, order)}>
+                                        <RefreshCcw className="h-4 w-4 text-gray-500" /> Change Status
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium" onClick={() => toast({ title: 'Export queued', description: 'Associated cutting order export is ready.' })}>
+                                        <Download className="h-4 w-4 text-gray-500" /> Export Details
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            )) : (
+                              <TableRow>
+                                <TableCell colSpan={12} className="py-8 text-center text-sm text-slate-500">No associated cutting orders found for this trip.</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>
       </div>
 
       {/* Start Transfer Modal */}
-      <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+      <Dialog
+        open={isTransferModalOpen}
+        onOpenChange={(open) => {
+          setIsTransferModalOpen(open);
+          if (!open) {
+            setSelectedTripForTransfer(null);
+            requestAnimationFrame(() => {
+              clearDialogBodyLocks();
+              setTimeout(clearDialogBodyLocks, 50);
+            });
+          }
+        }}
+      >
         <DialogContent className="max-w-[700px] p-0 overflow-hidden bg-white border-none shadow-2xl">
           <div className="p-6 flex justify-between items-center border-b">
             <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">
-              Start Transfer - {selectedTripForTransfer?.vanNo || 'N/A'}
+              Edit Transfer - {selectedTripForTransfer?.vanNo || 'N/A'}
             </DialogTitle>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsTransferModalOpen(false)}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={closeTransferModal}>
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -1401,7 +2502,7 @@ export default function MyProduceDashboard() {
                 <div className="flex gap-4">
                   <Button 
                     className="flex-1 h-12 bg-black text-white font-bold text-xs uppercase tracking-widest gap-2"
-                    onClick={() => { setIsTransferModalOpen(false); setIsVlsModalOpen(true); }}
+                    onClick={() => { closeTransferModal(); setIsVlsModalOpen(true); }}
                   >
                     <Plus className="h-4 w-4" /> CREATE VLS
                   </Button>
@@ -1434,7 +2535,7 @@ export default function MyProduceDashboard() {
               className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-black text-xs tracking-widest gap-3 shadow-lg uppercase" 
               onClick={() => { 
                 toast({ title: "Manifest Saved", description: "Transfer initiation data has been recorded." });
-                setIsTransferModalOpen(false);
+                closeTransferModal();
               }}
             >
               <Truck className="h-4 w-4" /> SAVE
@@ -1459,6 +2560,7 @@ export default function MyProduceDashboard() {
       );
     }
     if (activeView === 'loading-advice') return renderLoadingAdviceView();
+    if (activeView === 'cutting-order') return renderCuttingOrdersView();
     if (activeView === 'bookings') return renderBookingsView();
     if (activeView === 'trips') return renderTripsView();
     return <div className="p-12 text-center text-gray-400">View implementation pending.</div>;
@@ -1528,7 +2630,7 @@ export default function MyProduceDashboard() {
             <Button
               variant="outline"
               className="h-10 rounded-sm border-slate-300 bg-white px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-sm"
-              onClick={() => setActiveView('bookings')}
+            onClick={() => navigateToView('bookings')}
             >
               CREATE/VIEW BOOKINGS
             </Button>
@@ -1779,11 +2881,12 @@ export default function MyProduceDashboard() {
       <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0 shadow-xl no-print">
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
-          <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
-          <Button variant="ghost" onClick={() => setActiveView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
-          <Button variant="ghost" onClick={() => setActiveView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
-          <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'configuration' && "bg-white/10")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
+          <Button variant="ghost" onClick={() => navigateToView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
+          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />Cutting Orders</Button>
+          <Button variant="ghost" onClick={() => navigateToView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
+          <Button variant="ghost" onClick={() => navigateToView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
+          <Button variant="ghost" onClick={() => navigateToView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
+          <Button variant="ghost" onClick={() => navigateToView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'configuration' && "bg-white/10")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
       </aside>
@@ -1861,12 +2964,15 @@ export default function MyProduceDashboard() {
                       {laRows.map((row) => (
                         <TableRow key={row.id} className="hover:bg-transparent">
                           <TableCell className="px-3 py-3 align-top">
-                            <Input
-                              value={row.farm}
-                              onChange={(e) => setLaRows(laRows.map((r) => (r.id === row.id ? { ...r, farm: e.target.value } : r)))}
-                              placeholder="Select"
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
-                            />
+                            <Select value={row.farm} onValueChange={(v) => setLaRows(laRows.map((r) => (r.id === row.id ? { ...r, farm: v } : r)))}>
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Anflocor">Anflocor</SelectItem>
+                                <SelectItem value="TADECO">TADECO</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top">
                             <Select value={row.pol} onValueChange={(v) => setLaRows(laRows.map((r) => (r.id === row.id ? { ...r, pol: v } : r)))}>
@@ -1943,7 +3049,6 @@ export default function MyProduceDashboard() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="Palletized">Palletized</SelectItem>
-                                <SelectItem value="Breakbulk">Breakbulk</SelectItem>
                                 <SelectItem value="Non-Palletized">Non-Palletized</SelectItem>
                               </SelectContent>
                             </Select>
@@ -2976,14 +4081,14 @@ export default function MyProduceDashboard() {
       </Dialog>
 
       <Dialog open={isShippingDocEditorOpen} onOpenChange={setIsShippingDocEditorOpen}>
-        <DialogContent className="max-w-6xl w-[96vw] p-0 overflow-hidden bg-slate-100 border-none shadow-2xl h-[90vh] flex flex-col">
+        <DialogContent className="max-w-[96vw] w-[96vw] p-0 overflow-hidden bg-slate-100 border-none shadow-2xl h-[92vh] flex flex-col">
           <div className="p-6 border-b bg-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-emerald-50 p-2">
                 <FileSignature className="h-5 w-5 text-emerald-700" />
               </div>
               <div>
-                <DialogTitle className="text-base font-black text-gray-900">Editable Shipping Draft</DialogTitle>
+                <DialogTitle className="text-base font-black text-gray-900">{selectedShippingDocType}</DialogTitle>
                 <p className="text-[10px] font-medium text-gray-500">
                   {selectedShippingDocType} for {selectedTripForDocs?.vanNo || selectedTripForDocs?.tripId || 'selected trip'}
                 </p>
@@ -2995,62 +4100,35 @@ export default function MyProduceDashboard() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[430px_1fr]">
               <div className="space-y-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Document Fields</div>
-                  <div className="space-y-2">
-                    <Label className="text-[9px] font-black uppercase text-slate-400">Title</Label>
-                    <Input
-                      value={shippingDocDraft.title}
-                      onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, title: e.target.value })}
-                      className="h-10 bg-slate-50"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+                {renderShippingDocFields()}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Common Fields</div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
                     <div className="space-y-2">
                       <Label className="text-[9px] font-black uppercase text-slate-400">Reference No</Label>
-                      <Input
-                        value={shippingDocDraft.referenceNo}
-                        onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, referenceNo: e.target.value })}
-                        className="h-10 bg-slate-50"
-                      />
+                      <Input value={shippingDocDraft.referenceNo} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, referenceNo: e.target.value })} className="h-10 bg-slate-50" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[9px] font-black uppercase text-slate-400">Issue Date</Label>
-                      <Input
-                        type="date"
-                        value={shippingDocDraft.issueDate}
-                        onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, issueDate: e.target.value })}
-                        className="h-10 bg-slate-50"
-                      />
+                      <Input type="date" value={shippingDocDraft.issueDate} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, issueDate: e.target.value })} className="h-10 bg-slate-50" />
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-[9px] font-black uppercase text-slate-400">Prepared By</Label>
-                      <Input
-                        value={shippingDocDraft.preparedBy}
-                        onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, preparedBy: e.target.value })}
-                        className="h-10 bg-slate-50"
-                      />
+                      <Input value={shippingDocDraft.preparedBy} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, preparedBy: e.target.value })} className="h-10 bg-slate-50" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[9px] font-black uppercase text-slate-400">Recipient</Label>
-                      <Input
-                        value={shippingDocDraft.recipient}
-                        onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, recipient: e.target.value })}
-                        className="h-10 bg-slate-50"
-                      />
+                      <Input value={shippingDocDraft.recipient} onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, recipient: e.target.value })} className="h-10 bg-slate-50" />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[9px] font-black uppercase text-slate-400">Editable Body</Label>
+                  <div className="space-y-2 mt-4">
+                    <Label className="text-[9px] font-black uppercase text-slate-400">Notes / Editable Text</Label>
                     <Textarea
                       value={shippingDocDraft.body}
                       onChange={(e) => setShippingDocDraft({ ...shippingDocDraft, body: e.target.value })}
-                      className="min-h-48 bg-slate-50 text-sm"
-                      placeholder="Enter draft content..."
+                      className="min-h-40 bg-slate-50 text-sm"
                     />
                   </div>
                 </div>
@@ -3058,44 +4136,7 @@ export default function MyProduceDashboard() {
 
               <div className="space-y-4">
                 <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">PDF Preview</div>
-                <div className="min-h-[650px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-                  <div className="mx-auto flex h-full max-w-2xl flex-col gap-6 rounded-lg border border-slate-200 bg-white p-8 shadow-[0_30px_60px_rgba(15,23,42,0.08)]">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-                      <div>
-                        <div className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-700">Dummy PDF Draft</div>
-                        <h3 className="mt-1 text-2xl font-black text-slate-900">{shippingDocDraft.title}</h3>
-                      </div>
-                      <div className="rounded border border-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Editable
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Reference No</p>
-                        <p className="mt-1 font-semibold text-slate-800">{shippingDocDraft.referenceNo || '--'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Issue Date</p>
-                        <p className="mt-1 font-semibold text-slate-800">{shippingDocDraft.issueDate || '--'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Prepared By</p>
-                        <p className="mt-1 font-semibold text-slate-800">{shippingDocDraft.preparedBy || '--'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Recipient</p>
-                        <p className="mt-1 font-semibold text-slate-800">{shippingDocDraft.recipient || '--'}</p>
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Document Body</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{shippingDocDraft.body}</p>
-                    </div>
-                    <div className="mt-auto border-t border-slate-200 pt-4 text-[10px] font-medium text-slate-400">
-                      Drag, edit, and export this draft as needed.
-                    </div>
-                  </div>
-                </div>
+                {renderShippingDocPreview()}
               </div>
             </div>
           </div>
