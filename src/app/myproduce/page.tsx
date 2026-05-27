@@ -31,7 +31,7 @@ import {
   FileSignature,
   Mail,
   Check,
-  Calendar,
+  Calendar as CalendarIcon,
   Save,
   Edit2,
   CheckSquare,
@@ -211,7 +211,7 @@ export default function MyProduceDashboard() {
   const [selectedPalletIndex, setSelectedPalletIndex] = useState<number | null>(null);
   const [vlsType, setVlsType] = useState<'palletized' | 'non-palletized'>('palletized');
   const [vlsManifest, setVlsManifest] = useState({
-    datePrepared: format(new Date(), 'MM/dd/yyyy'),
+    datePrepared: format(new Date(), 'yyyy-MM-dd'),
     waybillNo: '',
     hauler: '',
     truckNo: '',
@@ -319,7 +319,6 @@ export default function MyProduceDashboard() {
       return;
     }
     
-    // Attempt to find real items for this pod/week or use mock
     const mockItems: CORow[] = [{
       id: `MOCK-${Date.now()}-1`,
       ps: '1',
@@ -395,11 +394,11 @@ export default function MyProduceDashboard() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center gap-4 mb-4">
         <Select value={weekFilter} onValueChange={setWeekFilter}>
-          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="All Weeks" /></SelectTrigger>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
           <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
         </Select>
         <Select value={customerFilter} onValueChange={setCustomerFilter}>
-          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="All Customers" /></SelectTrigger>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Customer" /></SelectTrigger>
           <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-4 text-gray-400">
@@ -629,7 +628,12 @@ export default function MyProduceDashboard() {
                   <div className="grid grid-cols-4 gap-6">
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">DATE PREPARED</Label>
-                      <Input value={vlsManifest.datePrepared} className="h-10 bg-gray-50/50" readOnly />
+                      <Input 
+                        type="date"
+                        value={vlsManifest.datePrepared} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, datePrepared: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">WAYBILL NO.</Label>
@@ -757,7 +761,6 @@ export default function MyProduceDashboard() {
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent border-b-2 border-gray-200">
-                            <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">PALLET ID</TableHead>
                             <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">PACK TYPE</TableHead>
                             <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8 text-right">QTY</TableHead>
                           </TableRow>
@@ -766,7 +769,6 @@ export default function MyProduceDashboard() {
                           {Object.entries(palletsData).flatMap(([idx, items]) => 
                             items.map((item, subIdx) => (
                               <TableRow key={`${idx}-${subIdx}`} className="border-none h-10 group">
-                                <TableCell className="font-bold text-gray-400 text-xs">#{parseInt(idx) + 1}</TableCell>
                                 <TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell>
                                 <TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell>
                               </TableRow>
@@ -774,7 +776,7 @@ export default function MyProduceDashboard() {
                           )}
                           {Object.keys(palletsData).length === 0 && (
                             <TableRow>
-                              <TableCell colSpan={3} className="h-64 text-center">
+                              <TableCell colSpan={2} className="h-64 text-center">
                                 <div className="flex flex-col items-center gap-2 opacity-20">
                                   <LayoutGrid className="h-10 w-10" />
                                   <span className="text-[10px] font-black uppercase">No pallets recorded</span>
@@ -785,7 +787,7 @@ export default function MyProduceDashboard() {
                         </TableBody>
                         <TableFooter className="bg-transparent border-t-2 border-gray-200">
                           <TableRow>
-                            <TableCell colSpan={2} className="text-[10px] font-black uppercase text-gray-400">TOTAL BOXES</TableCell>
+                            <TableCell className="text-[10px] font-black uppercase text-gray-400">TOTAL BOXES</TableCell>
                             <TableCell className="text-right font-black text-anflocor-green text-lg">
                               {Object.values(palletsData).flat().reduce((acc, curr) => acc + (parseInt(curr.qty) || 0), 0)}
                             </TableCell>
