@@ -187,7 +187,7 @@ export default function MyProduceDashboard() {
   // VLS Specific State
   const [isVlsModalOpen, setIsVlsModalOpen] = useState(false);
   const [isPalletDetailsModalOpen, setIsPalletDetailsModalOpen] = useState(false);
-  const [selectedPalletIndex, setSelectedPalletIndex] = useState<number | null>(null);
+  const [selectedPalletIndex, setSelectedPalletIndex] = useState<string | null>(null);
   const [vlsType, setVlsType] = useState<'palletized' | 'non-palletized'>('palletized');
   const [vlsManifest, setVlsManifest] = useState({
     datePrepared: format(new Date(), 'yyyy-MM-dd'),
@@ -201,9 +201,13 @@ export default function MyProduceDashboard() {
     gensetNo: '',
     tempSetting: ''
   });
-  const [palletsData, setPalletsData] = useState<{[key: number]: PalletItem[]}>({});
+  
+  // Storage for Palletized data (0-19)
+  const [palletsData, setPalletsData] = useState<{[key: string]: PalletItem[]}>({});
+  // Storage for Non-Palletized grid (row-col)
+  const [floorLoadData, setFloorLoadData] = useState<{[key: string]: PalletItem[]}>({});
+  
   const [currentPalletRows, setCurrentPalletRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
-  const [nonPalletizedRows, setNonPalletizedRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
   
   const [verificationData, setVerificationData] = useState({
     preparedBy: { name: 'D.G. REYES', role: 'PACKING STATION FOREMAN' },
@@ -359,38 +363,35 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleOpenPalletDetails = (index: number) => {
+  const handleOpenPalletDetails = (index: string) => {
     setSelectedPalletIndex(index);
-    setCurrentPalletRows(palletsData[index] || [{ packType: '', qty: '' }]);
+    const existingData = vlsType === 'palletized' ? palletsData[index] : floorLoadData[index];
+    setCurrentPalletRows(existingData || [{ packType: '', qty: '' }]);
     setIsPalletDetailsModalOpen(true);
   };
 
   const handleSavePalletDetails = () => {
     if (selectedPalletIndex !== null) {
       const filteredRows = currentPalletRows.filter(r => r.packType && r.qty);
-      setPalletsData({
-        ...palletsData,
-        [selectedPalletIndex]: filteredRows
-      });
+      if (vlsType === 'palletized') {
+        setPalletsData({ ...palletsData, [selectedPalletIndex]: filteredRows });
+      } else {
+        setFloorLoadData({ ...floorLoadData, [selectedPalletIndex]: filteredRows });
+      }
       setIsPalletDetailsModalOpen(false);
-      toast({ title: "Pallet Saved", description: `Details for Pallet #${selectedPalletIndex + 1} updated.` });
+      toast({ title: "Details Saved", description: "Entry data updated." });
     }
   };
 
-  const addNonPalletizedRow = () => {
-    setNonPalletizedRows([...nonPalletizedRows, { packType: '', qty: '' }]);
-  };
-
-  const updateNonPalletizedRow = (index: number, updates: Partial<PalletItem>) => {
-    const newRows = [...nonPalletizedRows];
-    newRows[index] = { ...newRows[index], ...updates };
-    setNonPalletizedRows(newRows);
-  };
-
-  const removeNonPalletizedRow = (index: number) => {
-    if (nonPalletizedRows.length > 1) {
-      setNonPalletizedRows(nonPalletizedRows.filter((_, i) => i !== index));
-    }
+  const getAggregatedSummary = () => {
+    const data = vlsType === 'palletized' ? palletsData : floorLoadData;
+    const summary: { [key: string]: number } = {};
+    Object.values(data).flat().forEach(item => {
+      if (item.packType) {
+        summary[item.packType] = (summary[item.packType] || 0) + (parseInt(item.qty) || 0);
+      }
+    });
+    return Object.entries(summary).map(([packType, qty]) => ({ packType, qty }));
   };
 
   const renderTripsView = () => (
@@ -512,7 +513,7 @@ export default function MyProduceDashboard() {
         </Table>
       </div>
 
-      {/* Start Transfer Modal Redesigned */}
+      {/* Start Transfer Modal */}
       <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
         <DialogContent className="max-w-[700px] p-0 overflow-hidden bg-white border-none shadow-2xl">
           <div className="p-6 flex justify-between items-center border-b">
@@ -607,7 +608,7 @@ export default function MyProduceDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Van Loading Summary (VLS) Modal */}
+      {/* VLS Modal */}
       <Dialog open={isVlsModalOpen} onOpenChange={setIsVlsModalOpen}>
         <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
           <div className="p-6 border-b bg-white flex justify-between items-center shrink-0">
@@ -682,16 +683,16 @@ export default function MyProduceDashboard() {
                         {Array.from({ length: 20 }).map((_, i) => (
                           <div 
                             key={i} 
-                            onClick={() => handleOpenPalletDetails(i)}
+                            onClick={() => handleOpenPalletDetails(i.toString())}
                             className={cn(
                               "relative group cursor-pointer rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1",
-                              palletsData[i]?.length > 0 
+                              palletsData[i.toString()]?.length > 0 
                                 ? "bg-green-50 border-anflocor-green shadow-md shadow-green-100" 
                                 : "bg-white border-gray-100 hover:border-anflocor-green/30 hover:bg-gray-50"
                             )}
                           >
                             <span className="text-[10px] font-black text-gray-300 group-hover:text-anflocor-green/40">#{i + 1}</span>
-                            {palletsData[i]?.length > 0 ? (
+                            {palletsData[i.toString()]?.length > 0 ? (
                               <>
                                 <Box className="h-6 w-6 text-anflocor-green" />
                                 <span className="text-[8px] font-bold text-anflocor-green uppercase">LOADED</span>
@@ -719,20 +720,18 @@ export default function MyProduceDashboard() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {Object.entries(palletsData).flatMap(([idx, items]) => 
-                            items.map((item, subIdx) => (
-                              <TableRow key={`${idx}-${subIdx}`} className="border-none h-10">
-                                <TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell>
-                                <TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell>
-                              </TableRow>
-                            ))
-                          )}
+                          {getAggregatedSummary().map((item, idx) => (
+                            <TableRow key={idx} className="border-none h-10">
+                              <TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell>
+                              <TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell>
+                            </TableRow>
+                          ))}
                         </TableBody>
                         <TableFooter className="bg-transparent border-t-2 border-gray-200">
                           <TableRow>
                             <TableCell className="text-[10px] font-black uppercase text-gray-400">TOTAL BOXES</TableCell>
                             <TableCell className="text-right font-black text-anflocor-green text-lg">
-                              {Object.values(palletsData).flat().reduce((acc, curr) => acc + (parseInt(curr.qty) || 0), 0)}
+                              {getAggregatedSummary().reduce((acc, curr) => acc + curr.qty, 0)}
                             </TableCell>
                           </TableRow>
                         </TableFooter>
@@ -788,64 +787,49 @@ export default function MyProduceDashboard() {
                   <div className="col-span-2 space-y-6">
                     <div className="flex items-center gap-2">
                       <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
-                      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">FLOOR LOADED BOXES (NON-PALLETIZED)</h3>
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">FLOOR-LOADED BOXES (NON-PALLETIZED)</h3>
                     </div>
-                    <div className="bg-white p-0 rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                      <Table>
-                        <TableHeader className="bg-gray-50/50">
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="text-[9px] font-black uppercase text-gray-400 w-12 text-center">#</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-gray-400">PACK TYPE</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-gray-400 text-center w-32">QUANTITY</TableHead>
-                            <TableHead className="w-16 text-center text-[9px] font-black uppercase text-gray-400">ACTION</TableHead>
+                    <div className="bg-white p-0 rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                      <Table className="border-collapse">
+                        <TableHeader className="bg-[#f8fafc]">
+                          <TableRow className="hover:bg-transparent border-b">
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r w-16 text-center h-10">ROW</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 1</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 2</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 3</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 4</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 5</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] text-center h-10">COL 6</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {nonPalletizedRows.map((row, idx) => (
-                            <TableRow key={idx} className="hover:bg-transparent h-14 border-b last:border-none">
-                              <TableCell className="text-center text-[10px] font-black text-gray-300">
-                                {idx + 1}
+                          {Array.from({ length: 10 }).map((_, rIdx) => (
+                            <TableRow key={rIdx} className="hover:bg-transparent border-b last:border-none h-10">
+                              <TableCell className="text-center text-[10px] font-black text-[#64748b] border-r bg-[#f8fafc]">
+                                {rIdx + 1}
                               </TableCell>
-                              <TableCell>
-                                <Input 
-                                  value={row.packType} 
-                                  onChange={(e) => updateNonPalletizedRow(idx, { packType: e.target.value })}
-                                  placeholder="Enter Pack Type"
-                                  className="h-10 bg-gray-50/30 border-gray-100 text-xs font-bold"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input 
-                                  type="number"
-                                  value={row.qty} 
-                                  onChange={(e) => updateNonPalletizedRow(idx, { qty: e.target.value })}
-                                  placeholder="0"
-                                  className="h-10 bg-gray-50/30 border-gray-100 text-xs font-black text-center"
-                                />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-9 w-9 text-red-200 hover:text-red-500 hover:bg-red-50"
-                                  onClick={() => removeNonPalletizedRow(idx)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
+                              {Array.from({ length: 6 }).map((_, cIdx) => {
+                                const cellKey = `${rIdx}-${cIdx}`;
+                                const hasData = floorLoadData[cellKey]?.length > 0;
+                                const cellValue = floorLoadData[cellKey]?.map(i => `${i.qty}${i.packType.charAt(0)}`).join(', ') || '';
+                                
+                                return (
+                                  <TableCell 
+                                    key={cIdx} 
+                                    onClick={() => handleOpenPalletDetails(cellKey)}
+                                    className={cn(
+                                      "text-center text-[10px] font-bold border-r last:border-none cursor-pointer transition-colors",
+                                      hasData ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]"
+                                    )}
+                                  >
+                                    {cellValue || '-'}
+                                  </TableCell>
+                                );
+                              })}
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
-                      <div className="p-4 bg-gray-50/50 border-t">
-                        <Button 
-                          variant="outline" 
-                          className="w-full h-11 border-dashed border-gray-200 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-anflocor-green hover:border-anflocor-green hover:bg-green-50/50 gap-2 transition-all"
-                          onClick={addNonPalletizedRow}
-                        >
-                          <Plus className="h-3.5 w-3.5" /> ADD ROW
-                        </Button>
-                      </div>
                     </div>
                   </div>
 
@@ -854,7 +838,7 @@ export default function MyProduceDashboard() {
                       <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
                       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">BREAKDOWN SUMMARY</h3>
                     </div>
-                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[200px]">
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[150px]">
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent border-b-2 border-gray-200">
@@ -863,10 +847,10 @@ export default function MyProduceDashboard() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {nonPalletizedRows.filter(r => r.packType && r.qty).map((row, idx) => (
+                          {getAggregatedSummary().map((item, idx) => (
                             <TableRow key={idx} className="border-none h-10">
-                              <TableCell className="font-medium text-xs text-gray-600">{row.packType}</TableCell>
-                              <TableCell className="text-right font-black text-anflocor-green text-xs">{row.qty}</TableCell>
+                              <TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell>
+                              <TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -874,107 +858,53 @@ export default function MyProduceDashboard() {
                           <TableRow>
                             <TableCell className="text-[10px] font-black uppercase text-gray-400">TOTAL BOXES</TableCell>
                             <TableCell className="text-right font-black text-anflocor-green text-lg">
-                              {nonPalletizedRows.reduce((acc, curr) => acc + (parseInt(curr.qty) || 0), 0)}
+                              {getAggregatedSummary().reduce((acc, curr) => acc + curr.qty, 0)}
                             </TableCell>
                           </TableRow>
                         </TableFooter>
                       </Table>
                     </div>
 
-                    {/* Verification Section */}
-                    <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm space-y-8">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-300">VERIFICATION</h3>
-                      </div>
-                      
-                      <div className="space-y-8">
-                        {/* Prepared By */}
-                        <div className="space-y-1 group">
-                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">PREPARED BY</Label>
+                    <div className="bg-white rounded-xl p-8 border border-gray-100 shadow-sm space-y-10">
+                      <div className="space-y-6">
+                        <div className="space-y-1">
                           <Input 
                             value={verificationData.preparedBy.name} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              preparedBy: { ...verificationData.preparedBy, name: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight text-gray-900 focus-visible:ring-0"
+                            onChange={(e) => setVerificationData({...verificationData, preparedBy: {...verificationData.preparedBy, name: e.target.value}})}
+                            className="h-auto p-0 border-none shadow-none text-base font-bold text-gray-900 focus-visible:ring-0 text-center"
                           />
-                          <Input 
-                            value={verificationData.preparedBy.role} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              preparedBy: { ...verificationData.preparedBy, role: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
-                          />
-                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
+                          <div className="h-[1px] w-full bg-gray-300"></div>
+                          <p className="text-[9px] font-black uppercase text-gray-400 text-center tracking-widest mt-1">PREPARED BY</p>
                         </div>
 
-                        {/* Checked By */}
-                        <div className="space-y-1 group">
-                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">CHECKED BY</Label>
+                        <div className="space-y-1">
                           <Input 
                             value={verificationData.checkedBy.name} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              checkedBy: { ...verificationData.checkedBy, name: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight text-gray-900 focus-visible:ring-0"
+                            onChange={(e) => setVerificationData({...verificationData, checkedBy: {...verificationData.checkedBy, name: e.target.value}})}
+                            className="h-auto p-0 border-none shadow-none text-base font-bold text-gray-900 focus-visible:ring-0 text-center"
                           />
-                          <Input 
-                            value={verificationData.checkedBy.role} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              checkedBy: { ...verificationData.checkedBy, role: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
-                          />
-                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
+                          <div className="h-[1px] w-full bg-gray-300"></div>
+                          <p className="text-[9px] font-black uppercase text-gray-400 text-center tracking-widest mt-1">CHECKED BY</p>
                         </div>
 
-                        {/* Approved For Delivery */}
-                        <div className="space-y-1 group">
-                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">APPROVED FOR DELIVERY</Label>
+                        <div className="space-y-1">
                           <Input 
                             value={verificationData.approvedBy.name} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              approvedBy: { ...verificationData.approvedBy, name: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight text-gray-900 focus-visible:ring-0"
+                            onChange={(e) => setVerificationData({...verificationData, approvedBy: {...verificationData.approvedBy, name: e.target.value}})}
+                            className="h-auto p-0 border-none shadow-none text-base font-bold text-gray-900 focus-visible:ring-0 text-center"
                           />
-                          <Input 
-                            value={verificationData.approvedBy.role} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              approvedBy: { ...verificationData.approvedBy, role: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
-                          />
-                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
+                          <div className="h-[1px] w-full bg-gray-300"></div>
+                          <p className="text-[9px] font-black uppercase text-gray-400 text-center tracking-widest mt-1">APPROVED FOR DELIVERY</p>
                         </div>
 
-                        {/* Received By */}
-                        <div className="space-y-1 group">
-                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">RECEIVED BY (HAULER)</Label>
+                        <div className="space-y-1">
                           <Input 
                             value={verificationData.receivedBy.name} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              receivedBy: { ...verificationData.receivedBy, name: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight italic text-gray-300 focus-visible:ring-0"
+                            onChange={(e) => setVerificationData({...verificationData, receivedBy: {...verificationData.receivedBy, name: e.target.value}})}
+                            className="h-auto p-0 border-none shadow-none text-base font-bold text-gray-300 italic focus-visible:ring-0 text-center"
                           />
-                          <Input 
-                            value={verificationData.receivedBy.role} 
-                            onChange={(e) => setVerificationData({
-                              ...verificationData, 
-                              receivedBy: { ...verificationData.receivedBy, role: e.target.value }
-                            })}
-                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
-                          />
-                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
+                          <div className="h-[1px] w-full bg-gray-300"></div>
+                          <p className="text-[9px] font-black uppercase text-gray-400 text-center tracking-widest mt-1">RECEIVED BY (HAULER)</p>
                         </div>
                       </div>
                     </div>
@@ -1002,7 +932,9 @@ export default function MyProduceDashboard() {
           <div className="p-6 border-b bg-gray-50 flex justify-between items-center">
              <div className="flex items-center gap-3">
                <div className="bg-white p-2 rounded-lg border shadow-sm"><Box className="h-5 w-5 text-anflocor-green" /></div>
-               <DialogTitle className="text-sm font-bold uppercase tracking-tight">Pallet Details #{selectedPalletIndex !== null ? selectedPalletIndex + 1 : ''}</DialogTitle>
+               <DialogTitle className="text-sm font-bold uppercase tracking-tight">
+                 {vlsType === 'palletized' ? `Pallet Details #${parseInt(selectedPalletIndex || '0') + 1}` : `Box Details (R${parseInt((selectedPalletIndex || '0-0').split('-')[0]) + 1} C${parseInt((selectedPalletIndex || '0-0').split('-')[1]) + 1})`}
+               </DialogTitle>
              </div>
              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPalletDetailsModalOpen(false)}><X className="h-4 w-4" /></Button>
           </div>
@@ -1056,7 +988,7 @@ export default function MyProduceDashboard() {
 
           <div className="p-4 bg-gray-50 border-t flex gap-2">
              <Button variant="ghost" onClick={() => setIsPalletDetailsModalOpen(false)} className="flex-1 text-[10px] font-black uppercase">CANCEL</Button>
-             <Button onClick={handleSavePalletDetails} className="flex-[2] bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10">SAVE PALLET</Button>
+             <Button onClick={handleSavePalletDetails} className="flex-[2] bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10">SAVE DETAILS</Button>
           </div>
         </DialogContent>
       </Dialog>
