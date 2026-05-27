@@ -166,6 +166,11 @@ interface PalletItem {
   qty: string;
 }
 
+interface VerificationPerson {
+  name: string;
+  role: string;
+}
+
 export default function MyProduceDashboard() {
   const router = useRouter();
   const db = useFirestore();
@@ -206,9 +211,10 @@ export default function MyProduceDashboard() {
   const [nonPalletizedRows, setNonPalletizedRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
   
   const [verificationData, setVerificationData] = useState({
-    preparedBy: '',
-    checkedBy: '',
-    verifiedBy: ''
+    preparedBy: { name: 'D.G. REYES', role: 'PACKING STATION FOREMAN' },
+    checkedBy: { name: 'EDCEL OBRADO', role: 'QAD - INSPECTOR' },
+    approvedBy: { name: 'RS PALADIO', role: 'PACKING STATION OVERSEER' },
+    receivedBy: { name: 'IAN BINAYA', role: 'HAULER REPRESENTATIVE' }
   });
   
   const [tripStep, setTripStep] = useState<1 | 2>(1);
@@ -468,7 +474,7 @@ export default function MyProduceDashboard() {
               <TableHead className="text-[9px] font-black uppercase text-gray-400">SEAL NO.</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">DRIVER</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE ATW RELEASED</TableHead>
-              <TableHead className="text-[9px] font-black uppercase text-gray-400 text-right text-gray-400">ACTIONS</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-right text-gray-400">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -513,89 +519,62 @@ export default function MyProduceDashboard() {
 
       {/* Start Transfer Modal */}
       <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
-        <DialogContent className="max-w-[700px] p-0 overflow-hidden bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-[500px] p-0 overflow-hidden bg-white border-none shadow-2xl">
           <div className="p-6 flex justify-between items-center border-b">
-            <DialogTitle className="text-lg font-semibold text-gray-700">Start Transfer - {selectedTripForTransfer?.vanNo || 'V-4022'}</DialogTitle>
+            <div>
+              <DialogTitle className="text-lg font-bold text-gray-900">Start Transfer</DialogTitle>
+              <DialogDescription className="text-xs font-medium text-gray-400 mt-0.5">Initiating container movement to port</DialogDescription>
+            </div>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsTransferModalOpen(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
           
-          <div className="p-8 space-y-10">
-            <div className="grid grid-cols-2 gap-12">
-              <div className="space-y-8">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">INBOUND DRIVER NAME</Label>
-                  <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
-                </div>
-
-                <div className="space-y-4">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">INSPECTION CHECKLIST</Label>
-                  <div className="grid grid-cols-2 gap-y-3">
-                    <div className="flex items-center space-x-3">
-                      <Checkbox id="temp" className="border-gray-300 h-4 w-4 rounded-sm" />
-                      <label htmlFor="temp" className="text-sm font-medium text-gray-600 cursor-pointer">Temperature</label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <Checkbox id="leaks" className="border-gray-300 h-4 w-4 rounded-sm" />
-                      <label htmlFor="leaks" className="text-sm font-medium text-gray-600 cursor-pointer">No Leaks</label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <Checkbox id="drain" className="border-gray-300 h-4 w-4 rounded-sm" />
-                      <label htmlFor="drain" className="text-sm font-medium text-gray-600 cursor-pointer">Check Drain Plug</label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <Checkbox id="odor" className="border-gray-300 h-4 w-4 rounded-sm" />
-                      <label htmlFor="odor" className="text-sm font-medium text-gray-600 cursor-pointer">No Odor</label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">OUTBOUND DRIVER NAME</Label>
-                  <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PHOTO CONFIRMATION</Label>
-                  <div className="flex flex-wrap gap-2.5">
-                    <div className="w-14 h-14 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
-                      <Camera className="h-5 w-5 text-gray-300" />
-                      <span className="text-[8px] font-black text-gray-400 mt-1 uppercase tracking-tighter">UPLOAD</span>
-                    </div>
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="w-14 h-14 bg-gray-50 border border-gray-100 rounded flex items-center justify-center">
-                        <ImageIcon className="h-5 w-5 text-gray-200" />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[9px] text-gray-400 italic font-medium">Up to 5 photos can be uploaded for loading verification.</p>
-                </div>
-              </div>
+          <div className="p-8 space-y-6">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+               <div>
+                  <Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">CONTAINER NO</Label>
+                  <span className="text-sm font-black text-gray-900 uppercase">{selectedTripForTransfer?.containerNo || 'N/A'}</span>
+               </div>
+               <div className="text-right">
+                  <Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">POD</Label>
+                  <Badge className="bg-anflocor-green text-white font-bold">{selectedTripForTransfer?.pod || 'SHA'}</Badge>
+               </div>
             </div>
 
-            <div className="space-y-3">
-              <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">DOCUMENT ACTIONS</Label>
-              <div className="flex gap-4">
-                <Button 
-                  className="h-12 px-6 bg-black hover:bg-black/90 text-white font-bold text-xs tracking-widest gap-2 uppercase"
-                  onClick={() => setIsVlsModalOpen(true)}
-                >
-                  + CREATE VLS
-                </Button>
-                <Button variant="outline" className="h-12 px-6 border-2 border-black text-black font-bold text-xs tracking-widest gap-2 bg-white hover:bg-gray-50 uppercase">+ CREATE DR</Button>
-              </div>
+            <div className="space-y-4">
+               <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">GATE PASS NUMBER</Label>
+                  <Input placeholder="Enter GP-XXXXX" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
+               </div>
+
+               <div className="space-y-3">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">SEAL VERIFICATION</Label>
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50/50 border border-gray-100 rounded-lg">
+                    <Checkbox id="sealVerify" className="border-gray-300 h-4 w-4 rounded-sm" />
+                    <label htmlFor="sealVerify" className="text-sm font-medium text-gray-600 cursor-pointer">I confirm the seal is intact and matches the manifest.</label>
+                  </div>
+               </div>
+
+               <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">DISPATCHER ID</Label>
+                  <Input placeholder="Enter your employee ID" className="h-11 bg-gray-50/50 border-gray-100 font-medium text-sm" />
+               </div>
+
+               <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">ADDITIONAL NOTES</Label>
+                  <Textarea placeholder="Any observations during gate out..." className="bg-gray-50/50 border-gray-100 resize-none min-h-[100px]" />
+               </div>
             </div>
           </div>
           
-          <div className="p-6 bg-gray-50/50 border-t flex justify-end">
-            <Button className="h-12 px-10 bg-[#14532d] hover:bg-[#114626] text-white font-bold text-xs tracking-widest gap-2 shadow-sm rounded-sm uppercase" onClick={() => { 
-              toast({ title: "Transfer Saved", description: "Inbound/Outbound details have been logged." });
+          <div className="p-6 bg-gray-50/50 border-t flex justify-end gap-3">
+            <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest text-gray-400" onClick={() => setIsTransferModalOpen(false)}>CANCEL</Button>
+            <Button className="h-12 px-8 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-bold text-xs tracking-widest gap-2 shadow-sm rounded-sm uppercase" onClick={() => { 
+              toast({ title: "Movement Started", description: "Container transfer has been logged in the system." });
               setIsTransferModalOpen(false);
             }}>
-              <RefreshCcw className="h-4 w-4" /> SAVE
+              CONFIRM TRANSFER
             </Button>
           </div>
         </DialogContent>
@@ -732,27 +711,6 @@ export default function MyProduceDashboard() {
                         </TableFooter>
                       </Table>
                     </div>
-
-                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4">
-                      <div className="flex items-center gap-2">
-                        <Signature className="h-4 w-4 text-gray-400" />
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">VERIFICATION</h3>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="space-y-1">
-                          <Label className="text-[8px] font-bold text-gray-400 uppercase">PREPARED BY</Label>
-                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.preparedBy} onChange={(e) => setVerificationData({...verificationData, preparedBy: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[8px] font-bold text-gray-400 uppercase">CHECKED BY</Label>
-                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.checkedBy} onChange={(e) => setVerificationData({...verificationData, checkedBy: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[8px] font-bold text-gray-400 uppercase">VERIFIED BY</Label>
-                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.verifiedBy} onChange={(e) => setVerificationData({...verificationData, verifiedBy: e.target.value})} />
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -805,24 +763,28 @@ export default function MyProduceDashboard() {
                       <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
                       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">FLOOR LOADED BOXES (NON-PALLETIZED)</h3>
                     </div>
-                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-4">
+                    <div className="bg-white p-0 rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                       <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-gray-50/50">
                           <TableRow className="hover:bg-transparent">
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 w-12 text-center">#</TableHead>
                             <TableHead className="text-[9px] font-black uppercase text-gray-400">PACK TYPE</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-gray-400 text-center">QUANTITY</TableHead>
-                            <TableHead className="w-12 text-center text-[9px] font-black uppercase text-gray-400">ACTION</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 text-center w-32">QUANTITY</TableHead>
+                            <TableHead className="w-16 text-center text-[9px] font-black uppercase text-gray-400">ACTION</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {nonPalletizedRows.map((row, idx) => (
-                            <TableRow key={idx} className="hover:bg-transparent">
+                            <TableRow key={idx} className="hover:bg-transparent h-14 border-b last:border-none">
+                              <TableCell className="text-center text-[10px] font-black text-gray-300">
+                                {idx + 1}
+                              </TableCell>
                               <TableCell>
                                 <Input 
                                   value={row.packType} 
                                   onChange={(e) => updateNonPalletizedRow(idx, { packType: e.target.value })}
                                   placeholder="Enter Pack Type"
-                                  className="h-9 bg-white text-xs font-medium"
+                                  className="h-10 bg-gray-50/30 border-gray-100 text-xs font-bold"
                                 />
                               </TableCell>
                               <TableCell>
@@ -831,14 +793,14 @@ export default function MyProduceDashboard() {
                                   value={row.qty} 
                                   onChange={(e) => updateNonPalletizedRow(idx, { qty: e.target.value })}
                                   placeholder="0"
-                                  className="h-9 bg-white text-xs font-black text-center"
+                                  className="h-10 bg-gray-50/30 border-gray-100 text-xs font-black text-center"
                                 />
                               </TableCell>
                               <TableCell className="text-center">
                                 <Button 
                                   variant="ghost" 
                                   size="icon" 
-                                  className="h-8 w-8 text-red-200 hover:text-red-500 hover:bg-red-50"
+                                  className="h-9 w-9 text-red-200 hover:text-red-500 hover:bg-red-50"
                                   onClick={() => removeNonPalletizedRow(idx)}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -848,13 +810,15 @@ export default function MyProduceDashboard() {
                           ))}
                         </TableBody>
                       </Table>
-                      <Button 
-                        variant="outline" 
-                        className="w-full h-10 border-dashed border-gray-300 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-anflocor-green hover:border-anflocor-green gap-2"
-                        onClick={addNonPalletizedRow}
-                      >
-                        <Plus className="h-3 w-3" /> ADD ROW
-                      </Button>
+                      <div className="p-4 bg-gray-50/50 border-t">
+                        <Button 
+                          variant="outline" 
+                          className="w-full h-11 border-dashed border-gray-200 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-anflocor-green hover:border-anflocor-green hover:bg-green-50/50 gap-2 transition-all"
+                          onClick={addNonPalletizedRow}
+                        >
+                          <Plus className="h-3.5 w-3.5" /> ADD ROW
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -863,7 +827,7 @@ export default function MyProduceDashboard() {
                       <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
                       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">BREAKDOWN SUMMARY</h3>
                     </div>
-                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[300px]">
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[200px]">
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent border-b-2 border-gray-200">
@@ -890,24 +854,100 @@ export default function MyProduceDashboard() {
                       </Table>
                     </div>
 
-                    {/* Verification Section */}
-                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4">
-                      <div className="flex items-center gap-2">
-                        <Signature className="h-4 w-4 text-gray-400" />
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">VERIFICATION</h3>
+                    {/* Verification Section - Redesigned to match Attachment 1 */}
+                    <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm space-y-8">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-300">VERIFICATION</h3>
                       </div>
-                      <div className="space-y-4">
-                        <div className="space-y-1">
-                          <Label className="text-[8px] font-bold text-gray-400 uppercase">PREPARED BY</Label>
-                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.preparedBy} onChange={(e) => setVerificationData({...verificationData, preparedBy: e.target.value})} />
+                      
+                      <div className="space-y-8">
+                        {/* Prepared By */}
+                        <div className="space-y-1 group">
+                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">PREPARED BY</Label>
+                          <Input 
+                            value={verificationData.preparedBy.name} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              preparedBy: { ...verificationData.preparedBy, name: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight text-gray-900 focus-visible:ring-0"
+                          />
+                          <Input 
+                            value={verificationData.preparedBy.role} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              preparedBy: { ...verificationData.preparedBy, role: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
+                          />
+                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-[8px] font-bold text-gray-400 uppercase">CHECKED BY</Label>
-                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.checkedBy} onChange={(e) => setVerificationData({...verificationData, checkedBy: e.target.value})} />
+
+                        {/* Checked By */}
+                        <div className="space-y-1 group">
+                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">CHECKED BY</Label>
+                          <Input 
+                            value={verificationData.checkedBy.name} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              checkedBy: { ...verificationData.checkedBy, name: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight text-gray-900 focus-visible:ring-0"
+                          />
+                          <Input 
+                            value={verificationData.checkedBy.role} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              checkedBy: { ...verificationData.checkedBy, role: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
+                          />
+                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-[8px] font-bold text-gray-400 uppercase">VERIFIED BY</Label>
-                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.verifiedBy} onChange={(e) => setVerificationData({...verificationData, verifiedBy: e.target.value})} />
+
+                        {/* Approved For Delivery */}
+                        <div className="space-y-1 group">
+                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">APPROVED FOR DELIVERY</Label>
+                          <Input 
+                            value={verificationData.approvedBy.name} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              approvedBy: { ...verificationData.approvedBy, name: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight text-gray-900 focus-visible:ring-0"
+                          />
+                          <Input 
+                            value={verificationData.approvedBy.role} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              approvedBy: { ...verificationData.approvedBy, role: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
+                          />
+                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
+                        </div>
+
+                        {/* Received By */}
+                        <div className="space-y-1 group">
+                          <Label className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-1">RECEIVED BY (HAULER)</Label>
+                          <Input 
+                            value={verificationData.receivedBy.name} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              receivedBy: { ...verificationData.receivedBy, name: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-lg font-black tracking-tight italic text-gray-300 focus-visible:ring-0"
+                          />
+                          <Input 
+                            value={verificationData.receivedBy.role} 
+                            onChange={(e) => setVerificationData({
+                              ...verificationData, 
+                              receivedBy: { ...verificationData.receivedBy, role: e.target.value }
+                            })}
+                            className="h-auto p-0 border-none shadow-none text-[9px] font-black uppercase text-gray-300 tracking-wider focus-visible:ring-0"
+                          />
+                          <div className="h-[1px] w-full bg-gray-100 group-focus-within:bg-anflocor-green mt-1"></div>
                         </div>
                       </div>
                     </div>
