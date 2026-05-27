@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -424,7 +425,7 @@ export default function MyProduceDashboard() {
         </div>
         <div className="flex gap-3">
           <Button variant="outline" className="h-10 px-6 font-bold uppercase text-xs tracking-widest border-gray-200">CREATE/VIEW TRIPS</Button>
-          <Button className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2" onClick={() => { setTripStep(1); setIsNewTripOpen(true); }}><Plus className="h-4 w-4" /> NEW TRIP</Button>
+          <Button className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2" onClick={() => { setTripStep(1); setIsNewLAOpen(true); setIsNewTripOpen(true); }}><Plus className="h-4 w-4" /> NEW TRIP</Button>
         </div>
       </div>
 
@@ -790,46 +791,68 @@ export default function MyProduceDashboard() {
                       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">FLOOR-LOADED BOXES (NON-PALLETIZED)</h3>
                     </div>
                     <div className="bg-white p-0 rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                      <Table className="border-collapse">
-                        <TableHeader className="bg-[#f8fafc]">
-                          <TableRow className="hover:bg-transparent border-b">
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r w-16 text-center h-10">ROW</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 1</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 2</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 3</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 4</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 5</TableHead>
-                            <TableHead className="text-[9px] font-black uppercase text-[#64748b] text-center h-10">COL 6</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {Array.from({ length: 10 }).map((_, rIdx) => (
-                            <TableRow key={rIdx} className="hover:bg-transparent border-b last:border-none h-10">
-                              <TableCell className="text-center text-[10px] font-black text-[#64748b] border-r bg-[#f8fafc]">
-                                {rIdx + 1}
-                              </TableCell>
-                              {Array.from({ length: 6 }).map((_, cIdx) => {
-                                const cellKey = `${rIdx}-${cIdx}`;
-                                const hasData = floorLoadData[cellKey]?.length > 0;
-                                const cellValue = floorLoadData[cellKey]?.map(i => `${i.qty}${i.packType.charAt(0)}`).join(', ') || '';
-                                
-                                return (
-                                  <TableCell 
-                                    key={cIdx} 
-                                    onClick={() => handleOpenPalletDetails(cellKey)}
-                                    className={cn(
-                                      "text-center text-[10px] font-bold border-r last:border-none cursor-pointer transition-colors",
-                                      hasData ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]"
-                                    )}
-                                  >
-                                    {cellValue || '-'}
-                                  </TableCell>
-                                );
-                              })}
+                      <ScrollArea className="h-[400px]">
+                        <Table className="border-collapse">
+                          <TableHeader className="bg-[#f8fafc] sticky top-0 z-10">
+                            <TableRow className="hover:bg-transparent border-b">
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r w-16 text-center h-10">ROW</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 1</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 2</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 3</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 4</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 5</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] text-center h-10">COL 6</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {Array.from({ length: 32 }).map((_, rIdx) => (
+                              <TableRow key={rIdx} className="hover:bg-transparent border-b last:border-none h-8">
+                                <TableCell className="text-center text-[9px] font-black text-[#64748b] border-r bg-[#f8fafc] py-1">
+                                  {rIdx + 1}
+                                </TableCell>
+                                
+                                {/* Column 1 - 32 rows */}
+                                <TableCell 
+                                  onClick={() => handleOpenPalletDetails(`${rIdx}-0`)}
+                                  className={cn(
+                                    "text-center text-[10px] font-bold border-r cursor-pointer transition-colors py-1",
+                                    floorLoadData[`${rIdx}-0`]?.length > 0 ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]"
+                                  )}
+                                >
+                                  {floorLoadData[`${rIdx}-0`]?.map(i => `${i.qty}${i.packType.charAt(0)}`).join(', ') || '-'}
+                                </TableCell>
+
+                                {/* Columns 2-6 - 22 rows only */}
+                                {Array.from({ length: 5 }).map((_, cIdx) => {
+                                  const actualCol = cIdx + 1;
+                                  const cellKey = `${rIdx}-${actualCol}`;
+                                  const hasData = floorLoadData[cellKey]?.length > 0;
+                                  const cellValue = floorLoadData[cellKey]?.map(i => `${i.qty}${i.packType.charAt(0)}`).join(', ') || '';
+                                  
+                                  if (rIdx < 22) {
+                                    return (
+                                      <TableCell 
+                                        key={cIdx} 
+                                        onClick={() => handleOpenPalletDetails(cellKey)}
+                                        className={cn(
+                                          "text-center text-[10px] font-bold border-r last:border-none cursor-pointer transition-colors py-1",
+                                          hasData ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]"
+                                        )}
+                                      >
+                                        {cellValue || '-'}
+                                      </TableCell>
+                                    );
+                                  } else {
+                                    return (
+                                      <TableCell key={cIdx} className="bg-gray-100/20 border-r last:border-none cursor-not-allowed py-1" />
+                                    );
+                                  }
+                                })}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
                     </div>
                   </div>
 
@@ -865,6 +888,7 @@ export default function MyProduceDashboard() {
                       </Table>
                     </div>
 
+                    {/* Verification design as per requirements */}
                     <div className="bg-white rounded-xl p-8 border border-gray-100 shadow-sm space-y-10">
                       <div className="space-y-6">
                         <div className="space-y-1">
@@ -933,7 +957,7 @@ export default function MyProduceDashboard() {
              <div className="flex items-center gap-3">
                <div className="bg-white p-2 rounded-lg border shadow-sm"><Box className="h-5 w-5 text-anflocor-green" /></div>
                <DialogTitle className="text-sm font-bold uppercase tracking-tight">
-                 {vlsType === 'palletized' ? `Pallet Details #${parseInt(selectedPalletIndex || '0') + 1}` : `Box Details (R${parseInt((selectedPalletIndex || '0-0').split('-')[0]) + 1} C${parseInt((selectedPalletIndex || '0-0').split('-')[1]) + 1})`}
+                 {vlsType === 'palletized' ? `Pallet Details #${parseInt(selectedPalletIndex || '0') + 1}` : `Box Details (Cell ${selectedPalletIndex})`}
                </DialogTitle>
              </div>
              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPalletDetailsModalOpen(false)}><X className="h-4 w-4" /></Button>
