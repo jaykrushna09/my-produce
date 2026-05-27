@@ -59,7 +59,8 @@ import {
   PackageCheck,
   Camera,
   Image as ImageIcon,
-  LayoutGrid
+  LayoutGrid,
+  Signature
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -127,21 +128,22 @@ import {
 import { useFirestore, useCollection, useMemoFirebase, useUser, useAuth } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
-import { format, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
+import { format } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips';
 
-interface LARow {
+interface TripRow {
   id: string;
-  farm: string;
-  pol: string;
-  pod: string;
-  shippingLine: string;
-  cutOffDate: string;
-  etd: string;
-  totalVans: number;
-  skuCode: string;
-  palletizedType: 'Palletized' | 'Non Palletized';
+  ps: string;
+  containerNo: string;
+  vanNo: string;
+  sealNo: string;
+  atwStatus: 'Y' | 'N';
+  atwReleased: string;
+  pmNo: string;
+  driverName: string;
+  signature: 'Pending' | 'Signed';
+  dateWithdrawn: string;
 }
 
 interface CORow {
@@ -159,28 +161,6 @@ interface CORow {
   atwStatus: 'PENDING' | 'READY' | 'LOADED';
 }
 
-interface BookingRow {
-  id: string;
-  bookingNo: string;
-  shippingLine: string;
-  vesselName: string;
-  pod: string;
-}
-
-interface TripRow {
-  id: string;
-  ps: string;
-  containerNo: string;
-  vanNo: string;
-  sealNo: string;
-  atwStatus: 'Y' | 'N';
-  atwReleased: string;
-  pmNo: string;
-  driverName: string;
-  signature: 'Pending' | 'Signed';
-  dateWithdrawn: string;
-}
-
 interface PalletItem {
   packType: string;
   qty: string;
@@ -190,12 +170,11 @@ export default function MyProduceDashboard() {
   const router = useRouter();
   const db = useFirestore();
   const auth = useAuth();
-  const { user, loading: userLoading } = useUser();
+  const { user } = useUser();
   const { toast } = useToast();
   
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
   
@@ -224,6 +203,13 @@ export default function MyProduceDashboard() {
   });
   const [palletsData, setPalletsData] = useState<{[key: number]: PalletItem[]}>({});
   const [currentPalletRows, setCurrentPalletRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
+  const [nonPalletizedRows, setNonPalletizedRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
+  
+  const [verificationData, setVerificationData] = useState({
+    preparedBy: '',
+    checkedBy: '',
+    verifiedBy: ''
+  });
   
   const [tripStep, setTripStep] = useState<1 | 2>(1);
   const [newTripHeader, setNewTripHeader] = useState({ 
@@ -278,8 +264,8 @@ export default function MyProduceDashboard() {
   const { data: customerMappings } = useCollection(customerMappingsQuery);
   const { data: podMappings } = useCollection(podMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
-  const { data: bookings, loading: bookingsLoading } = useCollection(bookingsQuery);
-  const { data: trips, loading: tripsLoading } = useCollection(tripsQuery);
+  const { data: bookings } = useCollection(bookingsQuery);
+  const { data: trips } = useCollection(tripsQuery);
 
   const weekOptions = useMemo(() => {
     const options = [];
@@ -390,6 +376,22 @@ export default function MyProduceDashboard() {
     }
   };
 
+  const addNonPalletizedRow = () => {
+    setNonPalletizedRows([...nonPalletizedRows, { packType: '', qty: '' }]);
+  };
+
+  const updateNonPalletizedRow = (index: number, updates: Partial<PalletItem>) => {
+    const newRows = [...nonPalletizedRows];
+    newRows[index] = { ...newRows[index], ...updates };
+    setNonPalletizedRows(newRows);
+  };
+
+  const removeNonPalletizedRow = (index: number) => {
+    if (nonPalletizedRows.length > 1) {
+      setNonPalletizedRows(nonPalletizedRows.filter((_, i) => i !== index));
+    }
+  };
+
   const renderTripsView = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center gap-4 mb-4">
@@ -466,8 +468,7 @@ export default function MyProduceDashboard() {
               <TableHead className="text-[9px] font-black uppercase text-gray-400">SEAL NO.</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">DRIVER</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE ATW RELEASED</TableHead>
-              <TableHead className="text-[9px] font-black uppercase text-gray-400">DATE WITHDRAWN</TableHead>
-              <TableHead className="text-[9px] font-black uppercase text-gray-400 text-right">ACTIONS</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400 text-right text-gray-400">ACTIONS</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -480,7 +481,6 @@ export default function MyProduceDashboard() {
                 <TableCell className="text-xs">{t.sealNo}</TableCell>
                 <TableCell className="font-bold text-xs uppercase">{t.driver}</TableCell>
                 <TableCell className="text-[10px] text-gray-400">{t.dateAtwReleased}</TableCell>
-                <TableCell className="text-[10px] text-gray-400">{t.dateWithdrawn}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -603,7 +603,7 @@ export default function MyProduceDashboard() {
 
       {/* Van Loading Summary (VLS) Modal */}
       <Dialog open={isVlsModalOpen} onOpenChange={setIsVlsModalOpen}>
-        <DialogContent className="max-w-[90vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
+        <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
           <div className="p-6 border-b bg-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
               <div className="bg-green-100 p-2 rounded-lg"><FileCheck className="h-6 w-6 text-anflocor-green" /></div>
@@ -612,14 +612,14 @@ export default function MyProduceDashboard() {
             <Button variant="ghost" size="icon" onClick={() => setIsVlsModalOpen(false)}><X className="h-5 w-5" /></Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8 bg-white space-y-8">
+          <div className="flex-1 overflow-y-auto p-8 bg-white">
             <Tabs value={vlsType} onValueChange={(val: any) => setVlsType(val)} className="w-full">
               <TabsList className="bg-gray-100 p-1 w-fit mb-8">
                 <TabsTrigger value="palletized" className="data-[state=active]:bg-white data-[state=active]:text-anflocor-green font-black uppercase text-[10px] tracking-widest px-8">PALLETIZED</TabsTrigger>
                 <TabsTrigger value="non-palletized" className="data-[state=active]:bg-white data-[state=active]:text-anflocor-green font-black uppercase text-[10px] tracking-widest px-8">NON-PALLETIZED</TabsTrigger>
               </TabsList>
 
-              <div className="space-y-10">
+              <TabsContent value="palletized" className="space-y-10 mt-0">
                 <div className="space-y-6">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
@@ -628,84 +628,35 @@ export default function MyProduceDashboard() {
                   <div className="grid grid-cols-4 gap-6">
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">DATE PREPARED</Label>
-                      <Input 
-                        type="date"
-                        value={vlsManifest.datePrepared} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, datePrepared: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input type="date" value={vlsManifest.datePrepared} onChange={(e) => setVlsManifest({...vlsManifest, datePrepared: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">WAYBILL NO.</Label>
-                      <Input 
-                        value={vlsManifest.waybillNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, waybillNo: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.waybillNo} onChange={(e) => setVlsManifest({...vlsManifest, waybillNo: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">HAULER</Label>
-                      <Input 
-                        value={vlsManifest.hauler} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, hauler: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.hauler} onChange={(e) => setVlsManifest({...vlsManifest, hauler: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">TRUCK NO.</Label>
-                      <Input 
-                        value={vlsManifest.truckNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, truckNo: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.truckNo} onChange={(e) => setVlsManifest({...vlsManifest, truckNo: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">PLATE NO.</Label>
-                      <Input 
-                        value={vlsManifest.plateNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, plateNo: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.plateNo} onChange={(e) => setVlsManifest({...vlsManifest, plateNo: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">TRIP NO.</Label>
-                      <Input 
-                        value={vlsManifest.tripNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, tripNo: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.tripNo} onChange={(e) => setVlsManifest({...vlsManifest, tripNo: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">VAN NO.</Label>
-                      <Input 
-                        value={vlsManifest.vanNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, vanNo: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.vanNo} onChange={(e) => setVlsManifest({...vlsManifest, vanNo: e.target.value})} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">SEAL NO.</Label>
-                      <Input 
-                        value={vlsManifest.sealNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, sealNo: e.target.value})}
-                        className="h-10" 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[9px] font-bold text-gray-400 uppercase">GENSET NO.</Label>
-                      <Input 
-                        value={vlsManifest.gensetNo} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, gensetNo: e.target.value})}
-                        className="h-10" 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[9px] font-bold text-gray-400 uppercase">TEMP. SETTING</Label>
-                      <Input 
-                        value={vlsManifest.tempSetting} 
-                        onChange={(e) => setVlsManifest({...vlsManifest, tempSetting: e.target.value})}
-                        className="h-10" 
-                      />
+                      <Input value={vlsManifest.sealNo} onChange={(e) => setVlsManifest({...vlsManifest, sealNo: e.target.value})} className="h-10" />
                     </div>
                   </div>
                 </div>
@@ -745,10 +696,6 @@ export default function MyProduceDashboard() {
                           </div>
                         ))}
                       </div>
-                      <div className="mt-8 flex justify-center gap-20">
-                         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded-full"></div><span className="text-[10px] font-bold text-gray-400 uppercase">LOADED</span></div>
-                         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-gray-200 rounded-full"></div><span className="text-[10px] font-bold text-gray-400 uppercase">EMPTY</span></div>
-                      </div>
                     </div>
                   </div>
 
@@ -757,7 +704,7 @@ export default function MyProduceDashboard() {
                       <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
                       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">BREAKDOWN SUMMARY</h3>
                     </div>
-                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[400px]">
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[300px]">
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent border-b-2 border-gray-200">
@@ -768,21 +715,11 @@ export default function MyProduceDashboard() {
                         <TableBody>
                           {Object.entries(palletsData).flatMap(([idx, items]) => 
                             items.map((item, subIdx) => (
-                              <TableRow key={`${idx}-${subIdx}`} className="border-none h-10 group">
+                              <TableRow key={`${idx}-${subIdx}`} className="border-none h-10">
                                 <TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell>
                                 <TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell>
                               </TableRow>
                             ))
-                          )}
-                          {Object.keys(palletsData).length === 0 && (
-                            <TableRow>
-                              <TableCell colSpan={2} className="h-64 text-center">
-                                <div className="flex flex-col items-center gap-2 opacity-20">
-                                  <LayoutGrid className="h-10 w-10" />
-                                  <span className="text-[10px] font-black uppercase">No pallets recorded</span>
-                                </div>
-                              </TableCell>
-                            </TableRow>
                           )}
                         </TableBody>
                         <TableFooter className="bg-transparent border-t-2 border-gray-200">
@@ -795,9 +732,188 @@ export default function MyProduceDashboard() {
                         </TableFooter>
                       </Table>
                     </div>
+
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Signature className="h-4 w-4 text-gray-400" />
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">VERIFICATION</h3>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-bold text-gray-400 uppercase">PREPARED BY</Label>
+                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.preparedBy} onChange={(e) => setVerificationData({...verificationData, preparedBy: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-bold text-gray-400 uppercase">CHECKED BY</Label>
+                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.checkedBy} onChange={(e) => setVerificationData({...verificationData, checkedBy: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-bold text-gray-400 uppercase">VERIFIED BY</Label>
+                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.verifiedBy} onChange={(e) => setVerificationData({...verificationData, verifiedBy: e.target.value})} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </TabsContent>
+
+              <TabsContent value="non-palletized" className="space-y-10 mt-0">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">LOGISTICS MANIFEST INFO</h3>
+                  </div>
+                  <div className="grid grid-cols-4 gap-6">
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">DATE PREPARED</Label>
+                      <Input type="date" value={vlsManifest.datePrepared} onChange={(e) => setVlsManifest({...vlsManifest, datePrepared: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">WAYBILL NO.</Label>
+                      <Input value={vlsManifest.waybillNo} onChange={(e) => setVlsManifest({...vlsManifest, waybillNo: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">HAULER</Label>
+                      <Input value={vlsManifest.hauler} onChange={(e) => setVlsManifest({...vlsManifest, hauler: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">TRUCK NO.</Label>
+                      <Input value={vlsManifest.truckNo} onChange={(e) => setVlsManifest({...vlsManifest, truckNo: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">PLATE NO.</Label>
+                      <Input value={vlsManifest.plateNo} onChange={(e) => setVlsManifest({...vlsManifest, plateNo: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">TRIP NO.</Label>
+                      <Input value={vlsManifest.tripNo} onChange={(e) => setVlsManifest({...vlsManifest, tripNo: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">VAN NO.</Label>
+                      <Input value={vlsManifest.vanNo} onChange={(e) => setVlsManifest({...vlsManifest, vanNo: e.target.value})} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">SEAL NO.</Label>
+                      <Input value={vlsManifest.sealNo} onChange={(e) => setVlsManifest({...vlsManifest, sealNo: e.target.value})} className="h-10" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-12 pt-8 border-t">
+                  <div className="col-span-2 space-y-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">FLOOR LOADED BOXES (NON-PALLETIZED)</h3>
+                    </div>
+                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400">PACK TYPE</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 text-center">QUANTITY</TableHead>
+                            <TableHead className="w-12 text-center text-[9px] font-black uppercase text-gray-400">ACTION</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {nonPalletizedRows.map((row, idx) => (
+                            <TableRow key={idx} className="hover:bg-transparent">
+                              <TableCell>
+                                <Input 
+                                  value={row.packType} 
+                                  onChange={(e) => updateNonPalletizedRow(idx, { packType: e.target.value })}
+                                  placeholder="Enter Pack Type"
+                                  className="h-9 bg-white text-xs font-medium"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input 
+                                  type="number"
+                                  value={row.qty} 
+                                  onChange={(e) => updateNonPalletizedRow(idx, { qty: e.target.value })}
+                                  placeholder="0"
+                                  className="h-9 bg-white text-xs font-black text-center"
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-red-200 hover:text-red-500 hover:bg-red-50"
+                                  onClick={() => removeNonPalletizedRow(idx)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <Button 
+                        variant="outline" 
+                        className="w-full h-10 border-dashed border-gray-300 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-anflocor-green hover:border-anflocor-green gap-2"
+                        onClick={addNonPalletizedRow}
+                      >
+                        <Plus className="h-3 w-3" /> ADD ROW
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">BREAKDOWN SUMMARY</h3>
+                    </div>
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[300px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-b-2 border-gray-200">
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">PACK TYPE</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8 text-right">QTY</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {nonPalletizedRows.filter(r => r.packType && r.qty).map((row, idx) => (
+                            <TableRow key={idx} className="border-none h-10">
+                              <TableCell className="font-medium text-xs text-gray-600">{row.packType}</TableCell>
+                              <TableCell className="text-right font-black text-anflocor-green text-xs">{row.qty}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter className="bg-transparent border-t-2 border-gray-200">
+                          <TableRow>
+                            <TableCell className="text-[10px] font-black uppercase text-gray-400">TOTAL BOXES</TableCell>
+                            <TableCell className="text-right font-black text-anflocor-green text-lg">
+                              {nonPalletizedRows.reduce((acc, curr) => acc + (parseInt(curr.qty) || 0), 0)}
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </div>
+
+                    {/* Verification Section */}
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Signature className="h-4 w-4 text-gray-400" />
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">VERIFICATION</h3>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-bold text-gray-400 uppercase">PREPARED BY</Label>
+                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.preparedBy} onChange={(e) => setVerificationData({...verificationData, preparedBy: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-bold text-gray-400 uppercase">CHECKED BY</Label>
+                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.checkedBy} onChange={(e) => setVerificationData({...verificationData, checkedBy: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-bold text-gray-400 uppercase">VERIFIED BY</Label>
+                          <Input className="h-8 bg-white text-xs font-bold" value={verificationData.verifiedBy} onChange={(e) => setVerificationData({...verificationData, verifiedBy: e.target.value})} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
             </Tabs>
           </div>
 
@@ -904,7 +1020,7 @@ export default function MyProduceDashboard() {
                     <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
                     <Select value={newTripHeader.customerName} onValueChange={(val) => setNewTripHeader({...newTripHeader, customerName: val})}>
                       <SelectTrigger className="h-12 bg-gray-50"><SelectValue placeholder="Select Customer" /></SelectTrigger>
-                      <SelectContent>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+                      <SelectContent>{customerMappings?.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -917,12 +1033,12 @@ export default function MyProduceDashboard() {
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-gray-300">Booking No</Label>
                     <Select value={newTripHeader.bookingNo} onValueChange={(val) => {
-                      const b = bookings.find((bk: any) => bk.bookingNumber === val);
+                      const b = bookings?.find((bk: any) => bk.bookingNumber === val);
                       if (b) setNewTripHeader({...newTripHeader, bookingNo: val, shippingLine: b.shippingLine, vessel: b.vesselName, pod: b.pod });
                       else setNewTripHeader({...newTripHeader, bookingNo: val});
                     }}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="--Select--" /></SelectTrigger>
-                      <SelectContent>{bookings.map((b: any) => (<SelectItem key={b.id} value={b.bookingNumber}>{b.bookingNumber}</SelectItem>))}</SelectContent>
+                      <SelectContent>{bookings?.map((b: any) => (<SelectItem key={b.id} value={b.bookingNumber}>{b.bookingNumber}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-gray-300">Shipping Line</Label><Input className="h-10 bg-white" value={newTripHeader.shippingLine} readOnly /></div>
@@ -1052,15 +1168,14 @@ export default function MyProduceDashboard() {
         <section className="animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="flex items-center space-x-2 mb-6"><div className="h-8 w-1 bg-anflocor-green rounded-full" /><h2 className="text-xl font-bold text-gray-800">Production Overview</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card className="bg-white border-l-4 border-l-indigo-700"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Pending manifests</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{contracts.filter(c => c.status === 'pending').length}</p></CardContent></Card>
-            <Card className="bg-white border-l-4 border-l-emerald-600"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Bookings</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{bookings.length}</p></CardContent></Card>
-            <Card className="bg-white border-l-4 border-l-amber-600"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Trips</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{trips.length}</p></CardContent></Card>
+            <Card className="bg-white border-l-4 border-l-indigo-700"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Pending manifests</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{contracts?.filter((c: any) => c.status === 'pending').length}</p></CardContent></Card>
+            <Card className="bg-white border-l-4 border-l-emerald-600"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Bookings</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{bookings?.length}</p></CardContent></Card>
+            <Card className="bg-white border-l-4 border-l-amber-600"><CardHeader className="pb-2"><CardDescription className="text-xs font-bold uppercase">Active Trips</CardDescription></CardHeader><CardContent><p className="text-3xl font-black text-gray-900">{trips?.length}</p></CardContent></Card>
           </div>
         </section>
       );
     }
     if (activeView === 'loading-advice') return renderLoadingAdviceView();
-    if (activeView === 'edit-cutting-orders') return renderEditCuttingOrders();
     if (activeView === 'bookings') return renderBookingsView();
     if (activeView === 'trips') return renderTripsView();
     return <div className="p-12 text-center text-gray-400">View implementation pending.</div>;
@@ -1078,7 +1193,7 @@ export default function MyProduceDashboard() {
         <div className="w-64">
           <Select value={customerFilter} onValueChange={setCustomerFilter}>
             <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+            <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings?.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
           </Select>
         </div>
       </div>
@@ -1111,7 +1226,7 @@ export default function MyProduceDashboard() {
           <TableBody>
             {contractsLoading ? (
               <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-anflocor-green opacity-40" /></TableCell></TableRow>
-            ) : contracts.map((c: any) => (
+            ) : contracts?.map((c: any) => (
               <TableRow key={c.id} className={cn("hover:bg-gray-50/80 cursor-pointer h-16 group", selectedContractId === c.id && "bg-green-50/50 border-l-4 border-l-anflocor-green")} onClick={() => setSelectedContractId(c.id)}>
                 <TableCell className="font-bold">{c.weekNumber}</TableCell>
                 <TableCell className="text-sm font-bold">{c.customerName}</TableCell>
@@ -1124,14 +1239,6 @@ export default function MyProduceDashboard() {
           </TableBody>
         </Table>
       </Card>
-      
-      <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
-        <DialogContent className="max-w-[95vw]">
-           <DialogHeader><DialogTitle>New Loading Advice</DialogTitle></DialogHeader>
-           <div className="p-4 text-center text-gray-400">LA Entry form restored.</div>
-           <DialogFooter><Button onClick={() => setIsNewLAOpen(false)}>Close</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 
@@ -1145,64 +1252,11 @@ export default function MyProduceDashboard() {
           <Table>
              <TableHeader className="bg-gray-50"><TableRow><TableHead>BOOKING NO</TableHead><TableHead>SHIPPING LINE</TableHead><TableHead>VESSEL</TableHead><TableHead>POD</TableHead></TableRow></TableHeader>
              <TableBody>
-                {bookings.map((b: any) => (<TableRow key={b.id}><TableCell className="font-bold text-anflocor-green">{b.bookingNumber}</TableCell><TableCell>{b.shippingLine}</TableCell><TableCell>{b.vesselName}</TableCell><TableCell>{b.pod}</TableCell></TableRow>))}
+                {bookings?.map((b: any) => (<TableRow key={b.id}><TableCell className="font-bold text-anflocor-green">{b.bookingNumber}</TableCell><TableCell>{b.shippingLine}</TableCell><TableCell>{b.vesselName}</TableCell><TableCell>{b.pod}</TableCell></TableRow>))}
              </TableBody>
           </Table>
        </Card>
-
-       <Dialog open={isNewBookingOpen} onOpenChange={setIsNewBookingOpen}>
-        <DialogContent className="max-w-[95vw] p-0 overflow-hidden h-[90vh] flex flex-col">
-          <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0">
-             <p className="text-sm font-medium">Please ensure all manifest details match the confirmed booking documents.</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
-            <div className="grid grid-cols-2 gap-8 border-b pb-8">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
-                <Input className="h-12 bg-gray-50 font-bold" placeholder="Select Customer" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-gray-400">Week No</Label>
-                <Input className="h-12 bg-gray-50 font-bold" placeholder="Select Week" />
-              </div>
-            </div>
-            <Table>
-              <TableHeader className="bg-gray-100">
-                <TableRow>
-                  <TableHead className="w-12 text-center text-[9px] font-black uppercase">#</TableHead>
-                  <TableHead className="text-[9px] font-black uppercase">BOOKING NO.</TableHead>
-                  <TableHead className="text-[9px] font-black uppercase">SHIPPING LINE</TableHead>
-                  <TableHead className="text-[9px] font-black uppercase">VESSEL</TableHead>
-                  <TableHead className="text-[9px] font-black uppercase">POD</TableHead>
-                  <TableHead className="text-[9px] font-black uppercase">ATTACHMENTS</TableHead>
-                  <TableHead className="w-12 text-[9px] font-black uppercase">ACTIONS</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow>
-                  <TableCell className="text-center font-bold text-gray-400">1</TableCell>
-                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
-                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
-                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
-                  <TableCell><Input className="h-9 bg-white border" /></TableCell>
-                  <TableCell><Button variant="ghost" size="sm" className="h-8 text-anflocor-green gap-2 px-2"><Paperclip className="h-3 w-3" /> Upload</Button></TableCell>
-                  <TableCell><Button variant="ghost" size="icon" className="text-red-300"><Trash2 className="h-4 w-4" /></Button></TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-            <Button variant="ghost" className="text-anflocor-green text-xs font-bold"><Plus className="mr-2 h-4 w-4" /> Add Row</Button>
-          </div>
-          <div className="p-6 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setIsNewBookingOpen(false)} className="text-[10px] font-black uppercase">CANCEL</Button>
-            <Button className="bg-anflocor-green text-white text-[10px] font-black uppercase px-8 h-10">FINALIZE</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
-  );
-
-  const renderEditCuttingOrders = () => (
-    <div className="p-12 text-center text-gray-400">Edit CO View implementation pending restoration.</div>
   );
 
   return (
@@ -1211,7 +1265,7 @@ export default function MyProduceDashboard() {
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => setActiveView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", (activeView === 'loading-advice' || activeView === 'edit-cutting-orders') && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
+          <Button variant="ghost" onClick={() => setActiveView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
           <Button variant="ghost" onClick={() => setActiveView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
           <Button variant="ghost" onClick={() => setActiveView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
           <Button variant="ghost" onClick={() => setActiveView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'configuration' && "bg-white/10")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
