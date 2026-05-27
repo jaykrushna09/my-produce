@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -850,9 +849,16 @@ export default function MyProduceDashboard() {
                                 })}
                               </TableRow>
                             ))}
+                            <TableRow className="bg-[#f8fafc] hover:bg-[#f8fafc] h-10">
+                              <TableCell className="text-center text-[9px] font-black text-[#64748b] border-r uppercase">VACANT</TableCell>
+                              <TableCell colSpan={6} className="text-center text-[10px] font-black text-[#cbd5e1] uppercase tracking-widest">VACANT AREA</TableCell>
+                            </TableRow>
                           </TableBody>
                         </Table>
                       </ScrollArea>
+                      <div className="p-4 border-t bg-white">
+                        <p className="text-[10px] italic text-[#64748b]">Note: Loading Diagram for 13.5kg loose packs. Pattern for 1,556 boxes (Non-Palletized)</p>
+                      </div>
                     </div>
                   </div>
 
