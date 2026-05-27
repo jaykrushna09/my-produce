@@ -99,6 +99,12 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
+import { 
+  Tabs, 
+  TabsContent, 
+  TabsList, 
+  TabsTrigger 
+} from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -206,15 +212,15 @@ export default function MyProduceDashboard() {
   const [vlsType, setVlsType] = useState<'palletized' | 'non-palletized'>('palletized');
   const [vlsManifest, setVlsManifest] = useState({
     datePrepared: format(new Date(), 'MM/dd/yyyy'),
-    waybillNo: '4193...',
-    hauler: 'PISI',
-    truckNo: '831',
-    plateNo: 'ZAG 8450',
-    tripNo: '71',
-    vanNo: 'BEAU972952-1',
-    sealNo: '0381817',
-    gensetNo: '776',
-    tempSetting: '13.3°C'
+    waybillNo: '',
+    hauler: '',
+    truckNo: '',
+    plateNo: '',
+    tripNo: '',
+    vanNo: '',
+    sealNo: '',
+    gensetNo: '',
+    tempSetting: ''
   });
   const [palletsData, setPalletsData] = useState<{[key: number]: PalletItem[]}>({});
   const [currentPalletRows, setCurrentPalletRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
@@ -313,6 +319,7 @@ export default function MyProduceDashboard() {
       return;
     }
     
+    // Attempt to find real items for this pod/week or use mock
     const mockItems: CORow[] = [{
       id: `MOCK-${Date.now()}-1`,
       ps: '1',
@@ -626,39 +633,75 @@ export default function MyProduceDashboard() {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">WAYBILL NO.</Label>
-                      <Input value={vlsManifest.waybillNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.waybillNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, waybillNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">HAULER</Label>
-                      <Input value={vlsManifest.hauler} className="h-10" />
+                      <Input 
+                        value={vlsManifest.hauler} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, hauler: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">TRUCK NO.</Label>
-                      <Input value={vlsManifest.truckNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.truckNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, truckNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">PLATE NO.</Label>
-                      <Input value={vlsManifest.plateNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.plateNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, plateNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">TRIP NO.</Label>
-                      <Input value={vlsManifest.tripNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.tripNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, tripNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">VAN NO.</Label>
-                      <Input value={vlsManifest.vanNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.vanNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, vanNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">SEAL NO.</Label>
-                      <Input value={vlsManifest.sealNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.sealNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, sealNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">GENSET NO.</Label>
-                      <Input value={vlsManifest.gensetNo} className="h-10" />
+                      <Input 
+                        value={vlsManifest.gensetNo} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, gensetNo: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[9px] font-bold text-gray-400 uppercase">TEMP. SETTING</Label>
-                      <Input value={vlsManifest.tempSetting} className="h-10" />
+                      <Input 
+                        value={vlsManifest.tempSetting} 
+                        onChange={(e) => setVlsManifest({...vlsManifest, tempSetting: e.target.value})}
+                        className="h-10" 
+                      />
                     </div>
                   </div>
                 </div>
