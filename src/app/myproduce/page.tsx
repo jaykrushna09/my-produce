@@ -58,7 +58,8 @@ import {
   ClipboardCheck,
   PackageCheck,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  LayoutGrid
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -174,6 +175,11 @@ interface TripRow {
   dateWithdrawn: string;
 }
 
+interface PalletItem {
+  packType: string;
+  qty: string;
+}
+
 export default function MyProduceDashboard() {
   const router = useRouter();
   const db = useFirestore();
@@ -192,6 +198,26 @@ export default function MyProduceDashboard() {
   const [isNewTripOpen, setIsNewTripOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedTripForTransfer, setSelectedTripForTransfer] = useState<any>(null);
+
+  // VLS Specific State
+  const [isVlsModalOpen, setIsVlsModalOpen] = useState(false);
+  const [isPalletDetailsModalOpen, setIsPalletDetailsModalOpen] = useState(false);
+  const [selectedPalletIndex, setSelectedPalletIndex] = useState<number | null>(null);
+  const [vlsType, setVlsType] = useState<'palletized' | 'non-palletized'>('palletized');
+  const [vlsManifest, setVlsManifest] = useState({
+    datePrepared: format(new Date(), 'MM/dd/yyyy'),
+    waybillNo: '4193...',
+    hauler: 'PISI',
+    truckNo: '831',
+    plateNo: 'ZAG 8450',
+    tripNo: '71',
+    vanNo: 'BEAU972952-1',
+    sealNo: '0381817',
+    gensetNo: '776',
+    tempSetting: '13.3°C'
+  });
+  const [palletsData, setPalletsData] = useState<{[key: number]: PalletItem[]}>({});
+  const [currentPalletRows, setCurrentPalletRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
   
   const [tripStep, setTripStep] = useState<1 | 2>(1);
   const [newTripHeader, setNewTripHeader] = useState({ 
@@ -340,6 +366,24 @@ export default function MyProduceDashboard() {
     }
   };
 
+  const handleOpenPalletDetails = (index: number) => {
+    setSelectedPalletIndex(index);
+    setCurrentPalletRows(palletsData[index] || [{ packType: '', qty: '' }]);
+    setIsPalletDetailsModalOpen(true);
+  };
+
+  const handleSavePalletDetails = () => {
+    if (selectedPalletIndex !== null) {
+      const filteredRows = currentPalletRows.filter(r => r.packType && r.qty);
+      setPalletsData({
+        ...palletsData,
+        [selectedPalletIndex]: filteredRows
+      });
+      setIsPalletDetailsModalOpen(false);
+      toast({ title: "Pallet Saved", description: `Details for Pallet #${selectedPalletIndex + 1} updated.` });
+    }
+  };
+
   const renderTripsView = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center gap-4 mb-4">
@@ -461,6 +505,7 @@ export default function MyProduceDashboard() {
         </Table>
       </div>
 
+      {/* Start Transfer Modal */}
       <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
         <DialogContent className="max-w-[700px] p-0 overflow-hidden bg-white border-none shadow-2xl">
           <div className="p-6 flex justify-between items-center border-b">
@@ -528,7 +573,12 @@ export default function MyProduceDashboard() {
             <div className="space-y-3">
               <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">DOCUMENT ACTIONS</Label>
               <div className="flex gap-4">
-                <Button className="h-12 px-6 bg-black hover:bg-black/90 text-white font-bold text-xs tracking-widest gap-2 uppercase">+ CREATE VLS</Button>
+                <Button 
+                  className="h-12 px-6 bg-black hover:bg-black/90 text-white font-bold text-xs tracking-widest gap-2 uppercase"
+                  onClick={() => setIsVlsModalOpen(true)}
+                >
+                  + CREATE VLS
+                </Button>
                 <Button variant="outline" className="h-12 px-6 border-2 border-black text-black font-bold text-xs tracking-widest gap-2 bg-white hover:bg-gray-50 uppercase">+ CREATE DR</Button>
               </div>
             </div>
@@ -541,6 +591,244 @@ export default function MyProduceDashboard() {
             }}>
               <RefreshCcw className="h-4 w-4" /> SAVE
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Van Loading Summary (VLS) Modal */}
+      <Dialog open={isVlsModalOpen} onOpenChange={setIsVlsModalOpen}>
+        <DialogContent className="max-w-[90vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
+          <div className="p-6 border-b bg-white flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-100 p-2 rounded-lg"><FileCheck className="h-6 w-6 text-anflocor-green" /></div>
+              <DialogTitle className="text-xl font-bold text-gray-900">Create Van Loading Summary</DialogTitle>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setIsVlsModalOpen(false)}><X className="h-5 w-5" /></Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-8 bg-white space-y-8">
+            <Tabs value={vlsType} onValueChange={(val: any) => setVlsType(val)} className="w-full">
+              <TabsList className="bg-gray-100 p-1 w-fit mb-8">
+                <TabsTrigger value="palletized" className="data-[state=active]:bg-white data-[state=active]:text-anflocor-green font-black uppercase text-[10px] tracking-widest px-8">PALLETIZED</TabsTrigger>
+                <TabsTrigger value="non-palletized" className="data-[state=active]:bg-white data-[state=active]:text-anflocor-green font-black uppercase text-[10px] tracking-widest px-8">NON-PALLETIZED</TabsTrigger>
+              </TabsList>
+
+              <div className="space-y-10">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">LOGISTICS MANIFEST INFO</h3>
+                  </div>
+                  <div className="grid grid-cols-4 gap-6">
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">DATE PREPARED</Label>
+                      <Input value={vlsManifest.datePrepared} className="h-10 bg-gray-50/50" readOnly />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">WAYBILL NO.</Label>
+                      <Input value={vlsManifest.waybillNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">HAULER</Label>
+                      <Input value={vlsManifest.hauler} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">TRUCK NO.</Label>
+                      <Input value={vlsManifest.truckNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">PLATE NO.</Label>
+                      <Input value={vlsManifest.plateNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">TRIP NO.</Label>
+                      <Input value={vlsManifest.tripNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">VAN NO.</Label>
+                      <Input value={vlsManifest.vanNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">SEAL NO.</Label>
+                      <Input value={vlsManifest.sealNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">GENSET NO.</Label>
+                      <Input value={vlsManifest.gensetNo} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[9px] font-bold text-gray-400 uppercase">TEMP. SETTING</Label>
+                      <Input value={vlsManifest.tempSetting} className="h-10" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-12 pt-8 border-t">
+                  <div className="col-span-2 space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">LOADING DIAGRAM - TOP VIEW</h3>
+                      </div>
+                      <Badge variant="outline" className="text-[9px] font-bold text-gray-400">20 PALLETS CAPACITY</Badge>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-10 rounded-2xl border-2 border-dashed border-gray-200">
+                      <div className="grid grid-cols-10 grid-rows-2 gap-4 h-64">
+                        {Array.from({ length: 20 }).map((_, i) => (
+                          <div 
+                            key={i} 
+                            onClick={() => handleOpenPalletDetails(i)}
+                            className={cn(
+                              "relative group cursor-pointer rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1",
+                              palletsData[i]?.length > 0 
+                                ? "bg-green-50 border-anflocor-green shadow-md shadow-green-100" 
+                                : "bg-white border-gray-100 hover:border-anflocor-green/30 hover:bg-gray-50"
+                            )}
+                          >
+                            <span className="text-[10px] font-black text-gray-300 group-hover:text-anflocor-green/40">#{i + 1}</span>
+                            {palletsData[i]?.length > 0 ? (
+                              <>
+                                <Box className="h-6 w-6 text-anflocor-green" />
+                                <span className="text-[8px] font-bold text-anflocor-green uppercase">LOADED</span>
+                              </>
+                            ) : (
+                              <Plus className="h-5 w-5 text-gray-100 group-hover:text-anflocor-green/20" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-8 flex justify-center gap-20">
+                         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded-full"></div><span className="text-[10px] font-bold text-gray-400 uppercase">LOADED</span></div>
+                         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-gray-200 rounded-full"></div><span className="text-[10px] font-bold text-gray-400 uppercase">EMPTY</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-4 bg-anflocor-green rounded-full"></div>
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">BREAKDOWN SUMMARY</h3>
+                    </div>
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[400px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-b-2 border-gray-200">
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">PALLET ID</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">PACK TYPE</TableHead>
+                            <TableHead className="text-[9px] font-black uppercase text-gray-400 h-8 text-right">QTY</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.entries(palletsData).flatMap(([idx, items]) => 
+                            items.map((item, subIdx) => (
+                              <TableRow key={`${idx}-${subIdx}`} className="border-none h-10 group">
+                                <TableCell className="font-bold text-gray-400 text-xs">#{parseInt(idx) + 1}</TableCell>
+                                <TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell>
+                                <TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                          {Object.keys(palletsData).length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={3} className="h-64 text-center">
+                                <div className="flex flex-col items-center gap-2 opacity-20">
+                                  <LayoutGrid className="h-10 w-10" />
+                                  <span className="text-[10px] font-black uppercase">No pallets recorded</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                        <TableFooter className="bg-transparent border-t-2 border-gray-200">
+                          <TableRow>
+                            <TableCell colSpan={2} className="text-[10px] font-black uppercase text-gray-400">TOTAL BOXES</TableCell>
+                            <TableCell className="text-right font-black text-anflocor-green text-lg">
+                              {Object.values(palletsData).flat().reduce((acc, curr) => acc + (parseInt(curr.qty) || 0), 0)}
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Tabs>
+          </div>
+
+          <div className="p-6 bg-gray-50 border-t flex justify-end gap-3 shrink-0">
+            <Button variant="ghost" onClick={() => setIsVlsModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-gray-400">DISCARD</Button>
+            <Button className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-black text-[10px] tracking-widest uppercase gap-2" onClick={() => {
+              toast({ title: "VLS Created", description: "Van Loading Summary has been generated and linked to trip." });
+              setIsVlsModalOpen(false);
+            }}>
+              <FileSignature className="h-4 w-4" /> GENERATE VLS
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pallet Details Modal (Sub-modal of VLS) */}
+      <Dialog open={isPalletDetailsModalOpen} onOpenChange={setIsPalletDetailsModalOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-6 border-b bg-gray-50 flex justify-between items-center">
+             <div className="flex items-center gap-3">
+               <div className="bg-white p-2 rounded-lg border shadow-sm"><Box className="h-5 w-5 text-anflocor-green" /></div>
+               <DialogTitle className="text-sm font-bold uppercase tracking-tight">Pallet Details #{selectedPalletIndex !== null ? selectedPalletIndex + 1 : ''}</DialogTitle>
+             </div>
+             <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPalletDetailsModalOpen(false)}><X className="h-4 w-4" /></Button>
+          </div>
+          
+          <div className="p-8 space-y-6">
+             <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                {currentPalletRows.map((row, idx) => (
+                   <div key={idx} className="grid grid-cols-12 gap-3 items-end group">
+                      <div className="col-span-7 space-y-1.5">
+                         <Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">PACK TYPE</Label>
+                         <Input 
+                            value={row.packType} 
+                            onChange={(e) => setCurrentPalletRows(currentPalletRows.map((r, i) => i === idx ? { ...r, packType: e.target.value } : r))}
+                            className="h-10 bg-gray-50 border-gray-100 font-bold text-xs" 
+                            placeholder="e.g. SKU-001"
+                         />
+                      </div>
+                      <div className="col-span-4 space-y-1.5">
+                         <Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">QTY</Label>
+                         <Input 
+                            type="number"
+                            value={row.qty} 
+                            onChange={(e) => setCurrentPalletRows(currentPalletRows.map((r, i) => i === idx ? { ...r, qty: e.target.value } : r))}
+                            className="h-10 bg-gray-50 border-gray-100 font-black text-xs text-center" 
+                            placeholder="0"
+                         />
+                      </div>
+                      <div className="col-span-1 pb-1">
+                         <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-gray-200 hover:text-red-500 hover:bg-red-50"
+                            onClick={() => setCurrentPalletRows(currentPalletRows.filter((_, i) => i !== idx))}
+                            disabled={currentPalletRows.length === 1}
+                         >
+                            <Trash2 className="h-3.5 w-3.5" />
+                         </Button>
+                      </div>
+                   </div>
+                ))}
+             </div>
+             
+             <Button 
+                variant="outline" 
+                className="w-full h-10 border-dashed border-gray-200 text-gray-400 text-[10px] font-black uppercase tracking-widest hover:text-anflocor-green hover:border-anflocor-green/40 hover:bg-green-50/30 gap-2"
+                onClick={() => setCurrentPalletRows([...currentPalletRows, { packType: '', qty: '' }])}
+             >
+                <Plus className="h-3 w-3" /> ADD ROW
+             </Button>
+          </div>
+
+          <div className="p-4 bg-gray-50 border-t flex gap-2">
+             <Button variant="ghost" onClick={() => setIsPalletDetailsModalOpen(false)} className="flex-1 text-[10px] font-black uppercase">CANCEL</Button>
+             <Button onClick={handleSavePalletDetails} className="flex-[2] bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10">SAVE PALLET</Button>
           </div>
         </DialogContent>
       </Dialog>
