@@ -332,6 +332,30 @@ export default function MyProduceDashboard() {
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
   const [tripStatusFilter, setTripStatusFilter] = useState<'all' | 'shipped'>('all');
+  const [selectedCuttingOrderKeys, setSelectedCuttingOrderKeys] = useState<string[]>([]);
+  const [isBulkCuttingStatusModalOpen, setIsBulkCuttingStatusModalOpen] = useState(false);
+  const [bulkCuttingStatus, setBulkCuttingStatus] = useState<CuttingOrderStatus>('PENDING');
+  const [isEditCuttingOrderModalOpen, setIsEditCuttingOrderModalOpen] = useState(false);
+  const [selectedCuttingOrderForEdit, setSelectedCuttingOrderForEdit] = useState<CuttingOrderListRow | null>(null);
+  const [cuttingOrderEditDraft, setCuttingOrderEditDraft] = useState<{
+    ps: string;
+    pod: string;
+    cutOffDate: string;
+    etd: string;
+    sku: string;
+    palletization: string;
+    atwStatus: string;
+    status: CuttingOrderStatus;
+  }>({
+    ps: '',
+    pod: '',
+    cutOffDate: '',
+    etd: '',
+    sku: '',
+    palletization: '',
+    atwStatus: '',
+    status: 'PENDING',
+  });
   
   // Modals State
   const [isNewLAOpen, setIsNewLAOpen] = useState(false);
@@ -353,6 +377,8 @@ export default function MyProduceDashboard() {
   const [isShippingDocEditorOpen, setIsShippingDocEditorOpen] = useState(false);
   const [selectedTripForDocs, setSelectedTripForDocs] = useState<any>(null);
   const [selectedShippingDocType, setSelectedShippingDocType] = useState<ShippingDocType>('Shipping Instruction');
+  const [vlsSavedTripIds, setVlsSavedTripIds] = useState<string[]>([]);
+  const [isSavingVls, setIsSavingVls] = useState(false);
   const [shippingDocDraft, setShippingDocDraft] = useState<ShippingDocDraft>({
     title: 'Shipping Instruction',
     referenceNo: '',
@@ -535,11 +561,12 @@ export default function MyProduceDashboard() {
     }
   });
   const [drVerification, setDrVerification] = useState({
-    preparedBy: { name: 'D.G. REYES', role: 'PACKING STATION FOREMAN' },
+    preparedBy: { name: 'D.G. REYES', role: 'PACKING STATION FOREMAN', signatureDataUrl: '' },
     checkedBy: { name: 'EDCEL OBRADO', role: 'QAD - INSPECTOR' },
     approvedBy: { name: 'RS PALADIO', role: 'PACKING STATION OVERSEER' },
     receivedBy: { name: 'IAN BINAYA', role: 'HAULER REPRESENTATIVE' }
   });
+  const [isSavingDr, setIsSavingDr] = useState(false);
 
   // VLS Specific State
   const [isVlsModalOpen, setIsVlsModalOpen] = useState(false);
@@ -547,6 +574,7 @@ export default function MyProduceDashboard() {
   const [selectedPalletIndex, setSelectedPalletIndex] = useState<string | null>(null);
   const [vlsType, setVlsType] = useState<'palletized' | 'non-palletized'>('palletized');
   const [isPreparedByModalOpen, setIsPreparedByModalOpen] = useState(false);
+  const [preparedBySignatureTarget, setPreparedBySignatureTarget] = useState<'vls' | 'dr'>('vls');
   const preparedByCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const preparedByDrawingRef = useRef(false);
   const preparedByLastPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -607,34 +635,69 @@ export default function MyProduceDashboard() {
 
   useEffect(() => {
     if (!isDrModalOpen) return;
+    const savedDr = selectedTripForTransfer?.deliveryReceipt || {};
+    const savedTimeline = savedDr.operationalTimeline || {};
+    const savedRows = Array.isArray(savedDr.rows) && savedDr.rows.length > 0 ? savedDr.rows : null;
     setDrHeader({
-      datePrepared: format(new Date(), 'yyyy-MM-dd'),
-      customer: selectedTripForTransfer?.customerName || '',
-      packingStationNo: selectedTripForTransfer?.ps || selectedTripForTransfer?.pmNo || '',
-      vanNo: selectedTripForTransfer?.vanNo || '',
-      hauler: '',
-      tripNo: selectedTripForTransfer?.tripId || '',
-      truckNo: '',
-      trailerChassisNo: '',
-      plateNo: '',
-      waybillNo: '',
-      sealNo: selectedTripForTransfer?.sealNo || '',
-      shippingLine: selectedTripForTransfer?.shippingLine || '',
-      vesselName: selectedTripForTransfer?.vessel || '',
-      voyage: '',
-      portOfLoading: '',
-      remarks: '',
+      datePrepared: savedDr.datePrepared || format(new Date(), 'yyyy-MM-dd'),
+      customer: savedDr.customer || selectedTripForTransfer?.customerName || '',
+      packingStationNo: savedDr.packingStationNo || selectedTripForTransfer?.ps || selectedTripForTransfer?.pmNo || '',
+      vanNo: savedDr.vanNo || selectedTripForTransfer?.vanNo || '',
+      hauler: savedDr.hauler || '',
+      tripNo: savedDr.tripNo || selectedTripForTransfer?.tripId || '',
+      truckNo: savedDr.truckNo || '',
+      trailerChassisNo: savedDr.trailerChassisNo || '',
+      plateNo: savedDr.plateNo || '',
+      waybillNo: savedDr.waybillNo || '',
+      sealNo: savedDr.sealNo || selectedTripForTransfer?.sealNo || '',
+      shippingLine: savedDr.shippingLine || selectedTripForTransfer?.shippingLine || '',
+      vesselName: savedDr.vesselName || selectedTripForTransfer?.vessel || '',
+      voyage: savedDr.voyage || '',
+      portOfLoading: savedDr.portOfLoading || '',
+      remarks: savedDr.remarks || '',
       operationalTimeline: {
-        vanArrivalAtPs: '',
-        startOfLoading: '',
-        finishedLoading: '',
-        vanDeparture: '',
-        wharfArrival: '',
-        startUnloading: '',
-        finishUnloading: '',
+        vanArrivalAtPs: savedTimeline.vanArrivalAtPs || '',
+        startOfLoading: savedTimeline.startOfLoading || '',
+        finishedLoading: savedTimeline.finishedLoading || '',
+        vanDeparture: savedTimeline.vanDeparture || '',
+        wharfArrival: savedTimeline.wharfArrival || '',
+        startUnloading: savedTimeline.startUnloading || '',
+        finishUnloading: savedTimeline.finishUnloading || '',
       }
     });
-    setDrRows([createEmptyDRRow()]);
+    setDrRows(
+      savedRows
+        ? savedRows.map((row: any) => ({
+            id: row.id || Math.random().toString(36).substr(2, 9),
+            destination: row.destination || '',
+            packType: row.packType || '',
+            classValue: row.classValue || '',
+            quantity: row.quantity || '',
+            totalBoxes: row.totalBoxes || '',
+            noPallets: row.noPallets || '',
+            totalDestination: row.totalDestination || '',
+          }))
+        : [createEmptyDRRow()]
+    );
+    setDrVerification({
+      preparedBy: {
+        name: savedDr.preparedBy?.name || 'D.G. REYES',
+        role: savedDr.preparedBy?.role || 'PACKING STATION FOREMAN',
+        signatureDataUrl: savedDr.preparedBy?.signatureDataUrl || '',
+      },
+      checkedBy: {
+        name: savedDr.checkedBy?.name || 'EDCEL OBRADO',
+        role: savedDr.checkedBy?.role || 'QAD - INSPECTOR',
+      },
+      approvedBy: {
+        name: savedDr.approvedBy?.name || 'RS PALADIO',
+        role: savedDr.approvedBy?.role || 'PACKING STATION OVERSEER',
+      },
+      receivedBy: {
+        name: savedDr.receivedBy?.name || 'IAN BINAYA',
+        role: savedDr.receivedBy?.role || 'HAULER REPRESENTATIVE',
+      },
+    });
   }, [isDrModalOpen, selectedTripForTransfer]);
 
   // Firestore Collections
@@ -821,6 +884,15 @@ export default function MyProduceDashboard() {
     });
   }, [cuttingOrderRows, weekFilter, customerFilter]);
 
+  const cuttingOrderRowKey = (row: CuttingOrderListRow) => `${row.contractId}:${row.id}`;
+
+  const selectedFilteredCuttingOrderRows = useMemo(() => {
+    return filteredCuttingOrderRows.filter((row) => selectedCuttingOrderKeys.includes(cuttingOrderRowKey(row)));
+  }, [filteredCuttingOrderRows, selectedCuttingOrderKeys]);
+
+  const allFilteredCuttingOrdersSelected = filteredCuttingOrderRows.length > 0 && selectedFilteredCuttingOrderRows.length === filteredCuttingOrderRows.length;
+  const someFilteredCuttingOrdersSelected = selectedFilteredCuttingOrderRows.length > 0 && !allFilteredCuttingOrdersSelected;
+
   const selectedContract = useMemo(() => {
     return (contracts || []).find((contract: any) => contract.id === selectedContractId) || null;
   }, [contracts, selectedContractId]);
@@ -921,6 +993,16 @@ export default function MyProduceDashboard() {
       return matchesStatus;
     });
   }, [trips, tripStatusFilter]);
+
+  useEffect(() => {
+    setVlsSavedTripIds(
+      Array.isArray(trips)
+        ? trips
+            .filter((trip: any) => Boolean(trip?.vlsCreated || trip?.vlsManifest))
+            .map((trip: any) => trip.id)
+        : []
+    );
+  }, [trips]);
 
   const cosAllocationRows = useMemo(() => {
     if (Array.isArray(selectedContract?.items) && selectedContract.items.length > 0) {
@@ -1380,6 +1462,48 @@ export default function MyProduceDashboard() {
     return 'PENDING';
   };
 
+  const persistCuttingOrderContractRows = async (contractId: string, rows: CuttingOrderListRow[]) => {
+    if (!db) return;
+
+    const normalizedRows = rows.map((item) => ({
+      itemId: item.id,
+      ps: item.ps,
+      shippingLine: item.shippingLine,
+      bookingNo: item.bookingNo,
+      containerNo: item.containerNo,
+      atwStatus: item.atwStatus,
+      status: item.status,
+      pod: item.pod,
+      cutOffDate: item.cutOffDate,
+      etd: item.etd,
+      sku: item.sku,
+      palletization: item.palletization,
+    }));
+
+    const batch = writeBatch(db);
+    const contractRef = doc(db, CONTRACT_PATH, contractId);
+
+    batch.update(contractRef, {
+      cuttingOrders: normalizedRows,
+      cuttingOrdersUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    const existingRows = await getDocs(collection(db, `${CONTRACT_PATH}/${contractId}/cutting_orders`));
+    existingRows.docs.forEach((snapshot) => batch.delete(snapshot.ref));
+
+    normalizedRows.forEach((item) => {
+      const rowRef = doc(collection(db, `${CONTRACT_PATH}/${contractId}/cutting_orders`));
+      batch.set(rowRef, {
+        ...item,
+        itemId: rowRef.id,
+        updatedAt: serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+  };
+
   const handleChangeTripOrderStatus = async (trip: any, order: any) => {
     const nextStatus = getNextTripOrderStatus(order.status);
     const updatedOrders = getTripCuttingOrders(trip).map((item: any) =>
@@ -1421,9 +1545,97 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const closeTransferModal = () => {
+  const openEditCuttingOrderModal = (row: CuttingOrderListRow) => {
+    setSelectedCuttingOrderForEdit(row);
+    setCuttingOrderEditDraft({
+      ps: row.ps || '',
+      pod: row.pod || '',
+      cutOffDate: row.cutOffDate || '',
+      etd: row.etd || '',
+      sku: row.sku || '',
+      palletization: row.palletization || '',
+      atwStatus: row.atwStatus || 'PENDING',
+      status: row.status || 'PENDING',
+    });
+    setIsEditCuttingOrderModalOpen(true);
+  };
+
+  const handleSaveCuttingOrderEdit = async () => {
+    if (!selectedCuttingOrderForEdit) return;
+
+    try {
+      const updatedRows = cuttingOrderRows.map((item) =>
+        item.contractId === selectedCuttingOrderForEdit.contractId && item.id === selectedCuttingOrderForEdit.id
+          ? {
+              ...item,
+              ps: cuttingOrderEditDraft.ps,
+              pod: cuttingOrderEditDraft.pod,
+              cutOffDate: cuttingOrderEditDraft.cutOffDate,
+              etd: cuttingOrderEditDraft.etd,
+              sku: cuttingOrderEditDraft.sku,
+              palletization: cuttingOrderEditDraft.palletization,
+              atwStatus: cuttingOrderEditDraft.atwStatus as CuttingOrderListRow['atwStatus'],
+              status: cuttingOrderEditDraft.status,
+            }
+          : item
+      );
+
+      await persistCuttingOrderContractRows(
+        selectedCuttingOrderForEdit.contractId,
+        updatedRows.filter((item) => item.contractId === selectedCuttingOrderForEdit.contractId)
+      );
+
+      toast({
+        title: 'Cutting Order Updated',
+        description: 'The cutting order details were saved successfully.',
+      });
+      setIsEditCuttingOrderModalOpen(false);
+      setSelectedCuttingOrderForEdit(null);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Update Failed', description: err.message });
+    }
+  };
+
+  const openBulkCuttingStatusModal = () => {
+    if (selectedFilteredCuttingOrderRows.length === 0) return;
+    setBulkCuttingStatus(selectedFilteredCuttingOrderRows[0]?.status || 'PENDING');
+    setIsBulkCuttingStatusModalOpen(true);
+  };
+
+  const handleSaveBulkCuttingStatus = async () => {
+    if (selectedFilteredCuttingOrderRows.length === 0) return;
+
+    try {
+      const affectedContractIds = Array.from(new Set(selectedFilteredCuttingOrderRows.map((row) => row.contractId)));
+
+      for (const contractId of affectedContractIds) {
+        const rowsForContract = cuttingOrderRows
+          .map((item) =>
+            selectedCuttingOrderKeys.includes(cuttingOrderRowKey(item))
+              ? { ...item, status: bulkCuttingStatus }
+              : item
+          )
+          .filter((item) => item.contractId === contractId);
+
+        await persistCuttingOrderContractRows(contractId, rowsForContract);
+      }
+
+      toast({
+        title: 'Status Updated',
+        description: `Updated ${selectedFilteredCuttingOrderRows.length} cutting order${selectedFilteredCuttingOrderRows.length > 1 ? 's' : ''}.`,
+      });
+      setIsBulkCuttingStatusModalOpen(false);
+      setSelectedCuttingOrderKeys([]);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Bulk Update Failed', description: err.message });
+    }
+  };
+
+  const closeTransferModal = (preserveTrip = false) => {
     setIsTransferModalOpen(false);
-    setSelectedTripForTransfer(null);
+    if (!preserveTrip) {
+      setSelectedTripForTransfer(null);
+    }
     setTransferInspection({
       inboundDriverName: '',
       outboundDriverName: '',
@@ -1474,7 +1686,10 @@ export default function MyProduceDashboard() {
   useEffect(() => {
     if (!isPreparedByModalOpen) return;
 
-    const signatureDataUrl = verificationData.preparedBy.signatureDataUrl;
+    const signatureDataUrl =
+      preparedBySignatureTarget === 'dr'
+        ? drVerification.preparedBy.signatureDataUrl
+        : verificationData.preparedBy.signatureDataUrl;
     const raf = requestAnimationFrame(() => {
       const canvas = preparedByCanvasRef.current;
       if (!canvas) return;
@@ -1503,7 +1718,12 @@ export default function MyProduceDashboard() {
     });
 
     return () => cancelAnimationFrame(raf);
-  }, [isPreparedByModalOpen, verificationData.preparedBy.signatureDataUrl]);
+  }, [
+    isPreparedByModalOpen,
+    preparedBySignatureTarget,
+    verificationData.preparedBy.signatureDataUrl,
+    drVerification.preparedBy.signatureDataUrl,
+  ]);
 
   const getPreparedByCanvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = preparedByCanvasRef.current;
@@ -1566,6 +1786,17 @@ export default function MyProduceDashboard() {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);
+    if (preparedBySignatureTarget === 'dr') {
+      setDrVerification((current) => ({
+        ...current,
+        preparedBy: {
+          ...current.preparedBy,
+          signatureDataUrl: '',
+        },
+      }));
+      return;
+    }
+
     setVerificationData((current) => ({
       ...current,
       preparedBy: {
@@ -1578,19 +1809,40 @@ export default function MyProduceDashboard() {
   const savePreparedBySignature = () => {
     const canvas = preparedByCanvasRef.current;
     const signatureDataUrl = canvas ? canvas.toDataURL('image/png') : '';
-    setVerificationData((current) => ({
-      ...current,
-      preparedBy: {
-        ...current.preparedBy,
-        signatureDataUrl,
-      },
-    }));
+    if (preparedBySignatureTarget === 'dr') {
+      setDrVerification((current) => ({
+        ...current,
+        preparedBy: {
+          ...current.preparedBy,
+          signatureDataUrl,
+        },
+      }));
+    } else {
+      setVerificationData((current) => ({
+        ...current,
+        preparedBy: {
+          ...current.preparedBy,
+          signatureDataUrl,
+        },
+      }));
+    }
     setIsPreparedByModalOpen(false);
+  };
+
+  const openPreparedBySignatureModal = (target: 'vls' | 'dr') => {
+    setPreparedBySignatureTarget(target);
+    setIsPreparedByModalOpen(true);
   };
 
   const openShippingDocs = (trip: any) => {
     setSelectedTripForDocs(trip);
     setIsShippingDocsModalOpen(true);
+  };
+
+  const closeShippingDocsModal = () => {
+    setIsShippingDocsModalOpen(false);
+    setIsShippingDocEditorOpen(false);
+    setSelectedTripForDocs(null);
   };
 
   const openShippingDocEditor = (docType: ShippingDocType) => {
@@ -1694,6 +1946,118 @@ export default function MyProduceDashboard() {
       grossWeight: '200,970.00',
     });
     setIsShippingDocEditorOpen(true);
+  };
+
+  const hasExistingVls = Boolean(
+    selectedTripForTransfer?.vlsCreated ||
+      selectedTripForTransfer?.vlsManifest ||
+      (selectedTripForTransfer?.id && vlsSavedTripIds.includes(selectedTripForTransfer.id))
+  );
+
+  const handleSaveVls = async () => {
+    if (!db || !selectedTripForTransfer) return;
+
+    try {
+      setIsSavingVls(true);
+      const tripRef = doc(db, TRIP_PATH, selectedTripForTransfer.id);
+      await setDoc(
+        tripRef,
+        {
+          vlsCreated: true,
+          vlsManifest: {
+            ...vlsManifest,
+            vlsType,
+          },
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setSelectedTripForTransfer((current: any) =>
+        current
+          ? {
+              ...current,
+              vlsCreated: true,
+              vlsManifest: {
+                ...vlsManifest,
+                vlsType,
+              },
+            }
+          : current
+      );
+      setVlsSavedTripIds((current) =>
+        current.includes(selectedTripForTransfer.id) ? current : [...current, selectedTripForTransfer.id]
+      );
+
+      toast({
+        title: 'VLS Saved',
+        description: 'Van Loading Summary has been linked to this trip.',
+      });
+      setIsVlsModalOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
+    } finally {
+      setIsSavingVls(false);
+    }
+  };
+
+  const handleSaveDr = async (finalize = false) => {
+    if (!db || !selectedTripForTransfer) return;
+
+    try {
+      setIsSavingDr(true);
+      const tripRef = doc(db, TRIP_PATH, selectedTripForTransfer.id);
+      const payload = {
+        deliveryReceipt: {
+          datePrepared: drHeader.datePrepared,
+          customer: drHeader.customer,
+          packingStationNo: drHeader.packingStationNo,
+          vanNo: drHeader.vanNo,
+          hauler: drHeader.hauler,
+          tripNo: drHeader.tripNo,
+          truckNo: drHeader.truckNo,
+          trailerChassisNo: drHeader.trailerChassisNo,
+          plateNo: drHeader.plateNo,
+          waybillNo: drHeader.waybillNo,
+          sealNo: drHeader.sealNo,
+          shippingLine: drHeader.shippingLine,
+          vesselName: drHeader.vesselName,
+          voyage: drHeader.voyage,
+          portOfLoading: drHeader.portOfLoading,
+          remarks: drHeader.remarks,
+          operationalTimeline: drHeader.operationalTimeline,
+          rows: drRows,
+          verification: drVerification,
+          status: finalize ? 'FINALIZED' : 'DRAFT',
+        },
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(tripRef, payload, { merge: true });
+
+      setSelectedTripForTransfer((current: any) =>
+        current
+          ? {
+              ...current,
+              deliveryReceipt: payload.deliveryReceipt,
+            }
+          : current
+      );
+
+      toast({
+        title: finalize ? 'DR Created' : 'Draft Saved',
+        description: finalize
+          ? 'Delivery receipt form has been saved and finalized.'
+          : 'Delivery receipt draft has been saved.',
+      });
+      if (finalize) {
+        setIsDrModalOpen(false);
+      }
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
+    } finally {
+      setIsSavingDr(false);
+    }
   };
 
   const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
@@ -1887,13 +2251,38 @@ export default function MyProduceDashboard() {
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
           <div className="flex gap-2">
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
-            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Download className="h-3 w-3" /> EXPORT</Button>
+            {selectedFilteredCuttingOrderRows.length > 0 && (
+              <Button
+                className="h-8 px-3 text-[10px] font-black uppercase tracking-widest gap-2 bg-emerald-700 text-white hover:bg-emerald-800"
+                onClick={openBulkCuttingStatusModal}
+              >
+                <RefreshCcw className="h-3 w-3" />
+                Change Status ({selectedFilteredCuttingOrderRows.length})
+              </Button>
+            )}
           </div>
         </div>
         <Table>
           <TableHeader className="bg-gray-50/50">
             <TableRow>
-              <TableHead className="w-12 text-center"><Checkbox /></TableHead>
+              <TableHead className="w-12 text-center">
+                <Checkbox
+                  checked={
+                    allFilteredCuttingOrdersSelected
+                      ? true
+                      : someFilteredCuttingOrdersSelected
+                        ? 'indeterminate'
+                        : false
+                  }
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedCuttingOrderKeys(filteredCuttingOrderRows.map((row) => cuttingOrderRowKey(row)));
+                    } else {
+                      setSelectedCuttingOrderKeys([]);
+                    }
+                  }}
+                />
+              </TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">PS</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Shipping Line</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Booking No</TableHead>
@@ -1911,7 +2300,18 @@ export default function MyProduceDashboard() {
           <TableBody>
             {filteredCuttingOrderRows.map((row) => (
               <TableRow key={`${row.contractId}-${row.id}`} className="h-16 hover:bg-gray-50/50">
-                <TableCell className="text-center"><Checkbox /></TableCell>
+                <TableCell className="text-center">
+                  <Checkbox
+                    checked={selectedCuttingOrderKeys.includes(cuttingOrderRowKey(row))}
+                    onCheckedChange={(checked) => {
+                      setSelectedCuttingOrderKeys((current) =>
+                        checked
+                          ? [...new Set([...current, cuttingOrderRowKey(row)])]
+                          : current.filter((key) => key !== cuttingOrderRowKey(row))
+                      );
+                    }}
+                  />
+                </TableCell>
                 <TableCell className="font-bold text-xs">{row.ps}</TableCell>
                 <TableCell className="text-xs font-bold uppercase">{row.shippingLine}</TableCell>
                 <TableCell className="text-xs text-gray-500 font-semibold">{row.bookingNo}</TableCell>
@@ -1965,16 +2365,9 @@ export default function MyProduceDashboard() {
                     <DropdownMenuContent align="end" className="w-52">
                       <DropdownMenuItem
                         className="gap-3 py-2.5 cursor-pointer font-medium"
-                        onClick={() => handleChangeCuttingOrderStatus(row)}
+                        onClick={() => openEditCuttingOrderModal(row)}
                       >
-                        <RefreshCcw className="h-4 w-4 text-gray-500" /> Change Status
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="gap-3 py-2.5 cursor-pointer font-medium"
-                        onClick={() => toast({ title: 'Export queued', description: 'Cutting order details export has been prepared.' })}
-                      >
-                        <Download className="h-4 w-4 text-gray-500" /> Export Details
+                        <FileText className="h-4 w-4 text-gray-500" /> Edit
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -2486,7 +2879,10 @@ export default function MyProduceDashboard() {
                       </DropdownMenuItem> */}
                       <DropdownMenuItem
                         className="gap-3 py-2.5 cursor-pointer font-medium"
-                        onClick={() => openShippingDocs(t)}
+                        onSelect={() => {
+                          setSelectedTripForDocs(t);
+                          requestAnimationFrame(() => setIsShippingDocsModalOpen(true));
+                        }}
                       >
                         <FileText className="h-4 w-4 text-gray-500" /> Shipping Docs
                       </DropdownMenuItem>
@@ -2610,6 +3006,158 @@ export default function MyProduceDashboard() {
         </Table>
       </div>
 
+      <Dialog
+        open={isBulkCuttingStatusModalOpen}
+        onOpenChange={(open) => {
+          setIsBulkCuttingStatusModalOpen(open);
+          if (!open) {
+            setBulkCuttingStatus('PENDING');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-6 border-b flex justify-between items-center">
+            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Change Cutting Status</DialogTitle>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsBulkCuttingStatusModalOpen(false)}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="rounded-lg bg-gray-50 p-4 text-sm text-gray-600">
+              {selectedFilteredCuttingOrderRows.length} cutting order{selectedFilteredCuttingOrderRows.length > 1 ? 's' : ''} selected.
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">Status</Label>
+              <Select value={bulkCuttingStatus} onValueChange={(value) => setBulkCuttingStatus(value as CuttingOrderStatus)}>
+                <SelectTrigger className="h-11 bg-white">
+                  <SelectValue placeholder="Select Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PENDING">PENDING</SelectItem>
+                  <SelectItem value="IN-PROCESS">IN-PROCESS</SelectItem>
+                  <SelectItem value="AVAILABLE">AVAILABLE</SelectItem>
+                  <SelectItem value="DEPART">DEPART</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsBulkCuttingStatusModalOpen(false)} className="text-[10px] font-black uppercase">Cancel</Button>
+            <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10 px-6" onClick={handleSaveBulkCuttingStatus}>
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditCuttingOrderModalOpen}
+        onOpenChange={(open) => {
+          setIsEditCuttingOrderModalOpen(open);
+          if (!open) {
+            setSelectedCuttingOrderForEdit(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-6 border-b flex justify-between items-center">
+            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Edit Cutting Order</DialogTitle>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsEditCuttingOrderModalOpen(false)}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">PS</Label>
+              <Input
+                className="h-11 bg-white"
+                value={cuttingOrderEditDraft.ps}
+                onChange={(e) => setCuttingOrderEditDraft((current) => ({ ...current, ps: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">POD</Label>
+              <Input
+                className="h-11 bg-white"
+                value={cuttingOrderEditDraft.pod}
+                onChange={(e) => setCuttingOrderEditDraft((current) => ({ ...current, pod: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">Cut-Off Date</Label>
+              <Input
+                className="h-11 bg-white"
+                value={cuttingOrderEditDraft.cutOffDate}
+                onChange={(e) => setCuttingOrderEditDraft((current) => ({ ...current, cutOffDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">ETD</Label>
+              <Input
+                className="h-11 bg-white"
+                value={cuttingOrderEditDraft.etd}
+                onChange={(e) => setCuttingOrderEditDraft((current) => ({ ...current, etd: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">SKU</Label>
+              <Input
+                className="h-11 bg-white"
+                value={cuttingOrderEditDraft.sku}
+                onChange={(e) => setCuttingOrderEditDraft((current) => ({ ...current, sku: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">Palletization</Label>
+              <Input
+                className="h-11 bg-white"
+                value={cuttingOrderEditDraft.palletization}
+                onChange={(e) => setCuttingOrderEditDraft((current) => ({ ...current, palletization: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">ATW Status</Label>
+              <Select
+                value={cuttingOrderEditDraft.atwStatus}
+                onValueChange={(value) => setCuttingOrderEditDraft((current) => ({ ...current, atwStatus: value }))}
+              >
+                <SelectTrigger className="h-11 bg-white">
+                  <SelectValue placeholder="Select ATW Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PENDING">PENDING</SelectItem>
+                  <SelectItem value="READY">READY</SelectItem>
+                  <SelectItem value="LOADED">LOADED</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-gray-400">Status</Label>
+              <Select
+                value={cuttingOrderEditDraft.status}
+                onValueChange={(value) => setCuttingOrderEditDraft((current) => ({ ...current, status: value as CuttingOrderStatus }))}
+              >
+                <SelectTrigger className="h-11 bg-white">
+                  <SelectValue placeholder="Select Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PENDING">PENDING</SelectItem>
+                  <SelectItem value="IN-PROCESS">IN-PROCESS</SelectItem>
+                  <SelectItem value="AVAILABLE">AVAILABLE</SelectItem>
+                  <SelectItem value="DEPART">DEPART</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsEditCuttingOrderModalOpen(false)} className="text-[10px] font-black uppercase">Cancel</Button>
+            <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10 px-6" onClick={handleSaveCuttingOrderEdit}>
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Start Transfer Modal */}
       <Dialog
         open={isTransferModalOpen}
@@ -2633,7 +3181,7 @@ export default function MyProduceDashboard() {
             <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">
               Edit Transfer - {selectedTripForTransfer?.vanNo || 'N/A'}
             </DialogTitle>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={closeTransferModal}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => closeTransferModal()}>
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -2715,9 +3263,9 @@ export default function MyProduceDashboard() {
                 <div className="flex gap-4">
                   <Button 
                     className="flex-1 h-12 bg-black text-white font-bold text-xs uppercase tracking-widest gap-2"
-                    onClick={() => { closeTransferModal(); setIsVlsModalOpen(true); }}
+                    onClick={() => { closeTransferModal(true); setIsVlsModalOpen(true); }}
                   >
-                    <Plus className="h-4 w-4" /> CREATE VLS
+                    <Plus className="h-4 w-4" /> {hasExistingVls ? 'EDIT VLS' : 'CREATE VLS'}
                   </Button>
                   <Button variant="outline" className="flex-1 h-12 border-gray-200 font-bold text-xs uppercase tracking-widest gap-2" onClick={openDrModal}>
                     <Plus className="h-4 w-4" /> CREATE DR
@@ -3950,9 +4498,34 @@ export default function MyProduceDashboard() {
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                   <div className="rounded-sm bg-white px-4 py-2">
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="text-center cursor-pointer select-none rounded-lg px-2 py-1 hover:bg-slate-50"
+                        onClick={() => openPreparedBySignatureModal('dr')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openPreparedBySignatureModal('dr');
+                          }
+                        }}
+                      >
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Prepared By</p>
+                        {drVerification.preparedBy.signatureDataUrl ? (
+                          <img
+                            src={drVerification.preparedBy.signatureDataUrl}
+                            alt="DR prepared by signature"
+                            className="mx-auto h-14 max-w-full object-contain"
+                          />
+                        ) : (
+                          <div className="h-14" />
+                        )}
+                        <div className="mx-auto my-2 h-px w-44 bg-slate-200" />
+                        <p className="text-[10px] font-bold text-slate-700">Prepared by:</p>
+                        <p className="text-[9px] font-black uppercase text-slate-400">{drVerification.preparedBy.role}</p>
+                      </div>
                       {[
-                        ['D.G. REYES', 'Prepared by:', 'PACKING STATION FOREMAN'],
-                        ['? ', 'Noted by:', 'PACKING STATION SUPERVISOR'],
+                        ['?', 'Noted by:', 'PACKING STATION SUPERVISOR'],
                         ['?', 'Confirmed by:', "BUYER'S REPRESENTATIVE"],
                       ].map(([name, label, role], idx) => (
                         <div key={idx} className="text-center">
@@ -3989,17 +4562,20 @@ export default function MyProduceDashboard() {
                 <span className="text-emerald-700">Verified compliant</span>
               </div>
               <div className="flex items-center gap-3">
-                <Button variant="outline" className="h-10 rounded-sm border-slate-300 px-6 text-xs font-bold uppercase tracking-[0.18em] text-slate-700">
-                  Save Draft
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-sm border-slate-300 px-6 text-xs font-bold uppercase tracking-[0.18em] text-slate-700"
+                  onClick={() => handleSaveDr(false)}
+                  disabled={isSavingDr}
+                >
+                  {isSavingDr ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   className="h-10 rounded-sm bg-emerald-700 px-6 text-xs font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-emerald-800"
-                  onClick={() => {
-                    toast({ title: 'DR Created', description: 'Delivery receipt form has been opened and captured.' });
-                    setIsDrModalOpen(false);
-                  }}
+                  onClick={() => handleSaveDr(true)}
+                  disabled={isSavingDr}
                 >
-                  Finalize Receipt
+                  {isSavingDr ? 'Saving...' : 'Finalize Receipt'}
                 </Button>
               </div>
             </div>
@@ -4190,12 +4766,12 @@ export default function MyProduceDashboard() {
                         role="button"
                         tabIndex={0}
                         onClick={() => {
-                          setIsPreparedByModalOpen(true);
+                          openPreparedBySignatureModal('vls');
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            setIsPreparedByModalOpen(true);
+                            openPreparedBySignatureModal('vls');
                           }
                         }}
                         className="space-y-1 cursor-pointer select-none rounded-lg px-2 py-1 hover:bg-slate-50"
@@ -4240,8 +4816,12 @@ export default function MyProduceDashboard() {
 
           <div className="p-6 bg-gray-50 border-t flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setIsVlsModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-gray-400">DISCARD</Button>
-            <Button className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-black text-[10px] tracking-widest uppercase gap-2" onClick={() => { toast({ title: "VLS Created", description: "Van Loading Summary has been generated and linked to trip." }); setIsVlsModalOpen(false); }}>
-              <FileSignature className="h-4 w-4" /> GENERATE VLS
+            <Button
+              className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-black text-[10px] tracking-widest uppercase gap-2"
+              onClick={handleSaveVls}
+              disabled={isSavingVls}
+            >
+              <FileSignature className="h-4 w-4" /> {isSavingVls ? 'SAVING...' : 'GENERATE VLS'}
             </Button>
           </div>
         </DialogContent>
@@ -4313,7 +4893,16 @@ export default function MyProduceDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isShippingDocsModalOpen} onOpenChange={setIsShippingDocsModalOpen}>
+      <Dialog
+        open={isShippingDocsModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeShippingDocsModal();
+          } else {
+            setIsShippingDocsModalOpen(true);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg h-[90vh] p-0 overflow-hidden bg-white border-none shadow-2xl flex flex-col">
           <div className="p-6 border-b bg-gray-50 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
@@ -4371,7 +4960,7 @@ export default function MyProduceDashboard() {
           <div className="flex justify-end border-t bg-gray-50 px-6 py-4">
             <Button
               className="bg-emerald-700 px-8 text-[10px] font-black uppercase tracking-widest text-white hover:bg-emerald-800"
-              onClick={() => setIsShippingDocsModalOpen(false)}
+              onClick={closeShippingDocsModal}
             >
               Done
             </Button>
