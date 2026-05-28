@@ -152,6 +152,15 @@ interface TripRow {
   dateWithdrawn: string;
 }
 
+interface TransferInspectionState {
+  inboundDriverName: string;
+  outboundDriverName: string;
+  temperature: boolean;
+  noLeaks: boolean;
+  checkDrainPlug: boolean;
+  noOdor: boolean;
+}
+
 interface CORow {
   id: string;
   ps: string;
@@ -213,6 +222,7 @@ interface ShippingDocDraft {
 interface PalletItem {
   packType: string;
   qty: string;
+  skuNo: string;
 }
 
 interface LARow {
@@ -330,6 +340,14 @@ export default function MyProduceDashboard() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isDrModalOpen, setIsDrModalOpen] = useState(false);
   const [selectedTripForTransfer, setSelectedTripForTransfer] = useState<any>(null);
+  const [transferInspection, setTransferInspection] = useState<TransferInspectionState>({
+    inboundDriverName: '',
+    outboundDriverName: '',
+    temperature: false,
+    noLeaks: false,
+    checkDrainPlug: false,
+    noOdor: false,
+  });
   const [expandedTripIds, setExpandedTripIds] = useState<string[]>([]);
   const [isShippingDocsModalOpen, setIsShippingDocsModalOpen] = useState(false);
   const [isShippingDocEditorOpen, setIsShippingDocEditorOpen] = useState(false);
@@ -529,7 +547,9 @@ export default function MyProduceDashboard() {
   const [selectedPalletIndex, setSelectedPalletIndex] = useState<string | null>(null);
   const [vlsType, setVlsType] = useState<'palletized' | 'non-palletized'>('palletized');
   const [isPreparedByModalOpen, setIsPreparedByModalOpen] = useState(false);
-  const [preparedByDraft, setPreparedByDraft] = useState('');
+  const preparedByCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const preparedByDrawingRef = useRef(false);
+  const preparedByLastPointRef = useRef<{ x: number; y: number } | null>(null);
   const [vlsManifest, setVlsManifest] = useState({
     datePrepared: format(new Date(), 'yyyy-MM-dd'),
     waybillNo: '',
@@ -545,10 +565,10 @@ export default function MyProduceDashboard() {
   
   const [palletsData, setPalletsData] = useState<{[key: string]: PalletItem[]}>({});
   const [floorLoadData, setFloorLoadData] = useState<{[key: string]: PalletItem[]}>({});
-  const [currentPalletRows, setCurrentPalletRows] = useState<PalletItem[]>([{ packType: '', qty: '' }]);
+  const [currentPalletRows, setCurrentPalletRows] = useState<PalletItem[]>([{ packType: '', qty: '', skuNo: '' }]);
   
   const [verificationData, setVerificationData] = useState({
-    preparedBy: { name: 'D.G. REYES', role: 'PACKING STATION FOREMAN' },
+    preparedBy: { name: 'D.G. REYES', role: 'PACKING STATION FOREMAN', signatureDataUrl: '' },
     checkedBy: { name: 'EDCEL OBRADO', role: 'QAD - INSPECTOR' },
     approvedBy: { name: 'RS PALADIO', role: 'PACKING STATION OVERSEER' },
     receivedBy: { name: 'IAN BINAYA', role: 'HAULER REPRESENTATIVE' }
@@ -584,16 +604,6 @@ export default function MyProduceDashboard() {
     });
     setLaRows([createEmptyLARow()]);
   }, [isNewLAOpen]);
-
-  useEffect(() => {
-    if (!isNewBookingOpen) return;
-    setBookingHeader({
-      customerName: '',
-      weekNumber: '',
-      receivedAt: format(new Date(), 'yyyy-MM-dd')
-    });
-    setBookingRows([createEmptyBookingRow()]);
-  }, [isNewBookingOpen]);
 
   useEffect(() => {
     if (!isDrModalOpen) return;
@@ -946,8 +956,8 @@ export default function MyProduceDashboard() {
   }, [cosAllocationRows, cosRows]);
 
   const totalCosAllocation = useMemo(() => {
-    return cosAllocationRows.reduce((acc: number, row: any) => acc + (Number(row.totalVans ?? row.total ?? 0) || 0), 0);
-  }, [cosAllocationRows]);
+    return cosRows.length;
+  }, [cosRows]);
 
   const openCosModal = (sourceContract: any = selectedContract) => {
     if (!sourceContract) {
@@ -964,10 +974,14 @@ export default function MyProduceDashboard() {
       : Array.isArray(sourceContract.items) && sourceContract.items.length > 0
         ? sourceContract.items
         : [null];
+    const sourcePod =
+      sourceContract.pod ||
+      sourceRows.find((row: any) => row?.pod)?.pod ||
+      '';
     setCosHeader({
       customerName: sourceContract.customerName || '',
       weekNumber: String(sourceContract.weekNumber || ''),
-      pod: sourceContract.pod || '',
+      pod: sourcePod,
       laId: sourceContract.contractId || sourceContract.id,
     });
     setCosRows(
@@ -980,16 +994,26 @@ export default function MyProduceDashboard() {
               bookingNumber: row.bookingNumber || '',
               containerNo: row.containerNo || '',
               atwStatus: (row.atwStatus || 'PENDING') as 'PENDING' | 'READY' | 'LOADED',
-              pod: row.pod || sourceContract.pod || '',
+              pod: row.pod || sourcePod || '',
               cutOffDate: row.cutOffDate || sourceContract.cutOffDate || '',
               etd: row.etd || sourceContract.etd || '',
               sku: row.sku || (Array.isArray(sourceContract.selectedSKUs) ? sourceContract.selectedSKUs[0] : '') || '',
               palletization: row.palletization || sourceContract.palletizedType || 'Palletized',
             }
-          : createEmptyCOSRow(String(index + 1), sourceContract.pod || '')
+          : createEmptyCOSRow(String(index + 1), sourcePod)
       )
     );
     setIsCosModalOpen(true);
+  };
+
+  const openBookingBatchModal = (sourceContract: any = null) => {
+    setBookingHeader({
+      customerName: sourceContract?.customerName || '',
+      weekNumber: String(sourceContract?.weekNumber || ''),
+      receivedAt: format(new Date(), 'yyyy-MM-dd'),
+    });
+    setBookingRows([createEmptyBookingRow()]);
+    setIsNewBookingOpen(true);
   };
 
   const handleSignOut = async () => {
@@ -1410,17 +1434,179 @@ export default function MyProduceDashboard() {
   const closeTransferModal = () => {
     setIsTransferModalOpen(false);
     setSelectedTripForTransfer(null);
+    setTransferInspection({
+      inboundDriverName: '',
+      outboundDriverName: '',
+      temperature: false,
+      noLeaks: false,
+      checkDrainPlug: false,
+      noOdor: false,
+    });
     requestAnimationFrame(() => {
       clearDialogBodyLocks();
       setTimeout(clearDialogBodyLocks, 50);
     });
   };
 
+  const handleSaveTransfer = async () => {
+    if (!db || !selectedTripForTransfer) return;
+
+    try {
+      const tripRef = doc(db, TRIP_PATH, selectedTripForTransfer.id);
+      const payload = {
+        transferInspection: {
+          ...transferInspection,
+        },
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(tripRef, payload, { merge: true });
+
+      toast({
+        title: 'Manifest Saved',
+        description: 'Transfer inspection data has been recorded.',
+      });
+      closeTransferModal();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
+    }
+  };
+
+  useEffect(() => {
+    if (!isTransferModalOpen || !selectedTripForTransfer) return;
+    const savedInspection = selectedTripForTransfer.transferInspection || {};
+    setTransferInspection({
+      inboundDriverName: savedInspection.inboundDriverName || selectedTripForTransfer.driver || '',
+      outboundDriverName: savedInspection.outboundDriverName || '',
+      temperature: Boolean(savedInspection.temperature),
+      noLeaks: Boolean(savedInspection.noLeaks),
+      checkDrainPlug: Boolean(savedInspection.checkDrainPlug),
+      noOdor: Boolean(savedInspection.noOdor),
+    });
+  }, [isTransferModalOpen, selectedTripForTransfer]);
+
   useEffect(() => {
     if (!isTransferModalOpen) {
       clearDialogBodyLocks();
     }
   }, [isTransferModalOpen]);
+
+  useEffect(() => {
+    if (!isPreparedByModalOpen) return;
+
+    const signatureDataUrl = verificationData.preparedBy.signatureDataUrl;
+    const raf = requestAnimationFrame(() => {
+      const canvas = preparedByCanvasRef.current;
+      if (!canvas) return;
+
+      const context = canvas.getContext('2d');
+      if (!context) return;
+
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width || 520;
+      canvas.height = rect.height || 180;
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (!signatureDataUrl) return;
+
+      const image = new Image();
+      image.onload = () => {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      };
+      image.src = signatureDataUrl;
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [isPreparedByModalOpen, verificationData.preparedBy.signatureDataUrl]);
+
+  const getPreparedByCanvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = preparedByCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
+
+  const startPreparedBySignature = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = preparedByCanvasRef.current;
+    const point = getPreparedByCanvasPoint(event);
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context || !point) return;
+
+    preparedByDrawingRef.current = true;
+    preparedByLastPointRef.current = point;
+    canvas.setPointerCapture(event.pointerId);
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.strokeStyle = '#064e3b';
+    context.lineWidth = 3;
+  };
+
+  const drawPreparedBySignature = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!preparedByDrawingRef.current) return;
+    const canvas = preparedByCanvasRef.current;
+    const context = canvas?.getContext('2d');
+    const currentPoint = getPreparedByCanvasPoint(event);
+    const previousPoint = preparedByLastPointRef.current;
+    if (!canvas || !context || !currentPoint || !previousPoint) return;
+
+    context.beginPath();
+    context.moveTo(previousPoint.x, previousPoint.y);
+    context.lineTo(currentPoint.x, currentPoint.y);
+    context.stroke();
+    preparedByLastPointRef.current = currentPoint;
+  };
+
+  const endPreparedBySignature = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = preparedByCanvasRef.current;
+    if (canvas) {
+      try {
+        canvas.releasePointerCapture(event.pointerId);
+      } catch {
+        // Ignore if the pointer was already released.
+      }
+    }
+    preparedByDrawingRef.current = false;
+    preparedByLastPointRef.current = null;
+  };
+
+  const clearPreparedBySignature = () => {
+    const canvas = preparedByCanvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    setVerificationData((current) => ({
+      ...current,
+      preparedBy: {
+        ...current.preparedBy,
+        signatureDataUrl: '',
+      },
+    }));
+  };
+
+  const savePreparedBySignature = () => {
+    const canvas = preparedByCanvasRef.current;
+    const signatureDataUrl = canvas ? canvas.toDataURL('image/png') : '';
+    setVerificationData((current) => ({
+      ...current,
+      preparedBy: {
+        ...current.preparedBy,
+        signatureDataUrl,
+      },
+    }));
+    setIsPreparedByModalOpen(false);
+  };
 
   const openShippingDocs = (trip: any) => {
     setSelectedTripForDocs(trip);
@@ -1620,13 +1806,18 @@ export default function MyProduceDashboard() {
   const handleOpenPalletDetails = (index: string) => {
     setSelectedPalletIndex(index);
     const existingData = vlsType === 'palletized' ? palletsData[index] : floorLoadData[index];
-    setCurrentPalletRows(existingData || [{ packType: '', qty: '' }]);
+    setCurrentPalletRows(existingData || [{ packType: '', qty: '', skuNo: '' }]);
     setIsPalletDetailsModalOpen(true);
   };
 
   const handleSavePalletDetails = () => {
     if (selectedPalletIndex !== null) {
-      const filteredRows = currentPalletRows.filter(r => r.packType && r.qty);
+      const filteredRows = currentPalletRows
+        .filter((r) => r.packType && r.qty)
+        .map((r) => ({
+          ...r,
+          skuNo: r.packType,
+        }));
       if (vlsType === 'palletized') {
         setPalletsData({ ...palletsData, [selectedPalletIndex]: filteredRows });
       } else {
@@ -1640,8 +1831,9 @@ export default function MyProduceDashboard() {
     const data = vlsType === 'palletized' ? palletsData : floorLoadData;
     const summary: { [key: string]: number } = {};
     Object.values(data).flat().forEach(item => {
-      if (item.packType) {
-        summary[item.packType] = (summary[item.packType] || 0) + (parseInt(item.qty) || 0);
+      const key = item.skuNo || item.packType;
+      if (key) {
+        summary[key] = (summary[key] || 0) + (parseInt(item.qty) || 0);
       }
     });
     return Object.entries(summary).map(([packType, qty]) => ({ packType, qty }));
@@ -2467,26 +2659,59 @@ export default function MyProduceDashboard() {
             <div className="space-y-8">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">INBOUND DRIVER NAME</Label>
-                <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-200" />
+                <Input
+                  placeholder="Enter driver name"
+                  className="h-11 bg-gray-50/50 border-gray-200"
+                  value={transferInspection.inboundDriverName}
+                  onChange={(e) => setTransferInspection({ ...transferInspection, inboundDriverName: e.target.value })}
+                />
               </div>
 
               <div className="space-y-4">
                 <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">INSPECTION CHECKLIST</Label>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center space-x-3">
-                    <Checkbox id="temp" className="border-gray-300" />
+                    <Checkbox
+                      id="temp"
+                      className="border-gray-300"
+                      checked={transferInspection.temperature}
+                      onCheckedChange={(checked) =>
+                        setTransferInspection({ ...transferInspection, temperature: Boolean(checked) })
+                      }
+                    />
                     <label htmlFor="temp" className="text-sm font-medium text-gray-600">Temperature</label>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Checkbox id="leaks" className="border-gray-300" />
+                    <Checkbox
+                      id="leaks"
+                      className="border-gray-300"
+                      checked={transferInspection.noLeaks}
+                      onCheckedChange={(checked) =>
+                        setTransferInspection({ ...transferInspection, noLeaks: Boolean(checked) })
+                      }
+                    />
                     <label htmlFor="leaks" className="text-sm font-medium text-gray-600">No Leaks</label>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Checkbox id="drain" className="border-gray-300" />
+                    <Checkbox
+                      id="drain"
+                      className="border-gray-300"
+                      checked={transferInspection.checkDrainPlug}
+                      onCheckedChange={(checked) =>
+                        setTransferInspection({ ...transferInspection, checkDrainPlug: Boolean(checked) })
+                      }
+                    />
                     <label htmlFor="drain" className="text-sm font-medium text-gray-600">Check Drain Plug</label>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Checkbox id="odor" className="border-gray-300" />
+                    <Checkbox
+                      id="odor"
+                      className="border-gray-300"
+                      checked={transferInspection.noOdor}
+                      onCheckedChange={(checked) =>
+                        setTransferInspection({ ...transferInspection, noOdor: Boolean(checked) })
+                      }
+                    />
                     <label htmlFor="odor" className="text-sm font-medium text-gray-600">No Odor</label>
                   </div>
                 </div>
@@ -2494,7 +2719,12 @@ export default function MyProduceDashboard() {
 
               <div className="space-y-2">
                 <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">OUTBOUND DRIVER NAME</Label>
-                <Input placeholder="Enter driver name" className="h-11 bg-gray-50/50 border-gray-200" />
+                <Input
+                  placeholder="Enter driver name"
+                  className="h-11 bg-gray-50/50 border-gray-200"
+                  value={transferInspection.outboundDriverName}
+                  onChange={(e) => setTransferInspection({ ...transferInspection, outboundDriverName: e.target.value })}
+                />
               </div>
 
               <div className="space-y-4 pt-4 border-t">
@@ -2533,10 +2763,7 @@ export default function MyProduceDashboard() {
           <div className="p-6 bg-gray-50 border-t flex justify-end">
             <Button 
               className="h-12 px-12 bg-anflocor-green hover:bg-anflocor-green/90 text-white font-black text-xs tracking-widest gap-3 shadow-lg uppercase" 
-              onClick={() => { 
-                toast({ title: "Manifest Saved", description: "Transfer initiation data has been recorded." });
-                closeTransferModal();
-              }}
+              onClick={handleSaveTransfer}
             >
               <Truck className="h-4 w-4" /> SAVE
             </Button>
@@ -2626,14 +2853,14 @@ export default function MyProduceDashboard() {
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="outline"
-              className="h-10 rounded-sm border-slate-300 bg-white px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-sm"
-            onClick={() => navigateToView('bookings')}
-            >
-              CREATE/VIEW BOOKINGS
-            </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            className="h-10 rounded-sm border-slate-300 bg-white px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-sm"
+            onClick={() => openBookingBatchModal(selectedContract)}
+          >
+            CREATE/VIEW BOOKINGS
+          </Button>
             <Button
               variant="outline"
               className="h-10 rounded-sm border-slate-300 bg-white px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-sm"
@@ -2784,7 +3011,7 @@ export default function MyProduceDashboard() {
 
           <Button
             className="h-10 rounded-sm bg-emerald-700 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-emerald-800"
-            onClick={() => setIsNewBookingOpen(true)}
+            onClick={() => openBookingBatchModal()}
           >
             <Plus className="mr-2 h-4 w-4" />
             New Booking
@@ -2882,11 +3109,10 @@ export default function MyProduceDashboard() {
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
           <Button variant="ghost" onClick={() => navigateToView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />Cutting Orders</Button>
           <Button variant="ghost" onClick={() => navigateToView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
           <Button variant="ghost" onClick={() => navigateToView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
+          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />Cutting Orders</Button>
           <Button variant="ghost" onClick={() => navigateToView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
-          <Button variant="ghost" onClick={() => navigateToView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'configuration' && "bg-white/10")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
         </nav>
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
       </aside>
@@ -3284,15 +3510,50 @@ export default function MyProduceDashboard() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Customer</Label>
-                    <Input value={cosHeader.customerName} readOnly className="h-11 rounded-sm border-slate-300 bg-slate-50 shadow-sm" />
+                    <Select
+                      value={cosHeader.customerName}
+                      onValueChange={(value) => setCosHeader({ ...cosHeader, customerName: value })}
+                    >
+                      <SelectTrigger className="h-11 rounded-sm border-slate-300 bg-white shadow-sm">
+                        <SelectValue placeholder="Select Customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customerMappings?.map((customer: any) => (
+                          <SelectItem key={customer.id} value={customer.Customer}>
+                            {customer.Customer}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Week No</Label>
-                    <Input value={cosHeader.weekNumber} readOnly className="h-11 rounded-sm border-slate-300 bg-slate-50 shadow-sm" />
+                    <Input
+                      value={cosHeader.weekNumber}
+                      onChange={(e) => setCosHeader({ ...cosHeader, weekNumber: e.target.value })}
+                      className="h-11 rounded-sm border-slate-300 bg-white shadow-sm"
+                    />
                   </div>
                   <div className="space-y-2 md:col-span-1">
                     <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">POD</Label>
-                    <Input value={cosHeader.pod} readOnly className="h-11 rounded-sm border-slate-300 bg-slate-50 shadow-sm" />
+                    <Select
+                      value={cosHeader.pod}
+                      onValueChange={(value) => {
+                        setCosHeader({ ...cosHeader, pod: value });
+                        setCosRows((rows) => rows.map((row) => ({ ...row, pod: row.pod || value })));
+                      }}
+                    >
+                      <SelectTrigger className="h-11 rounded-sm border-slate-300 bg-white shadow-sm">
+                        <SelectValue placeholder="Select POD" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {podMappings?.map((pod: any) => (
+                          <SelectItem key={pod.id} value={pod.portName}>
+                            {pod.portName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -3481,7 +3742,12 @@ export default function MyProduceDashboard() {
                 <Button
                   variant="ghost"
                   className="h-9 px-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                  onClick={() => setCosRows([...cosRows, createEmptyCOSRow(String(cosRows.length + 1), cosHeader.pod || '')])}
+                  onClick={() =>
+                    setCosRows((rows) => [
+                      ...rows,
+                      createEmptyCOSRow(String(rows.length + 1), cosHeader.pod || ''),
+                    ])
+                  }
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add Row
@@ -3807,12 +4073,41 @@ export default function MyProduceDashboard() {
                     </div>
                     <div className="bg-gray-50 p-10 rounded-2xl border-2 border-dashed border-gray-200">
                       <div className="grid grid-cols-10 grid-rows-2 gap-4 h-64">
-                        {Array.from({ length: 20 }).map((_, i) => (
-                          <div key={i} onClick={() => handleOpenPalletDetails(i.toString())} className={cn("relative group cursor-pointer rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1", palletsData[i.toString()]?.length > 0 ? "bg-green-50 border-anflocor-green shadow-md shadow-green-100" : "bg-white border-gray-100 hover:border-anflocor-green/30 hover:bg-gray-50")}>
-                            <span className="text-[10px] font-black text-gray-300 group-hover:text-anflocor-green/40">#{i + 1}</span>
-                            {palletsData[i.toString()]?.length > 0 ? <><Box className="h-6 w-6 text-anflocor-green" /><span className="text-[8px] font-bold text-anflocor-green uppercase">LOADED</span></> : <Plus className="h-5 w-5 text-gray-100 group-hover:text-anflocor-green/20" />}
-                          </div>
-                        ))}
+                        {Array.from({ length: 20 }).map((_, i) => {
+                          const palletRows = palletsData[i.toString()] || [];
+                          const palletSkus = palletRows
+                            .map((item) => item.skuNo || item.packType || '')
+                            .filter(Boolean);
+
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => handleOpenPalletDetails(i.toString())}
+                              className={cn(
+                                "relative group cursor-pointer rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1 px-2 text-center overflow-hidden",
+                                palletRows.length > 0
+                                  ? "bg-green-50 border-anflocor-green shadow-md shadow-green-100"
+                                  : "bg-white border-gray-100 hover:border-anflocor-green/30 hover:bg-gray-50"
+                              )}
+                            >
+                              <span className="text-[10px] font-black text-gray-300 group-hover:text-anflocor-green/40">#{i + 1}</span>
+                              {palletRows.length > 0 ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <Box className="h-5 w-5 text-anflocor-green" />
+                                  <div className="flex max-h-12 flex-col items-center gap-0.5 overflow-hidden">
+                                    {palletSkus.map((sku, skuIndex) => (
+                                      <span key={`${sku}-${skuIndex}`} className="text-[8px] font-black uppercase leading-none text-anflocor-green">
+                                        {sku}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <Plus className="h-5 w-5 text-gray-100 group-hover:text-anflocor-green/20" />
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -3820,7 +4115,7 @@ export default function MyProduceDashboard() {
                     <div className="flex items-center gap-2"><div className="w-1 h-4 bg-anflocor-green rounded-full"></div><h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">BREAKDOWN SUMMARY</h3></div>
                     <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 min-h-[300px]">
                       <Table>
-                        <TableHeader><TableRow className="hover:bg-transparent border-b-2 border-gray-200"><TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">PACK TYPE</TableHead><TableHead className="text-[9px] font-black uppercase text-gray-400 h-8 text-right">QTY</TableHead></TableRow></TableHeader>
+                        <TableHeader><TableRow className="hover:bg-transparent border-b-2 border-gray-200"><TableHead className="text-[9px] font-black uppercase text-gray-400 h-8">SKU NO.</TableHead><TableHead className="text-[9px] font-black uppercase text-gray-400 h-8 text-right">QTY</TableHead></TableRow></TableHeader>
                         <TableBody>
                           {getAggregatedSummary().map((item, idx) => (<TableRow key={idx} className="border-none h-10"><TableCell className="font-medium text-xs text-gray-600">{item.packType}</TableCell><TableCell className="text-right font-black text-anflocor-green text-xs">{item.qty}</TableCell></TableRow>))}
                         </TableBody>
@@ -3865,20 +4160,21 @@ export default function MyProduceDashboard() {
                               <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 3</TableHead>
                               <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 4</TableHead>
                               <TableHead className="text-[9px] font-black uppercase text-[#64748b] border-r text-center h-10">COL 5</TableHead>
+                              <TableHead className="text-[9px] font-black uppercase text-[#64748b] text-center h-10">COL 6</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {Array.from({ length: 32 }).map((_, rIdx) => (
                               <TableRow key={rIdx} className="hover:bg-transparent border-b last:border-none h-8">
                                 <TableCell className="text-center text-[9px] font-black text-[#64748b] border-r bg-[#f8fafc] py-1">{rIdx + 1}</TableCell>
-                                <TableCell onClick={() => handleOpenPalletDetails(`${rIdx}-0`)} className={cn("text-center text-[10px] font-bold border-r cursor-pointer transition-colors py-1", floorLoadData[`${rIdx}-0`]?.length > 0 ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]")}>{floorLoadData[`${rIdx}-0`]?.map(i => `${i.qty}${i.packType.charAt(0)}`).join(', ') || '-'}</TableCell>
-                                {Array.from({ length: 4 }).map((_, cIdx) => {
+                                <TableCell onClick={() => handleOpenPalletDetails(`${rIdx}-0`)} className={cn("text-center text-[10px] font-bold border-r cursor-pointer transition-colors py-1", floorLoadData[`${rIdx}-0`]?.length > 0 ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]")}>{floorLoadData[`${rIdx}-0`]?.map(i => i.packType).filter(Boolean).join(', ') || '-'}</TableCell>
+                                {Array.from({ length: 5 }).map((_, cIdx) => {
                                   const actualCol = cIdx + 1;
                                   const cellKey = `${rIdx}-${actualCol}`;
                                   if (rIdx < 22) {
                                     return (
                                       <TableCell key={cIdx} onClick={() => handleOpenPalletDetails(cellKey)} className={cn("text-center text-[10px] font-bold border-r last:border-none cursor-pointer transition-colors py-1", floorLoadData[cellKey]?.length > 0 ? "bg-green-50 text-anflocor-green" : "hover:bg-gray-50 text-[#cbd5e1]")}>
-                                        {floorLoadData[cellKey]?.map(i => `${i.qty}${i.packType.charAt(0)}`).join(', ') || '-'}
+                                        {floorLoadData[cellKey]?.map(i => i.packType).filter(Boolean).join(', ') || '-'}
                                       </TableCell>
                                     );
                                   }
@@ -3886,7 +4182,7 @@ export default function MyProduceDashboard() {
                                 })}
                               </TableRow>
                             ))}
-                            <TableRow className="bg-[#f8fafc] hover:bg-[#f8fafc] h-10"><TableCell className="text-center text-[9px] font-black text-[#64748b] border-r uppercase">VACANT</TableCell><TableCell colSpan={5} className="text-center text-[10px] font-black text-[#cbd5e1] uppercase tracking-widest">VACANT AREA</TableCell></TableRow>
+                            <TableRow className="bg-[#f8fafc] hover:bg-[#f8fafc] h-10"><TableCell className="text-center text-[9px] font-black text-[#64748b] border-r uppercase">VACANT</TableCell><TableCell colSpan={6} className="text-center text-[10px] font-black text-[#cbd5e1] uppercase tracking-widest">VACANT AREA</TableCell></TableRow>
                           </TableBody>
                         </Table>
                       </ScrollArea>
@@ -3911,20 +4207,26 @@ export default function MyProduceDashboard() {
                         role="button"
                         tabIndex={0}
                         onClick={() => {
-                          setPreparedByDraft(verificationData.preparedBy.name);
                           setIsPreparedByModalOpen(true);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            setPreparedByDraft(verificationData.preparedBy.name);
                             setIsPreparedByModalOpen(true);
                           }
                         }}
                         className="space-y-1 cursor-pointer select-none rounded-lg px-2 py-1 hover:bg-slate-50"
                       >
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Prepared By</p>
-                        <p className="text-lg font-black text-gray-900">{verificationData.preparedBy.name}</p>
+                        {verificationData.preparedBy.signatureDataUrl ? (
+                          <img
+                            src={verificationData.preparedBy.signatureDataUrl}
+                            alt="Prepared By signature"
+                            className="h-14 max-w-full object-contain"
+                          />
+                        ) : (
+                          <div className="h-14" />
+                        )}
                         <div className="h-px w-full bg-gray-200" />
                         <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">{verificationData.preparedBy.role}</p>
                       </div>
@@ -3973,13 +4275,13 @@ export default function MyProduceDashboard() {
              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                 {currentPalletRows.map((row, idx) => (
                    <div key={idx} className="grid grid-cols-12 gap-3 items-end group">
-                      <div className="col-span-7 space-y-1.5"><Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">PACK TYPE</Label><Input value={row.packType} onChange={(e) => setCurrentPalletRows(currentPalletRows.map((r, i) => i === idx ? { ...r, packType: e.target.value } : r))} className="h-10 bg-gray-50 border-gray-100 font-bold text-xs" placeholder="e.g. SKU-001" /></div>
-                      <div className="col-span-4 space-y-1.5"><Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">QTY</Label><Input type="number" value={row.qty} onChange={(e) => setCurrentPalletRows(currentPalletRows.map((r, i) => i === idx ? { ...r, qty: e.target.value } : r))} className="h-10 bg-gray-50 border-gray-100 font-black text-xs text-center" placeholder="0" /></div>
+                      <div className="col-span-5 space-y-1.5"><Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">PACK TYPE</Label><Input value={row.packType} onChange={(e) => setCurrentPalletRows(currentPalletRows.map((r, i) => i === idx ? { ...r, packType: e.target.value, skuNo: e.target.value } : r))} className="h-10 bg-gray-50 border-gray-100 font-bold text-xs" placeholder="e.g. 8V" /></div>
+                      <div className="col-span-5 space-y-1.5"><Label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">QTY</Label><Input type="number" value={row.qty} onChange={(e) => setCurrentPalletRows(currentPalletRows.map((r, i) => i === idx ? { ...r, qty: e.target.value } : r))} className="h-10 bg-gray-50 border-gray-100 font-black text-xs text-center" placeholder="0" /></div>
                       <div className="col-span-1 pb-1"><Button variant="ghost" size="icon" className="h-8 w-8 text-gray-200 hover:text-red-500 hover:bg-red-50" onClick={() => setCurrentPalletRows(currentPalletRows.filter((_, i) => i !== idx))} disabled={currentPalletRows.length === 1}><Trash2 className="h-3.5 w-3.5" /></Button></div>
                    </div>
                 ))}
              </div>
-             <Button variant="outline" className="w-full h-10 border-dashed border-gray-200 text-gray-400 text-[10px] font-black uppercase tracking-widest hover:text-anflocor-green hover:border-anflocor-green/40 hover:bg-green-50/30 gap-2" onClick={() => setCurrentPalletRows([...currentPalletRows, { packType: '', qty: '' }])}><Plus className="h-3 w-3" /> ADD ROW</Button>
+             <Button variant="outline" className="w-full h-10 border-dashed border-gray-200 text-gray-400 text-[10px] font-black uppercase tracking-widest hover:text-anflocor-green hover:border-anflocor-green/40 hover:bg-green-50/30 gap-2" onClick={() => setCurrentPalletRows([...currentPalletRows, { packType: '', qty: '', skuNo: '' }])}><Plus className="h-3 w-3" /> ADD ROW</Button>
           </div>
           <div className="p-4 bg-gray-50 border-t flex gap-2"><Button variant="ghost" onClick={() => setIsPalletDetailsModalOpen(false)} className="flex-1 text-[10px] font-black uppercase">CANCEL</Button><Button onClick={handleSavePalletDetails} className="flex-[2] bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10">SAVE DETAILS</Button></div>
         </DialogContent>
@@ -3992,22 +4294,36 @@ export default function MyProduceDashboard() {
           </div>
           <div className="p-6 space-y-4">
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-gray-400">Name</Label>
-              <Input value={preparedByDraft} onChange={(e) => setPreparedByDraft(e.target.value)} className="h-11 bg-gray-50" placeholder="Enter name" />
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-black uppercase text-gray-400">Signature</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-[10px] font-black uppercase text-gray-500"
+                  onClick={clearPreparedBySignature}
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+                <canvas
+                  ref={preparedByCanvasRef}
+                  className="h-[180px] w-full touch-none rounded-lg bg-white"
+                  width={520}
+                  height={180}
+                  onPointerDown={startPreparedBySignature}
+                  onPointerMove={drawPreparedBySignature}
+                  onPointerUp={endPreparedBySignature}
+                  onPointerLeave={endPreparedBySignature}
+                  onPointerCancel={endPreparedBySignature}
+                />
+              </div>
+              <p className="text-[10px] font-medium text-gray-400">Draw signature with mouse or touch.</p>
             </div>
           </div>
           <div className="p-4 bg-gray-50 border-t flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setIsPreparedByModalOpen(false)} className="text-[10px] font-black uppercase">Cancel</Button>
-            <Button
-              className="bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10 px-6"
-              onClick={() => {
-                setVerificationData({
-                  ...verificationData,
-                  preparedBy: { ...verificationData.preparedBy, name: preparedByDraft },
-                });
-                setIsPreparedByModalOpen(false);
-              }}
-            >
+            <Button className="bg-anflocor-green hover:bg-anflocor-green/90 text-white text-[10px] font-black uppercase h-10 px-6" onClick={savePreparedBySignature}>
               Save
             </Button>
           </div>
