@@ -1421,16 +1421,6 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const clearDialogBodyLocks = () => {
-    if (typeof document === 'undefined') return;
-    document.body.style.pointerEvents = 'auto';
-    document.body.style.overflow = 'auto';
-    document.body.removeAttribute('data-scroll-locked');
-    Array.from(document.body.classList)
-      .filter((className) => className.startsWith('block-interactivity-') || className.startsWith('allow-interactivity-'))
-      .forEach((className) => document.body.classList.remove(className));
-  };
-
   const closeTransferModal = () => {
     setIsTransferModalOpen(false);
     setSelectedTripForTransfer(null);
@@ -1441,10 +1431,6 @@ export default function MyProduceDashboard() {
       noLeaks: false,
       checkDrainPlug: false,
       noOdor: false,
-    });
-    requestAnimationFrame(() => {
-      clearDialogBodyLocks();
-      setTimeout(clearDialogBodyLocks, 50);
     });
   };
 
@@ -1484,12 +1470,6 @@ export default function MyProduceDashboard() {
       noOdor: Boolean(savedInspection.noOdor),
     });
   }, [isTransferModalOpen, selectedTripForTransfer]);
-
-  useEffect(() => {
-    if (!isTransferModalOpen) {
-      clearDialogBodyLocks();
-    }
-  }, [isTransferModalOpen]);
 
   useEffect(() => {
     if (!isPreparedByModalOpen) return;
@@ -2494,7 +2474,6 @@ export default function MyProduceDashboard() {
                       <DropdownMenuItem 
                         className="gap-3 py-2.5 cursor-pointer font-medium"
                         onSelect={(e) => {
-                          e.preventDefault();
                           setSelectedTripForTransfer(t);
                           requestAnimationFrame(() => setIsTransferModalOpen(true));
                         }}
@@ -2638,9 +2617,13 @@ export default function MyProduceDashboard() {
           setIsTransferModalOpen(open);
           if (!open) {
             setSelectedTripForTransfer(null);
-            requestAnimationFrame(() => {
-              clearDialogBodyLocks();
-              setTimeout(clearDialogBodyLocks, 50);
+            setTransferInspection({
+              inboundDriverName: '',
+              outboundDriverName: '',
+              temperature: false,
+              noLeaks: false,
+              checkDrainPlug: false,
+              noOdor: false,
             });
           }
         }}
