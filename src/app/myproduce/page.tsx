@@ -375,8 +375,11 @@ export default function MyProduceDashboard() {
   const [expandedTripIds, setExpandedTripIds] = useState<string[]>([]);
   const [isShippingDocsModalOpen, setIsShippingDocsModalOpen] = useState(false);
   const [isShippingDocEditorOpen, setIsShippingDocEditorOpen] = useState(false);
+  const [isShippingDocUploadOpen, setIsShippingDocUploadOpen] = useState(false);
   const [selectedTripForDocs, setSelectedTripForDocs] = useState<any>(null);
   const [selectedShippingDocType, setSelectedShippingDocType] = useState<ShippingDocType>('Shipping Instruction');
+  const [selectedShippingDocUploadType, setSelectedShippingDocUploadType] = useState<string>('');
+  const [selectedShippingDocFile, setSelectedShippingDocFile] = useState<File | null>(null);
   const [vlsSavedTripIds, setVlsSavedTripIds] = useState<string[]>([]);
   const [isSavingVls, setIsSavingVls] = useState(false);
   const [shippingDocDraft, setShippingDocDraft] = useState<ShippingDocDraft>({
@@ -1879,10 +1882,50 @@ export default function MyProduceDashboard() {
     setIsShippingDocsModalOpen(true);
   };
 
+  const openShippingDocUpload = (docType: string) => {
+    setSelectedShippingDocUploadType(docType);
+    setSelectedShippingDocFile(null);
+    setIsShippingDocUploadOpen(true);
+  };
+
   const closeShippingDocsModal = () => {
     setIsShippingDocsModalOpen(false);
     setIsShippingDocEditorOpen(false);
+    setIsShippingDocUploadOpen(false);
     setSelectedTripForDocs(null);
+  };
+
+  const handleSaveShippingDocUpload = () => {
+    if (!selectedShippingDocFile) {
+      toast({
+        variant: 'destructive',
+        title: 'Select a file',
+        description: 'Please choose a document to upload first.',
+      });
+      return;
+    }
+
+    setSelectedTripForDocs((current: any) =>
+      current
+        ? {
+            ...current,
+            shippingDocUploads: {
+              ...(current.shippingDocUploads || {}),
+              [selectedShippingDocUploadType]: {
+                fileName: selectedShippingDocFile.name,
+                fileType: selectedShippingDocFile.type,
+                uploadedAt: new Date().toISOString(),
+              },
+            },
+          }
+        : current
+    );
+
+    setIsShippingDocUploadOpen(false);
+    toast({
+      title: 'Upload saved',
+      description: `${selectedShippingDocUploadType} attached successfully.`,
+    });
   };
 
   const openShippingDocEditor = (docType: ShippingDocType) => {
@@ -1993,6 +2036,7 @@ export default function MyProduceDashboard() {
       selectedTripForTransfer?.vlsManifest ||
       (selectedTripForTransfer?.id && vlsSavedTripIds.includes(selectedTripForTransfer.id))
   );
+  const hasExistingDr = Boolean(selectedTripForTransfer?.deliveryReceipt);
 
   const handleSaveVls = async () => {
     if (!db || !selectedTripForTransfer) return;
@@ -3352,7 +3396,7 @@ export default function MyProduceDashboard() {
                     <Plus className="h-4 w-4" /> {hasExistingVls ? 'EDIT VLS' : 'CREATE VLS'}
                   </Button>
                   <Button variant="outline" className="flex-1 h-12 border-gray-200 font-bold text-xs uppercase tracking-widest gap-2" onClick={openDrModal}>
-                    <Plus className="h-4 w-4" /> CREATE DR
+                    <Plus className="h-4 w-4" /> {hasExistingDr ? 'EDIT DR' : 'CREATE DR'}
                   </Button>
                 </div>
               </div>
@@ -5021,6 +5065,10 @@ export default function MyProduceDashboard() {
                             openShippingDocEditor(doc.docType);
                             return;
                           }
+                          if (action === 'upload') {
+                            openShippingDocUpload(doc.label);
+                            return;
+                          }
                           toast({
                             title: `${action.toUpperCase()} requested`,
                             description: `${doc.label} will be handled in a future upload/export flow.`,
@@ -5046,6 +5094,61 @@ export default function MyProduceDashboard() {
               onClick={closeShippingDocsModal}
             >
               Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isShippingDocUploadOpen}
+        onOpenChange={(open) => {
+          setIsShippingDocUploadOpen(open);
+          if (!open) {
+            setSelectedShippingDocFile(null);
+            setSelectedShippingDocUploadType('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-6 border-b bg-gray-50 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-emerald-50 p-2">
+                <Upload className="h-5 w-5 text-emerald-700" />
+              </div>
+              <DialogTitle className="text-lg font-black text-gray-900">Upload Document</DialogTitle>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Document Type</Label>
+              <Input value={selectedShippingDocUploadType} readOnly className="h-10 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[9px] font-black uppercase text-slate-400">Choose File</Label>
+              <Input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={(e) => setSelectedShippingDocFile(e.target.files?.[0] || null)}
+                className="h-10 bg-white"
+              />
+            </div>
+            {selectedShippingDocFile && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                Selected: <span className="font-semibold">{selectedShippingDocFile.name}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsShippingDocUploadOpen(false)} className="text-[10px] font-black uppercase">
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-700 px-6 text-[10px] font-black uppercase tracking-widest text-white hover:bg-emerald-800"
+              onClick={handleSaveShippingDocUpload}
+            >
+              Save Upload
             </Button>
           </div>
         </DialogContent>
