@@ -514,6 +514,8 @@ export default function MyProduceDashboard() {
     sku: '',
     palletization: 'Palletized',
   });
+  const normalizePalletization = (value: any) =>
+    String(value || '').toLowerCase().includes('non') ? 'Non-Palletized' : 'Palletized';
   const [cosRows, setCosRows] = useState<COSRow[]>([createEmptyCOSRow()]);
   const [cosHeader, setCosHeader] = useState({
     customerName: '',
@@ -937,6 +939,16 @@ export default function MyProduceDashboard() {
     return rows;
   }, [bookings]);
 
+  const bookingNumberOptions = useMemo(() => {
+    const uniqueNumbers = new Set<string>();
+    bookingListRows.forEach((row) => {
+      if (row.bookingNumber && row.bookingNumber !== '--') {
+        uniqueNumbers.add(row.bookingNumber);
+      }
+    });
+    return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
+  }, [bookingListRows]);
+
   const filteredBookingRows = useMemo(() => {
     return bookingListRows.filter((row) => {
       const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
@@ -989,7 +1001,7 @@ export default function MyProduceDashboard() {
       const tripStatus = String(trip?.status || 'ACTIVE').toUpperCase();
       const matchesStatus =
         tripStatusFilter === 'all' ||
-        (tripStatusFilter === 'shipped' && tripStatus === 'DEPART');
+        (tripStatusFilter === 'shipped' && (tripStatus === 'DEPART' || tripStatus === 'SHIPPED'));
       return matchesStatus;
     });
   }, [trips, tripStatusFilter]);
@@ -1229,6 +1241,8 @@ export default function MyProduceDashboard() {
         totalBookings: normalizedRows.length,
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        bookingNumber: normalizedRows[0]?.bookingNumber || '',
+        bookingNumbers: Array.from(new Set(normalizedRows.map((row) => row.bookingNumber).filter(Boolean))),
         items: normalizedRows,
         shippingLine: normalizedRows[0]?.shippingLine || '',
         vesselName: normalizedRows[0]?.vesselName || '',
@@ -1263,7 +1277,7 @@ export default function MyProduceDashboard() {
         cutOffDate: row.cutOffDate || '',
         etd: row.etd || '',
         sku: row.sku || '',
-        palletization: row.palletization || 'Palletized',
+        palletization: normalizePalletization(row.palletization),
       }));
 
       const batch = writeBatch(db);
@@ -1404,42 +1418,68 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleDispatchTrip = async (trip: any) => {
+  const updateTripStatus = async (
+    trip: any,
+    nextStatus: 'DEPART' | 'SHIPPED',
+    options: { updateCuttingOrders?: boolean; title: string; description: string }
+  ) => {
     if (!db) return;
-    try {
-      const updatedCuttingOrders = Array.isArray(trip?.cuttingOrders)
-        ? trip.cuttingOrders.map((row: any) => ({
-            ...row,
-            status: 'DEPART',
-          }))
-        : [];
 
+    try {
       const batch = writeBatch(db);
       const tripRef = doc(db, TRIP_PATH, trip.id);
-      batch.update(tripRef, {
-        status: 'DEPART',
-        cuttingOrders: updatedCuttingOrders,
-        cuttingOrdersUpdatedAt: serverTimestamp(),
+      const payload: any = {
+        status: nextStatus,
         updatedAt: serverTimestamp(),
-      });
+      };
 
-      const cuttingOrderDocs = await getDocs(collection(db, `${TRIP_PATH}/${trip.id}/cutting_orders`));
-      cuttingOrderDocs.docs.forEach((snapshot) => {
-        batch.update(snapshot.ref, {
-          status: 'DEPART',
-          updatedAt: serverTimestamp(),
+      if (options.updateCuttingOrders) {
+        const updatedCuttingOrders = Array.isArray(trip?.cuttingOrders)
+          ? trip.cuttingOrders.map((row: any) => ({
+              ...row,
+              status: nextStatus,
+            }))
+          : [];
+
+        payload.cuttingOrders = updatedCuttingOrders;
+        payload.cuttingOrdersUpdatedAt = serverTimestamp();
+
+        const cuttingOrderDocs = await getDocs(collection(db, `${TRIP_PATH}/${trip.id}/cutting_orders`));
+        cuttingOrderDocs.docs.forEach((snapshot) => {
+          batch.update(snapshot.ref, {
+            status: nextStatus,
+            updatedAt: serverTimestamp(),
+          });
         });
-      });
+      }
 
+      batch.update(tripRef, payload);
       await batch.commit();
+
       toast({
-        title: 'Dispatched',
-        description: 'All associated cutting orders were moved to DEPART.',
+        title: options.title,
+        description: options.description,
       });
       setTripStatusFilter('shipped');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Dispatch Failed', description: err.message });
+      toast({ variant: 'destructive', title: `${options.title} Failed`, description: err.message });
     }
+  };
+
+  const handleDispatchTrip = async (trip: any) => {
+    await updateTripStatus(trip, 'DEPART', {
+      updateCuttingOrders: true,
+      title: 'Dispatched',
+      description: 'All associated cutting orders were moved to DEPART.',
+    });
+  };
+
+  const handleShipTrip = async (trip: any) => {
+    await updateTripStatus(trip, 'SHIPPED', {
+      updateCuttingOrders: false,
+      title: 'Shipped',
+      description: 'Trip status updated to SHIPPED.',
+    });
   };
 
   const toggleTripExpanded = (tripId: string) => {
@@ -2844,17 +2884,46 @@ export default function MyProduceDashboard() {
                 <TableCell className="font-bold text-xs uppercase">{t.driver}</TableCell>
                 <TableCell className="text-[10px] text-gray-400">{t.dateAtwReleased}</TableCell>
                 <TableCell className="text-center">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'font-bold uppercase tracking-wider',
-                      String(t.status || 'ACTIVE').toUpperCase() === 'DEPART'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-amber-200 bg-amber-50 text-amber-700'
-                    )}
-                  >
-                    {String(t.status || 'ACTIVE').toUpperCase()}
-                  </Badge>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-auto p-0 hover:bg-transparent">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'font-bold uppercase tracking-wider cursor-pointer',
+                            String(t.status || 'ACTIVE').toUpperCase() === 'SHIPPED'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : String(t.status || 'ACTIVE').toUpperCase() === 'DEPART'
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-amber-200 bg-amber-50 text-amber-700'
+                          )}
+                        >
+                          {String(t.status || 'ACTIVE').toUpperCase()}
+                        </Badge>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center" className="w-48">
+                      {String(t.status || 'ACTIVE').toUpperCase() === 'DEPART' ? (
+                        <DropdownMenuItem
+                          className="gap-3 py-2.5 cursor-pointer font-medium"
+                          onClick={() => handleShipTrip(t)}
+                        >
+                          <Check className="h-4 w-4 text-gray-500" /> Mark as Shipped
+                        </DropdownMenuItem>
+                      ) : String(t.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? (
+                        <DropdownMenuItem
+                          className="gap-3 py-2.5 cursor-pointer font-medium"
+                          onClick={() => handleDispatchTrip(t)}
+                        >
+                          <Truck className="h-4 w-4 text-gray-500" /> Mark as Dispatched
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem disabled className="gap-3 py-2.5 font-medium">
+                          No actions available
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
@@ -2864,6 +2933,28 @@ export default function MyProduceDashboard() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem
+                        className="gap-3 py-2.5 cursor-pointer font-medium"
+                        onClick={() => {
+                          const currentStatus = String(t.status || 'ACTIVE').toUpperCase();
+                          if (currentStatus === 'DEPART') {
+                            handleShipTrip(t);
+                          } else {
+                            handleDispatchTrip(t);
+                          }
+                        }}
+                      >
+                        {String(t.status || 'ACTIVE').toUpperCase() === 'DEPART' ? (
+                          <>
+                            <Check className="h-4 w-4 text-gray-500" /> Mark as Shipped
+                          </>
+                        ) : (
+                          <>
+                            <Truck className="h-4 w-4 text-gray-500" /> Mark as Dispatched
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem 
                         className="gap-3 py-2.5 cursor-pointer font-medium"
                         onSelect={(e) => {
@@ -2873,7 +2964,6 @@ export default function MyProduceDashboard() {
                       >
                         <Truck className="h-4 w-4 text-gray-500" /> Edit Transfer
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator />
                       {/* <DropdownMenuItem className="gap-3 py-2.5 cursor-pointer font-medium">
                         <FileText className="h-4 w-4 text-gray-500" /> Check Docs
                       </DropdownMenuItem> */}
@@ -2885,12 +2975,6 @@ export default function MyProduceDashboard() {
                         }}
                       >
                         <FileText className="h-4 w-4 text-gray-500" /> Shipping Docs
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="gap-3 py-2.5 cursor-pointer font-medium"
-                        onClick={() => handleDispatchTrip(t)}
-                      >
-                        <PackageCheck className="h-4 w-4 text-gray-500" /> Dispatch
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -4238,13 +4322,12 @@ export default function MyProduceDashboard() {
                             />
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top">
-                            <Select value={row.palletization} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, palletization: v } : r)))}>
+                            <Select value={normalizePalletization(row.palletization)} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, palletization: normalizePalletization(v) } : r)))}>
                               <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="Palletized">Palletized</SelectItem>
-                                <SelectItem value="Breakbulk">Breakbulk</SelectItem>
                                 <SelectItem value="Non-Palletized">Non-Palletized</SelectItem>
                               </SelectContent>
                             </Select>
@@ -5085,12 +5168,12 @@ export default function MyProduceDashboard() {
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-gray-300">Booking No</Label>
                     <Select value={newTripHeader.bookingNo} onValueChange={(val) => {
-                      const b = bookings?.find((bk: any) => bk.bookingNumber === val);
+                      const b = bookingListRows.find((bk: any) => bk.bookingNumber === val);
                       if (b) setNewTripHeader({...newTripHeader, bookingNo: val, shippingLine: b.shippingLine, vessel: b.vesselName, pod: b.pod });
                       else setNewTripHeader({...newTripHeader, bookingNo: val});
                     }}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="--Select--" /></SelectTrigger>
-                      <SelectContent>{bookings?.map((b: any) => (<SelectItem key={b.id} value={b.bookingNumber}>{b.bookingNumber}</SelectItem>))}</SelectContent>
+                      <SelectContent>{bookingNumberOptions.map((bookingNumber) => (<SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-gray-300">Shipping Line</Label><Input className="h-10 bg-white" value={newTripHeader.shippingLine} readOnly /></div>
