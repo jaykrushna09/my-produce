@@ -137,6 +137,7 @@ import { format } from 'date-fns';
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips';
 
 type CuttingOrderStatus = 'EMPTY' | 'PENDING' | 'ONGOING' | 'DEPART';
+type LoadingAdviceWorkflowStage = 'LA_CREATED' | 'COS_CREATED' | 'READY_FOR_BOOKING' | 'BOOKINGS_CREATED';
 
 const CUTTING_ORDER_STATUS_OPTIONS: CuttingOrderStatus[] = ['EMPTY', 'PENDING', 'ONGOING', 'DEPART'];
 
@@ -184,6 +185,44 @@ const getCuttingOrderStatusClassName = (status: CuttingOrderStatus) => {
 const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
   const currentIndex = CUTTING_ORDER_STATUS_OPTIONS.indexOf(normalizeCuttingOrderStatus(status));
   return CUTTING_ORDER_STATUS_OPTIONS[(currentIndex + 1) % CUTTING_ORDER_STATUS_OPTIONS.length];
+};
+
+const normalizeLoadingAdviceWorkflowStage = (value: any): LoadingAdviceWorkflowStage => {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'BOOKINGS_CREATED') return 'BOOKINGS_CREATED';
+  if (normalized === 'READY_FOR_BOOKING') return 'READY_FOR_BOOKING';
+  if (normalized === 'COS_CREATED') return 'COS_CREATED';
+  return 'LA_CREATED';
+};
+
+const getLoadingAdviceWorkflowStageLabel = (stage: LoadingAdviceWorkflowStage) => {
+  switch (stage) {
+    case 'LA_CREATED':
+      return 'LA Created';
+    case 'COS_CREATED':
+      return 'Cutting Orders Created';
+    case 'READY_FOR_BOOKING':
+      return 'Ready for Booking';
+    case 'BOOKINGS_CREATED':
+      return 'Booking Created';
+    default:
+      return 'LA Created';
+  }
+};
+
+const getLoadingAdviceWorkflowStageClassName = (stage: LoadingAdviceWorkflowStage) => {
+  switch (stage) {
+    case 'LA_CREATED':
+      return 'border-slate-200 bg-slate-50 text-slate-600';
+    case 'COS_CREATED':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
+    case 'READY_FOR_BOOKING':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'BOOKINGS_CREATED':
+      return 'border-cyan-200 bg-cyan-50 text-cyan-700';
+    default:
+      return 'border-slate-200 bg-slate-50 text-slate-600';
+  }
 };
 
 interface TripRow {
@@ -303,6 +342,7 @@ interface LoadingAdviceListRow {
   itemId: string;
   weekNumber: string;
   customerName: string;
+  workflowStage: LoadingAdviceWorkflowStage;
   farm: string;
   pol: string;
   pod: string;
@@ -565,6 +605,7 @@ export default function MyProduceDashboard() {
     receivedAt: format(new Date(), 'yyyy-MM-dd')
   });
   const [bookingRows, setBookingRows] = useState<BookingRowItem[]>([createEmptyBookingRow()]);
+  const [isFinalizingLoadingAdvice, setIsFinalizingLoadingAdvice] = useState(false);
   const createEmptyCOSRow = (ps = '1', pod = ''): COSRow => ({
     id: Math.random().toString(36).substr(2, 9),
     ps,
@@ -855,6 +896,7 @@ export default function MyProduceDashboard() {
           itemId: item.itemId || `${contract.id}-${index}`,
           weekNumber: String(contract.weekNumber || '--'),
           customerName: contract.customerName || '--',
+          workflowStage: normalizeLoadingAdviceWorkflowStage(contract.workflowStage),
           farm: item.farm || contract.farm || '--',
           pol: item.pol || contract.pol || '--',
           pod: item.pod || contract.pod || '--',
@@ -1058,6 +1100,13 @@ export default function MyProduceDashboard() {
     });
   }, [loadingAdviceRows, weekFilter, customerFilter]);
 
+  const readyLoadingAdviceOptions = useMemo(() => {
+    return (contracts || []).filter((contract: any) => {
+      const stage = normalizeLoadingAdviceWorkflowStage(contract.workflowStage);
+      return stage === 'READY_FOR_BOOKING' || stage === 'BOOKINGS_CREATED';
+    });
+  }, [contracts]);
+
   const selectedCosSourceRows = useMemo(() => {
     if (!selectedContract) return [];
     if (Array.isArray(selectedContract.cuttingOrders) && selectedContract.cuttingOrders.length > 0) {
@@ -1182,17 +1231,106 @@ export default function MyProduceDashboard() {
   };
 
   const openBookingBatchModal = (sourceContract: any = null) => {
+    const sourceContractId = sourceContract?.id || sourceContract?.contractId || sourceContract?.laId || '';
+    const resolvedContract =
+      (sourceContract?.cuttingOrders ? sourceContract : null) ||
+      (sourceContractId ? (contracts || []).find((contract: any) => contract.id === sourceContractId) : null) ||
+      selectedContract ||
+      readyLoadingAdviceOptions[0] ||
+      null;
+
+    if (resolvedContract) {
+      const stage = normalizeLoadingAdviceWorkflowStage(resolvedContract.workflowStage);
+      if (stage !== 'READY_FOR_BOOKING' && stage !== 'BOOKINGS_CREATED') {
+        toast({
+          variant: 'destructive',
+          title: 'LA not ready',
+          description: 'Finalize the cutting orders first and mark the loading advice as ready for booking.',
+        });
+        return;
+      }
+    }
+
+    if (!resolvedContract) {
+      toast({
+        variant: 'destructive',
+        title: 'No approved loading advice',
+        description: 'Please finalize a loading advice before creating bookings.',
+      });
+      return;
+    }
+
     setBookingHeader({
-      laId: sourceContract?.contractId || sourceContract?.id || '',
-      customerName: sourceContract?.customerName || '',
-      weekNumber: String(sourceContract?.weekNumber || ''),
+      laId: resolvedContract?.contractId || resolvedContract?.id || '',
+      customerName: resolvedContract?.customerName || '',
+      weekNumber: String(resolvedContract?.weekNumber || ''),
       receivedAt: format(new Date(), 'yyyy-MM-dd'),
     });
     setBookingRows([{
       ...createEmptyBookingRow(),
-      laId: sourceContract?.contractId || sourceContract?.id || '',
+      laId: resolvedContract?.contractId || resolvedContract?.id || '',
     }]);
     setIsNewBookingOpen(true);
+  };
+
+  const handleBookingLaSelection = (laId: string) => {
+    const selectedLa = (contracts || []).find((contract: any) => contract.id === laId);
+    setBookingHeader((current) => ({
+      ...current,
+      laId,
+      customerName: selectedLa?.customerName || '',
+      weekNumber: String(selectedLa?.weekNumber || ''),
+    }));
+    setBookingRows((current) => current.map((row) => ({ ...row, laId })));
+  };
+
+  const handleFinalizeLoadingAdviceForBooking = async (sourceContract: any = selectedContract || selectedLoadingAdviceRow) => {
+    if (!db) return;
+
+    const sourceContractId = sourceContract?.id || sourceContract?.contractId || sourceContract?.laId || '';
+    const resolvedContract =
+      (sourceContract?.cuttingOrders ? sourceContract : null) ||
+      (sourceContractId ? (contracts || []).find((contract: any) => contract.id === sourceContractId) : null) ||
+      selectedContract ||
+      (selectedContractId ? (contracts || []).find((contract: any) => contract.id === selectedContractId) : null);
+
+    if (!resolvedContract) {
+      toast({
+        variant: 'destructive',
+        title: 'Select a loading advice',
+        description: 'Please select a loading advice record first.',
+      });
+      return;
+    }
+
+    const cuttingOrders = Array.isArray(resolvedContract.cuttingOrders) ? resolvedContract.cuttingOrders : [];
+    if (cuttingOrders.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'No cutting orders found',
+        description: 'Create at least one cutting order before finalizing the loading advice.',
+      });
+      return;
+    }
+
+    try {
+      setIsFinalizingLoadingAdvice(true);
+      await updateDoc(doc(db, CONTRACT_PATH, resolvedContract.id), {
+        workflowStage: 'READY_FOR_BOOKING',
+        status: 'active',
+        cuttingOrdersFinalizedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: 'Loading Advice Finalized',
+        description: 'The loading advice is now ready for booking.',
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Finalize Failed', description: err.message });
+    } finally {
+      setIsFinalizingLoadingAdvice(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -1307,10 +1445,22 @@ export default function MyProduceDashboard() {
 
   const handleSaveBooking = async () => {
     if (!db) return;
-    if (!bookingHeader.customerName || !bookingHeader.weekNumber) {
-      toast({ variant: "destructive", title: "Validation Error", description: "Customer and Week No are required." });
+    if (!bookingHeader.laId || !bookingHeader.customerName || !bookingHeader.weekNumber) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Loading Advice, Customer, and Week No are required." });
       return;
     }
+
+    const sourceContract = (contracts || []).find((contract: any) => contract.id === bookingHeader.laId);
+    const sourceStage = normalizeLoadingAdviceWorkflowStage(sourceContract?.workflowStage);
+    if (!sourceContract || (sourceStage !== 'READY_FOR_BOOKING' && sourceStage !== 'BOOKINGS_CREATED')) {
+      toast({
+        variant: 'destructive',
+        title: 'LA not ready',
+        description: 'Please finalize the loading advice before creating bookings.',
+      });
+      return;
+    }
+
     try {
       const batchId = `BOOK-${Date.now()}`;
       const normalizedRows = bookingRows.map((row, index) => ({
@@ -1322,7 +1472,9 @@ export default function MyProduceDashboard() {
         pod: row.pod || '',
         attachmentUrl: row.attachmentUrl || '',
       }));
-      await setDoc(doc(db, BOOKING_PATH, batchId), {
+      const bookingDocRef = doc(db, BOOKING_PATH, batchId);
+      const contractRef = doc(db, CONTRACT_PATH, bookingHeader.laId);
+      await setDoc(bookingDocRef, {
         batchId,
         ...bookingHeader,
         laId: bookingHeader.laId || normalizedRows[0]?.laId || '',
@@ -1342,6 +1494,17 @@ export default function MyProduceDashboard() {
       normalizedRows.forEach(row => {
         const rowRef = doc(collection(db, `${BOOKING_PATH}/${batchId}/rows`));
         batch.set(rowRef, { ...row, bookingId: rowRef.id, updatedAt: serverTimestamp() });
+      });
+      batch.update(contractRef, {
+        workflowStage: 'BOOKINGS_CREATED',
+        bookingBatchIds: [...new Set([...(Array.isArray(sourceContract.bookingBatchIds) ? sourceContract.bookingBatchIds : []), batchId])],
+        bookingNumbers: Array.from(
+          new Set([
+            ...(Array.isArray(sourceContract.bookingNumbers) ? sourceContract.bookingNumbers : []),
+            ...normalizedRows.map((row) => row.bookingNumber).filter(Boolean),
+          ])
+        ),
+        updatedAt: serverTimestamp(),
       });
       await batch.commit();
 
@@ -3791,6 +3954,18 @@ export default function MyProduceDashboard() {
               CREATE/VIEW COS
             </Button>
             <Button
+              className="h-10 rounded-sm bg-slate-950 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-slate-800"
+              onClick={() => handleFinalizeLoadingAdviceForBooking(selectedContract || filteredLoadingAdviceRows[0] || null)}
+              disabled={isFinalizingLoadingAdvice || !selectedContract}
+            >
+              {isFinalizingLoadingAdvice ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="mr-2 h-4 w-4" />
+              )}
+              READY FOR BOOKING
+            </Button>
+            <Button
               className="h-10 rounded-sm bg-emerald-700 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-emerald-800"
               onClick={() => setIsNewLAOpen(true)}
             >
@@ -3828,12 +4003,13 @@ export default function MyProduceDashboard() {
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total Vans</TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SKU</TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Palletization</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Workflow</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {contractsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-56 text-center">
+                  <TableCell colSpan={11} className="h-56 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-700/50" />
                   </TableCell>
                 </TableRow>
@@ -3857,11 +4033,22 @@ export default function MyProduceDashboard() {
                     <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{row.totalVans}</TableCell>
                     <TableCell className="px-3 py-3 text-sm text-slate-700">{row.sku}</TableCell>
                     <TableCell className="px-3 py-3 text-sm text-slate-700">{row.palletization}</TableCell>
+                    <TableCell className="px-3 py-3">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'font-bold uppercase tracking-wider text-[10px]',
+                          getLoadingAdviceWorkflowStageClassName(row.workflowStage)
+                        )}
+                      >
+                        {getLoadingAdviceWorkflowStageLabel(row.workflowStage)}
+                      </Badge>
+                    </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-56 text-center text-sm text-slate-500">
+                  <TableCell colSpan={11} className="h-56 text-center text-sm text-slate-500">
                     No loading advice manifests match the current filters.
                   </TableCell>
                 </TableRow>
@@ -4260,9 +4447,34 @@ export default function MyProduceDashboard() {
             <ScrollArea className="flex-1">
               <div className="space-y-6 px-6 py-5">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Loading Advice</Label>
+                    <Select value={bookingHeader.laId} onValueChange={handleBookingLaSelection}>
+                      <SelectTrigger className="h-11 rounded-sm border-slate-300 bg-white text-sm shadow-sm">
+                        <SelectValue placeholder="Select approved loading advice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {readyLoadingAdviceOptions.length > 0 ? (
+                          readyLoadingAdviceOptions.map((contract: any) => (
+                            <SelectItem key={contract.id} value={contract.id}>
+                              {contract.contractId || contract.id} - {contract.customerName || 'Customer'} - Week {contract.weekNumber || '--'}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="__none__" disabled>
+                            No approved loading advice available
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Customer</Label>
-                    <Select value={bookingHeader.customerName} onValueChange={(v) => setBookingHeader({ ...bookingHeader, customerName: v })}>
+                    <Select
+                      value={bookingHeader.customerName}
+                      onValueChange={(v) => setBookingHeader({ ...bookingHeader, customerName: v })}
+                      disabled={!bookingHeader.laId}
+                    >
                       <SelectTrigger className="h-11 rounded-sm border-slate-300 bg-white text-sm shadow-sm">
                         <SelectValue placeholder="Select Customer" />
                       </SelectTrigger>
@@ -4281,6 +4493,7 @@ export default function MyProduceDashboard() {
                       value={bookingHeader.weekNumber}
                       onChange={(e) => setBookingHeader({ ...bookingHeader, weekNumber: e.target.value })}
                       className="h-11 rounded-sm border-slate-300 bg-white shadow-sm"
+                      disabled={!bookingHeader.laId}
                     />
                   </div>
                 </div>
