@@ -289,6 +289,7 @@ interface LARow {
 
 interface BookingRowItem {
   id: string;
+  laId?: string;
   shippingLine: string;
   vesselName: string;
   pod: string;
@@ -334,6 +335,7 @@ interface CuttingOrderListRow {
 interface BookingListRow {
   id: string;
   batchId: string;
+  laId: string;
   bookingNumber: string;
   shippingLine: string;
   vesselName: string;
@@ -549,6 +551,7 @@ export default function MyProduceDashboard() {
   // Booking State
   const createEmptyBookingRow = (): BookingRowItem => ({
     id: Math.random().toString(36).substr(2, 9),
+    laId: '',
     shippingLine: '',
     vesselName: '',
     pod: '',
@@ -556,6 +559,7 @@ export default function MyProduceDashboard() {
     attachmentUrl: ''
   });
   const [bookingHeader, setBookingHeader] = useState({
+    laId: '',
     customerName: '',
     weekNumber: '',
     receivedAt: format(new Date(), 'yyyy-MM-dd')
@@ -670,6 +674,8 @@ export default function MyProduceDashboard() {
     customerName: '', 
     weekNumber: '',
     bookingNo: '',
+    bookingBatchId: '',
+    laId: '',
     shippingLine: '',
     vessel: '',
     pod: ''
@@ -967,6 +973,7 @@ export default function MyProduceDashboard() {
           ? batch.rows
           : [{
               bookingNumber: batch.bookingNumber,
+              laId: batch.laId,
               shippingLine: batch.shippingLine,
               vesselName: batch.vesselName,
               pod: batch.pod,
@@ -976,6 +983,7 @@ export default function MyProduceDashboard() {
         rows.push({
           id: row.bookingId || row.id || `${batch.id}-${index}`,
           batchId: batch.id,
+          laId: row.laId || batch.laId || '',
           bookingNumber: row.bookingNumber || '--',
           shippingLine: row.shippingLine || batch.shippingLine || '--',
           vesselName: row.vesselName || batch.vesselName || '--',
@@ -1175,11 +1183,15 @@ export default function MyProduceDashboard() {
 
   const openBookingBatchModal = (sourceContract: any = null) => {
     setBookingHeader({
+      laId: sourceContract?.contractId || sourceContract?.id || '',
       customerName: sourceContract?.customerName || '',
       weekNumber: String(sourceContract?.weekNumber || ''),
       receivedAt: format(new Date(), 'yyyy-MM-dd'),
     });
-    setBookingRows([createEmptyBookingRow()]);
+    setBookingRows([{
+      ...createEmptyBookingRow(),
+      laId: sourceContract?.contractId || sourceContract?.id || '',
+    }]);
     setIsNewBookingOpen(true);
   };
 
@@ -1261,6 +1273,7 @@ export default function MyProduceDashboard() {
         contractId,
         ...newLAHeader,
         status: 'pending',
+        workflowStage: 'LA_CREATED',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         totalVans,
@@ -1302,6 +1315,7 @@ export default function MyProduceDashboard() {
       const batchId = `BOOK-${Date.now()}`;
       const normalizedRows = bookingRows.map((row, index) => ({
         bookingId: row.id || `${batchId}-${index}`,
+        laId: row.laId || bookingHeader.laId || '',
         bookingNumber: row.bookingNumber || '',
         shippingLine: row.shippingLine || '',
         vesselName: row.vesselName || '',
@@ -1311,6 +1325,8 @@ export default function MyProduceDashboard() {
       await setDoc(doc(db, BOOKING_PATH, batchId), {
         batchId,
         ...bookingHeader,
+        laId: bookingHeader.laId || normalizedRows[0]?.laId || '',
+        workflowStage: 'BOOKINGS_CREATED',
         totalBookings: normalizedRows.length,
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1366,6 +1382,7 @@ export default function MyProduceDashboard() {
         cuttingOrders: normalizedRows,
         cuttingOrderTotal: normalizedRows.length,
         cuttingOrdersUpdatedAt: serverTimestamp(),
+        workflowStage: 'COS_CREATED',
         status: 'active',
       });
 
@@ -1436,7 +1453,7 @@ export default function MyProduceDashboard() {
         itemId: row.id || `CO-${Date.now()}-${index}`,
         ps: row.ps || String(index + 1),
         pod: row.pod || newTripHeader.pod || '',
-        status: (row.status || 'PENDING') as 'PENDING' | 'DEPART',
+        status: normalizeCuttingOrderStatus(row.status),
         cutOffDate: row.cutOffDate || '',
         etd: row.etd || '',
         taskDate: row.taskDate || '',
@@ -1445,6 +1462,8 @@ export default function MyProduceDashboard() {
         containerNo: row.containerNo || '',
         shippingLine: row.shippingLine || newTripHeader.shippingLine || '',
         bookingNo: row.bookingNo || newTripHeader.bookingNo || '',
+        bookingBatchId: newTripHeader.bookingBatchId || '',
+        laId: newTripHeader.laId || '',
         atwStatus: row.atwStatus || 'PENDING',
       }));
 
@@ -1454,6 +1473,10 @@ export default function MyProduceDashboard() {
         const docRef = doc(db, TRIP_PATH, uniqueId);
         batch.set(docRef, {
           tripId: uniqueId,
+          laId: newTripHeader.laId || '',
+          bookingNo: newTripHeader.bookingNo || '',
+          bookingBatchId: newTripHeader.bookingBatchId || '',
+          bookingNumbers: newTripHeader.bookingNo ? [newTripHeader.bookingNo] : [],
           vanNo: row.vanNo,
           pmNo: row.pmNo,
           containerNo: row.containerNo,
@@ -1463,10 +1486,10 @@ export default function MyProduceDashboard() {
           dateWithdrawn: row.dateWithdrawn,
           customerName: newTripHeader.customerName,
           weekNumber: newTripHeader.weekNumber,
-          bookingNo: newTripHeader.bookingNo,
           shippingLine: newTripHeader.shippingLine,
           pod: newTripHeader.pod,
           status: 'ACTIVE',
+          workflowStage: 'TRIP_CREATED',
           cuttingOrders: normalizedCuttingOrders,
           cuttingOrderTotal: normalizedCuttingOrders.length,
           updatedAt: serverTimestamp()
@@ -1503,6 +1526,7 @@ export default function MyProduceDashboard() {
       const tripRef = doc(db, TRIP_PATH, trip.id);
       const payload: any = {
         status: nextStatus,
+        workflowStage: nextStatus === 'SHIPPED' ? 'VESSEL_MARKED_SHIPPED' : 'CONTAINER_DEPARTED',
         updatedAt: serverTimestamp(),
       };
 
@@ -1814,6 +1838,7 @@ export default function MyProduceDashboard() {
           ...transferInspection,
         },
         transferPhotos: transferInspection.photos,
+        workflowStage: 'TRANSFER_COMPLETED',
         updatedAt: serverTimestamp(),
       };
 
@@ -2026,21 +2051,40 @@ export default function MyProduceDashboard() {
       return;
     }
 
+    const uploadEntry = {
+      fileName: selectedShippingDocFile.name,
+      fileType: selectedShippingDocFile.type,
+      uploadedAt: new Date().toISOString(),
+    };
+
     setSelectedTripForDocs((current: any) =>
       current
         ? {
             ...current,
             shippingDocUploads: {
               ...(current.shippingDocUploads || {}),
-              [selectedShippingDocUploadType]: {
-                fileName: selectedShippingDocFile.name,
-                fileType: selectedShippingDocFile.type,
-                uploadedAt: new Date().toISOString(),
-              },
+              [selectedShippingDocUploadType]: uploadEntry,
             },
           }
         : current
     );
+
+    if (db && selectedTripForDocs?.id) {
+      setDoc(
+        doc(db, TRIP_PATH, selectedTripForDocs.id),
+        {
+          shippingDocUploads: {
+            ...(selectedTripForDocs.shippingDocUploads || {}),
+            [selectedShippingDocUploadType]: uploadEntry,
+          },
+          workflowStage: 'DOCUMENTS_UPLOADED',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      ).catch((err: any) => {
+        toast({ variant: 'destructive', title: 'Upload Failed', description: err.message });
+      });
+    }
 
     setIsShippingDocUploadOpen(false);
     toast({
@@ -2051,6 +2095,7 @@ export default function MyProduceDashboard() {
 
   const openShippingDocEditor = (docType: ShippingDocType) => {
     setSelectedShippingDocType(docType);
+    const savedDraft = selectedTripForDocs?.shippingDocumentDrafts?.[docType] || {};
     const baseDraft: ShippingDocDraft = {
       title: docType,
       referenceNo: selectedTripForDocs?.tripId || selectedTripForDocs?.id || '',
@@ -2107,6 +2152,7 @@ export default function MyProduceDashboard() {
         cartons: '13,860',
         volume: '450',
         grossWeight: '200,970.00',
+        ...savedDraft,
       });
       setIsShippingDocEditorOpen(true);
       return;
@@ -2127,6 +2173,7 @@ export default function MyProduceDashboard() {
         cartons: '13,860',
         volume: '450',
         grossWeight: '200,970.00',
+        ...savedDraft,
       });
       setIsShippingDocEditorOpen(true);
       return;
@@ -2148,6 +2195,7 @@ export default function MyProduceDashboard() {
       cartons: '13,860',
       volume: '450',
       grossWeight: '200,970.00',
+      ...savedDraft,
     });
     setIsShippingDocEditorOpen(true);
   };
@@ -2173,6 +2221,7 @@ export default function MyProduceDashboard() {
             ...vlsManifest,
             vlsType,
           },
+          workflowStage: 'VLS_SAVED',
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -2206,6 +2255,51 @@ export default function MyProduceDashboard() {
     }
   };
 
+  const handleSaveShippingDocDraft = async () => {
+    if (!db || !selectedTripForDocs) {
+      toast({
+        variant: 'destructive',
+        title: 'Select a trip',
+        description: 'Please choose a trip before saving document drafts.',
+      });
+      return;
+    }
+
+    try {
+      const nextDrafts = {
+        ...(selectedTripForDocs.shippingDocumentDrafts || {}),
+        [selectedShippingDocType]: shippingDocDraft,
+      };
+
+      await setDoc(
+        doc(db, TRIP_PATH, selectedTripForDocs.id),
+        {
+          shippingDocumentDrafts: nextDrafts,
+          workflowStage: 'DOCUMENT_DRAFT_SAVED',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setSelectedTripForDocs((current: any) =>
+        current
+          ? {
+              ...current,
+              shippingDocumentDrafts: nextDrafts,
+            }
+          : current
+      );
+
+      toast({
+        title: 'Draft saved',
+        description: `${selectedShippingDocType} draft updated for the selected trip.`,
+      });
+      setIsShippingDocEditorOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Draft save failed', description: err.message });
+    }
+  };
+
   const handleSaveDr = async (finalize = false) => {
     if (!db || !selectedTripForTransfer) return;
 
@@ -2235,6 +2329,7 @@ export default function MyProduceDashboard() {
           verification: drVerification,
           status: finalize ? 'FINALIZED' : 'DRAFT',
         },
+        workflowStage: finalize ? 'DR_FINALIZED' : 'DR_DRAFT_SAVED',
         updatedAt: serverTimestamp(),
       };
 
@@ -2977,7 +3072,39 @@ export default function MyProduceDashboard() {
             </Button>
           )}
           <Button variant="outline" className="h-10 px-6 font-bold uppercase text-xs tracking-widest border-gray-200">CREATE/VIEW TRIPS</Button>
-          <Button className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2" onClick={() => { setTripStep(1); setIsNewTripOpen(true); }}><Plus className="h-4 w-4" /> NEW TRIP</Button>
+          <Button
+            className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2"
+            onClick={() => {
+              setTripStep(1);
+              setNewTripHeader({
+                customerName: '',
+                weekNumber: '',
+                bookingNo: '',
+                bookingBatchId: '',
+                laId: '',
+                shippingLine: '',
+                vessel: '',
+                pod: '',
+              });
+              setTripRows([{
+                id: Math.random().toString(36).substr(2, 9),
+                ps: '1',
+                containerNo: '',
+                vanNo: '',
+                sealNo: '',
+                atwStatus: 'Y',
+                atwReleased: format(new Date(), 'yyyy-MM-dd'),
+                pmNo: '',
+                driverName: '',
+                signature: 'Pending',
+                dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
+              }]);
+              setBindCoRows([]);
+              setIsNewTripOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" /> NEW TRIP
+          </Button>
         </div>
       </div>
 
@@ -5392,13 +5519,7 @@ export default function MyProduceDashboard() {
             </Button>
             <Button
               className="h-10 bg-emerald-700 px-6 text-[10px] font-black uppercase tracking-widest text-white hover:bg-emerald-800"
-              onClick={() => {
-                toast({
-                  title: 'Draft saved',
-                  description: `${selectedShippingDocType} draft updated for the selected trip.`,
-                });
-                setIsShippingDocEditorOpen(false);
-              }}
+              onClick={handleSaveShippingDocDraft}
             >
               Save Draft
             </Button>
@@ -5467,8 +5588,16 @@ export default function MyProduceDashboard() {
                     <Label className="text-[10px] font-black uppercase text-gray-300">Booking No</Label>
                     <Select value={newTripHeader.bookingNo} onValueChange={(val) => {
                       const b = bookingListRows.find((bk: any) => bk.bookingNumber === val);
-                      if (b) setNewTripHeader({...newTripHeader, bookingNo: val, shippingLine: b.shippingLine, vessel: b.vesselName, pod: b.pod });
-                      else setNewTripHeader({...newTripHeader, bookingNo: val});
+                      if (b) setNewTripHeader({
+                        ...newTripHeader,
+                        bookingNo: val,
+                        bookingBatchId: b.batchId || '',
+                        laId: b.laId || '',
+                        shippingLine: b.shippingLine,
+                        vessel: b.vesselName,
+                        pod: b.pod,
+                      });
+                      else setNewTripHeader({...newTripHeader, bookingNo: val, bookingBatchId: '', laId: ''});
                     }}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="--Select--" /></SelectTrigger>
                       <SelectContent>{bookingNumberOptions.map((bookingNumber) => (<SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>))}</SelectContent>
