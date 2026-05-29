@@ -136,7 +136,55 @@ import { format } from 'date-fns';
 
 type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips';
 
-type CuttingOrderStatus = 'PENDING' | 'IN-PROCESS' | 'AVAILABLE' | 'DEPART';
+type CuttingOrderStatus = 'EMPTY' | 'PENDING' | 'ONGOING' | 'DEPART';
+
+const CUTTING_ORDER_STATUS_OPTIONS: CuttingOrderStatus[] = ['EMPTY', 'PENDING', 'ONGOING', 'DEPART'];
+
+const normalizeCuttingOrderStatus = (value: any): CuttingOrderStatus => {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'DEPART') return 'DEPART';
+  if (normalized === 'ONGOING' || normalized === 'IN-PROCESS' || normalized === 'IN_PROCESS' || normalized === 'AVAILABLE' || normalized === 'READY' || normalized === 'LOADED') {
+    return 'ONGOING';
+  }
+  if (normalized === 'PENDING') return 'PENDING';
+  if (normalized === 'EMPTY') return 'EMPTY';
+  return 'EMPTY';
+};
+
+const getCuttingOrderStatusLabel = (status: CuttingOrderStatus) => {
+  switch (status) {
+    case 'EMPTY':
+      return 'Empty';
+    case 'PENDING':
+      return 'Pending';
+    case 'ONGOING':
+      return 'Ongoing';
+    case 'DEPART':
+      return 'Depart';
+    default:
+      return 'Empty';
+  }
+};
+
+const getCuttingOrderStatusClassName = (status: CuttingOrderStatus) => {
+  switch (status) {
+    case 'EMPTY':
+      return 'border-slate-200 bg-slate-50 text-slate-500';
+    case 'PENDING':
+      return 'border-red-200 bg-red-50 text-red-600';
+    case 'ONGOING':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
+    case 'DEPART':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    default:
+      return 'border-slate-200 bg-slate-50 text-slate-500';
+  }
+};
+
+const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
+  const currentIndex = CUTTING_ORDER_STATUS_OPTIONS.indexOf(normalizeCuttingOrderStatus(status));
+  return CUTTING_ORDER_STATUS_OPTIONS[(currentIndex + 1) % CUTTING_ORDER_STATUS_OPTIONS.length];
+};
 
 interface TripRow {
   id: string;
@@ -159,6 +207,7 @@ interface TransferInspectionState {
   noLeaks: boolean;
   checkDrainPlug: boolean;
   noOdor: boolean;
+  photos: string[];
 }
 
 interface CORow {
@@ -334,7 +383,7 @@ export default function MyProduceDashboard() {
   const [tripStatusFilter, setTripStatusFilter] = useState<'all' | 'shipped'>('all');
   const [selectedCuttingOrderKeys, setSelectedCuttingOrderKeys] = useState<string[]>([]);
   const [isBulkCuttingStatusModalOpen, setIsBulkCuttingStatusModalOpen] = useState(false);
-  const [bulkCuttingStatus, setBulkCuttingStatus] = useState<CuttingOrderStatus>('PENDING');
+  const [bulkCuttingStatus, setBulkCuttingStatus] = useState<CuttingOrderStatus>('EMPTY');
   const [isEditCuttingOrderModalOpen, setIsEditCuttingOrderModalOpen] = useState(false);
   const [selectedCuttingOrderForEdit, setSelectedCuttingOrderForEdit] = useState<CuttingOrderListRow | null>(null);
   const [cuttingOrderEditDraft, setCuttingOrderEditDraft] = useState<{
@@ -354,7 +403,7 @@ export default function MyProduceDashboard() {
     sku: '',
     palletization: '',
     atwStatus: '',
-    status: 'PENDING',
+    status: 'EMPTY',
   });
   
   // Modals State
@@ -371,7 +420,9 @@ export default function MyProduceDashboard() {
     noLeaks: false,
     checkDrainPlug: false,
     noOdor: false,
+    photos: [],
   });
+  const transferPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [expandedTripIds, setExpandedTripIds] = useState<string[]>([]);
   const [isShippingDocsModalOpen, setIsShippingDocsModalOpen] = useState(false);
   const [isShippingDocEditorOpen, setIsShippingDocEditorOpen] = useState(false);
@@ -472,6 +523,12 @@ export default function MyProduceDashboard() {
   const [newLAHeader, setNewLAHeader] = useState({
     customerName: '',
     weekNumber: '',
+    senderEmail: '',
+    subject: ''
+  });
+  const getNewLAHeaderDefaults = () => ({
+    customerName: customerFilter !== 'all' ? customerFilter : '',
+    weekNumber: weekFilter !== 'all' ? weekFilter : '',
     senderEmail: '',
     subject: ''
   });
@@ -629,12 +686,7 @@ export default function MyProduceDashboard() {
   useEffect(() => {
     if (!isNewLAOpen) return;
     setAiText('');
-    setNewLAHeader({
-      customerName: '',
-      weekNumber: '',
-      senderEmail: '',
-      subject: ''
-    });
+    setNewLAHeader(getNewLAHeaderDefaults());
     setLaRows([createEmptyLARow()]);
   }, [isNewLAOpen]);
 
@@ -836,16 +888,6 @@ export default function MyProduceDashboard() {
             }];
 
       contractItems.forEach((item: any, index: number) => {
-        const normalizedStatus = String(item.status || '').toUpperCase();
-        const fallbackStatus =
-          normalizedStatus === 'DEPART'
-            ? 'DEPART'
-            : item.atwStatus === 'LOADED'
-              ? 'AVAILABLE'
-              : item.atwStatus === 'READY'
-                ? 'IN-PROCESS'
-                : 'PENDING';
-
         rows.push({
           id: item.itemId || item.id || `${contract.id}-${index}`,
           contractId: contract.id,
@@ -856,7 +898,7 @@ export default function MyProduceDashboard() {
           bookingNo: item.bookingNo || contract.bookingNo || '--',
           containerNo: item.containerNo || '--',
           atwStatus: item.atwStatus || 'PENDING',
-          status: fallbackStatus as CuttingOrderStatus,
+          status: normalizeCuttingOrderStatus(item.status || item.atwStatus),
           pod: item.pod || contract.pod || '--',
           cutOffDate: formatDisplayDate(item.cutOffDate || contract.cutOffDate),
           etd: formatDisplayDate(item.etd || contract.etd),
@@ -871,7 +913,7 @@ export default function MyProduceDashboard() {
 
   const cuttingOrderStatusCounts = useMemo(() => {
     return {
-      active: cuttingOrderRows.filter((row) => row.status !== 'DEPART').length,
+      active: cuttingOrderRows.filter((row) => row.status !== 'EMPTY' && row.status !== 'DEPART').length,
       depart: cuttingOrderRows.filter((row) => row.status === 'DEPART').length,
       total: cuttingOrderRows.length,
     };
@@ -901,6 +943,11 @@ export default function MyProduceDashboard() {
   const selectedContract = useMemo(() => {
     return (contracts || []).find((contract: any) => contract.id === selectedContractId) || null;
   }, [contracts, selectedContractId]);
+
+  const selectedLoadingAdviceRow = useMemo(() => {
+    if (!selectedContractId) return null;
+    return loadingAdviceRows.find((row) => row.contractId === selectedContractId) || null;
+  }, [loadingAdviceRows, selectedContractId]);
 
   const drTotalBoxes = useMemo(() => {
     return drRows.reduce((acc, row) => {
@@ -980,6 +1027,21 @@ export default function MyProduceDashboard() {
     ) as string[];
   }, [bookings]);
 
+  const containerNumberOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        (trips || [])
+          .flatMap((trip: any) => {
+            const containers = Array.isArray(trip?.items)
+              ? trip.items.map((item: any) => item?.containerNo)
+              : [];
+            return [trip?.containerNo, ...containers];
+          })
+          .filter(Boolean)
+      )
+    ) as string[];
+  }, [trips]);
+
   const filteredLoadingAdviceRows = useMemo(() => {
     return loadingAdviceRows.filter((row) => {
       const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
@@ -1056,8 +1118,14 @@ export default function MyProduceDashboard() {
     return cosRows.length;
   }, [cosRows]);
 
-  const openCosModal = (sourceContract: any = selectedContract) => {
-    if (!sourceContract) {
+  const openCosModal = (sourceContract: any = selectedLoadingAdviceRow || selectedContract) => {
+    const resolvedContract =
+      sourceContract ||
+      selectedLoadingAdviceRow ||
+      selectedContract ||
+      (filteredLoadingAdviceRows.length === 1 ? filteredLoadingAdviceRows[0] : null);
+
+    if (!resolvedContract) {
       toast({
         variant: 'destructive',
         title: 'Select an LA',
@@ -1066,20 +1134,22 @@ export default function MyProduceDashboard() {
       return;
     }
 
-    const sourceRows = Array.isArray(sourceContract.cuttingOrders) && sourceContract.cuttingOrders.length > 0
-      ? sourceContract.cuttingOrders
-      : Array.isArray(sourceContract.items) && sourceContract.items.length > 0
-        ? sourceContract.items
-        : [null];
+    const savedRows = Array.isArray(resolvedContract.cuttingOrders) && resolvedContract.cuttingOrders.length > 0
+      ? resolvedContract.cuttingOrders
+      : Array.isArray(resolvedContract.items) && resolvedContract.items.length > 0
+        ? resolvedContract.items
+        : [];
+    const totalRows = Math.max(Number(resolvedContract.totalVans || 0) || savedRows.length || 1, savedRows.length || 1);
+    const sourceRows = Array.from({ length: totalRows }, (_, index) => savedRows[index] || null);
     const sourcePod =
-      sourceContract.pod ||
+      resolvedContract.pod ||
       sourceRows.find((row: any) => row?.pod)?.pod ||
       '';
     setCosHeader({
-      customerName: sourceContract.customerName || '',
-      weekNumber: String(sourceContract.weekNumber || ''),
+      customerName: resolvedContract.customerName || '',
+      weekNumber: String(resolvedContract.weekNumber || ''),
       pod: sourcePod,
-      laId: sourceContract.contractId || sourceContract.id,
+      laId: resolvedContract.contractId || resolvedContract.id,
     });
     setCosRows(
       sourceRows.map((row: any, index: number) =>
@@ -1087,15 +1157,15 @@ export default function MyProduceDashboard() {
           ? {
               id: row.id || row.itemId || Math.random().toString(36).substr(2, 9),
               ps: String(row.ps || index + 1),
-              shippingLine: row.shippingLine || sourceContract.shippingLine || '',
+              shippingLine: row.shippingLine || resolvedContract.shippingLine || '',
               bookingNumber: row.bookingNumber || '',
               containerNo: row.containerNo || '',
               atwStatus: (row.atwStatus || 'PENDING') as 'PENDING' | 'READY' | 'LOADED',
               pod: row.pod || sourcePod || '',
-              cutOffDate: row.cutOffDate || sourceContract.cutOffDate || '',
-              etd: row.etd || sourceContract.etd || '',
-              sku: row.sku || (Array.isArray(sourceContract.selectedSKUs) ? sourceContract.selectedSKUs[0] : '') || '',
-              palletization: row.palletization || sourceContract.palletizedType || 'Palletized',
+              cutOffDate: row.cutOffDate || resolvedContract.cutOffDate || '',
+              etd: row.etd || resolvedContract.etd || '',
+              sku: row.sku || (Array.isArray(resolvedContract.selectedSKUs) ? resolvedContract.selectedSKUs[0] : '') || '',
+              palletization: row.palletization || resolvedContract.palletizedType || 'Palletized',
             }
           : createEmptyCOSRow(String(index + 1), sourcePod)
       )
@@ -1598,7 +1668,7 @@ export default function MyProduceDashboard() {
       sku: row.sku || '',
       palletization: row.palletization || '',
       atwStatus: row.atwStatus || 'PENDING',
-      status: row.status || 'PENDING',
+      status: normalizeCuttingOrderStatus(row.status),
     });
     setIsEditCuttingOrderModalOpen(true);
   };
@@ -1618,7 +1688,7 @@ export default function MyProduceDashboard() {
               sku: cuttingOrderEditDraft.sku,
               palletization: cuttingOrderEditDraft.palletization,
               atwStatus: cuttingOrderEditDraft.atwStatus as CuttingOrderListRow['atwStatus'],
-              status: cuttingOrderEditDraft.status,
+              status: normalizeCuttingOrderStatus(cuttingOrderEditDraft.status),
             }
           : item
       );
@@ -1641,7 +1711,7 @@ export default function MyProduceDashboard() {
 
   const openBulkCuttingStatusModal = () => {
     if (selectedFilteredCuttingOrderRows.length === 0) return;
-    setBulkCuttingStatus(selectedFilteredCuttingOrderRows[0]?.status || 'PENDING');
+    setBulkCuttingStatus(selectedFilteredCuttingOrderRows[0]?.status || 'EMPTY');
     setIsBulkCuttingStatusModalOpen(true);
   };
 
@@ -1686,7 +1756,52 @@ export default function MyProduceDashboard() {
       noLeaks: false,
       checkDrainPlug: false,
       noOdor: false,
+      photos: [],
     });
+  };
+
+  const handleTransferPhotoPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+
+    if (files.length === 0) return;
+
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'No images selected',
+        description: 'Please choose an image file to attach.',
+      });
+      return;
+    }
+
+    const readFileAsDataUrl = (file: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+        reader.readAsDataURL(file);
+      });
+
+    try {
+      const nextPhotos = await Promise.all(imageFiles.map(readFileAsDataUrl));
+      setTransferInspection((current) => {
+        const mergedPhotos = [...current.photos, ...nextPhotos].slice(0, 5);
+        return { ...current, photos: mergedPhotos };
+      });
+
+      toast({
+        title: 'Photo added',
+        description: imageFiles.length === 1 ? '1 image attached to the transfer form.' : `${imageFiles.length} images attached to the transfer form.`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Upload failed',
+        description: err?.message || 'Unable to read the selected image.',
+      });
+    }
   };
 
   const handleSaveTransfer = async () => {
@@ -1698,6 +1813,7 @@ export default function MyProduceDashboard() {
         transferInspection: {
           ...transferInspection,
         },
+        transferPhotos: transferInspection.photos,
         updatedAt: serverTimestamp(),
       };
 
@@ -1723,6 +1839,11 @@ export default function MyProduceDashboard() {
       noLeaks: Boolean(savedInspection.noLeaks),
       checkDrainPlug: Boolean(savedInspection.checkDrainPlug),
       noOdor: Boolean(savedInspection.noOdor),
+      photos: Array.isArray(savedInspection.photos)
+        ? savedInspection.photos
+        : Array.isArray(selectedTripForTransfer.transferPhotos)
+          ? selectedTripForTransfer.transferPhotos
+          : [],
     });
   }, [isTransferModalOpen, selectedTripForTransfer]);
 
@@ -2144,18 +2265,10 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
-    if (status === 'PENDING') return 'IN-PROCESS';
-    if (status === 'IN-PROCESS') return 'AVAILABLE';
-    if (status === 'AVAILABLE') return 'DEPART';
-    return 'PENDING';
-  };
-
-  const handleChangeCuttingOrderStatus = async (row: CuttingOrderListRow) => {
-    const nextStatus = getNextCuttingOrderStatus(row.status);
+  const handleUpdateCuttingOrderStatus = async (row: CuttingOrderListRow, nextStatus: CuttingOrderStatus) => {
     const updatedRows = cuttingOrderRows.map((item) =>
       item.id === row.id && item.contractId === row.contractId
-        ? { ...item, status: nextStatus }
+        ? { ...item, status: normalizeCuttingOrderStatus(nextStatus) }
         : item
     );
 
@@ -2208,11 +2321,16 @@ export default function MyProduceDashboard() {
 
       toast({
         title: 'Status Updated',
-        description: `Cutting order moved to ${nextStatus}.`,
+        description: `Cutting order moved to ${getCuttingOrderStatusLabel(normalizeCuttingOrderStatus(nextStatus))}.`,
       });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Status Update Failed', description: err.message });
     }
+  };
+
+  const handleChangeCuttingOrderStatus = async (row: CuttingOrderListRow) => {
+    const nextStatus = getNextCuttingOrderStatus(row.status);
+    await handleUpdateCuttingOrderStatus(row, nextStatus);
   };
 
   const shippingDocRows: Array<{
@@ -2423,21 +2541,25 @@ export default function MyProduceDashboard() {
                 <TableCell className="text-xs font-bold">{row.sku}</TableCell>
                 <TableCell className="text-xs">{row.palletization}</TableCell>
                 <TableCell className="text-center">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'font-bold uppercase tracking-wider text-[10px]',
-                      row.status === 'DEPART'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : row.status === 'AVAILABLE'
-                          ? 'border-blue-200 bg-blue-50 text-blue-700'
-                          : row.status === 'IN-PROCESS'
-                            ? 'border-amber-200 bg-amber-50 text-amber-700'
-                            : 'border-red-200 bg-red-50 text-red-600'
-                    )}
+                  <Select
+                    value={normalizeCuttingOrderStatus(row.status)}
+                    onValueChange={(value) => handleUpdateCuttingOrderStatus(row, value as CuttingOrderStatus)}
                   >
-                    {row.status}
-                  </Badge>
+                    <SelectTrigger
+                      className={cn(
+                        'h-8 w-[130px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-wider shadow-sm',
+                        getCuttingOrderStatusClassName(normalizeCuttingOrderStatus(row.status))
+                      )}
+                    >
+                      <SelectValue placeholder="Select Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EMPTY">Empty</SelectItem>
+                      <SelectItem value="PENDING">Pending</SelectItem>
+                      <SelectItem value="ONGOING">Ongoing</SelectItem>
+                      <SelectItem value="DEPART">Depart</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
@@ -3085,16 +3207,10 @@ export default function MyProduceDashboard() {
                                     variant="outline"
                                     className={cn(
                                       'font-bold uppercase tracking-wider text-[10px]',
-                                      String(order.status || 'PENDING').toUpperCase() === 'DEPART'
-                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                        : String(order.status || 'PENDING').toUpperCase() === 'AVAILABLE'
-                                          ? 'border-blue-200 bg-blue-50 text-blue-700'
-                                          : String(order.status || 'PENDING').toUpperCase() === 'IN-PROCESS'
-                                            ? 'border-amber-200 bg-amber-50 text-amber-700'
-                                            : 'border-red-200 bg-red-50 text-red-600'
+                                      getCuttingOrderStatusClassName(normalizeCuttingOrderStatus(order.status))
                                     )}
                                   >
-                                    {String(order.status || 'PENDING').toUpperCase()}
+                                    {getCuttingOrderStatusLabel(normalizeCuttingOrderStatus(order.status))}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -3139,7 +3255,7 @@ export default function MyProduceDashboard() {
         onOpenChange={(open) => {
           setIsBulkCuttingStatusModalOpen(open);
           if (!open) {
-            setBulkCuttingStatus('PENDING');
+            setBulkCuttingStatus('EMPTY');
           }
         }}
       >
@@ -3161,10 +3277,10 @@ export default function MyProduceDashboard() {
                   <SelectValue placeholder="Select Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PENDING">PENDING</SelectItem>
-                  <SelectItem value="IN-PROCESS">IN-PROCESS</SelectItem>
-                  <SelectItem value="AVAILABLE">AVAILABLE</SelectItem>
-                  <SelectItem value="DEPART">DEPART</SelectItem>
+                  <SelectItem value="EMPTY">Empty</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="ONGOING">Ongoing</SelectItem>
+                  <SelectItem value="DEPART">Depart</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -3265,17 +3381,17 @@ export default function MyProduceDashboard() {
                 value={cuttingOrderEditDraft.status}
                 onValueChange={(value) => setCuttingOrderEditDraft((current) => ({ ...current, status: value as CuttingOrderStatus }))}
               >
-                <SelectTrigger className="h-11 bg-white">
-                  <SelectValue placeholder="Select Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PENDING">PENDING</SelectItem>
-                  <SelectItem value="IN-PROCESS">IN-PROCESS</SelectItem>
-                  <SelectItem value="AVAILABLE">AVAILABLE</SelectItem>
-                  <SelectItem value="DEPART">DEPART</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <SelectTrigger className="h-11 bg-white">
+                <SelectValue placeholder="Select Status" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="EMPTY">Empty</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="ONGOING">Ongoing</SelectItem>
+                  <SelectItem value="DEPART">Depart</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           </div>
           <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setIsEditCuttingOrderModalOpen(false)} className="text-[10px] font-black uppercase">Cancel</Button>
@@ -3300,6 +3416,7 @@ export default function MyProduceDashboard() {
               noLeaks: false,
               checkDrainPlug: false,
               noOdor: false,
+              photos: [],
             });
           }
         }}
@@ -3405,16 +3522,35 @@ export default function MyProduceDashboard() {
             <div className="space-y-6">
               <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PHOTO CONFIRMATION</Label>
               <div className="grid grid-cols-4 gap-3">
-                <div className="aspect-square rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => transferPhotoInputRef.current?.click()}
+                  className="aspect-square rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
                   <Camera className="h-6 w-6 text-gray-400" />
                   <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">UPLOAD</span>
-                </div>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="aspect-square rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center">
-                    <ImageIcon className="h-6 w-6 text-gray-200" />
-                  </div>
-                ))}
+                </button>
+                {Array.from({ length: 4 }).map((_, i) => {
+                  const photoUrl = transferInspection.photos[i];
+                  return (
+                    <div key={i} className="aspect-square rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center overflow-hidden">
+                      {photoUrl ? (
+                        <img src={photoUrl} alt={`Transfer upload ${i + 1}`} className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-6 w-6 text-gray-200" />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+              <input
+                ref={transferPhotoInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleTransferPhotoPick}
+              />
               <p className="text-[10px] font-medium text-gray-400">Up to 5 photos can be uploaded for loading verification.</p>
             </div>
           </div>
@@ -3523,7 +3659,7 @@ export default function MyProduceDashboard() {
             <Button
               variant="outline"
               className="h-10 rounded-sm border-slate-300 bg-white px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-sm"
-              onClick={openCosModal}
+              onClick={() => openCosModal(selectedLoadingAdviceRow || selectedContract || filteredLoadingAdviceRows[0] || null)}
             >
               CREATE/VIEW COS
             </Button>
@@ -4298,20 +4434,55 @@ export default function MyProduceDashboard() {
                             </Select>
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top">
-                            <Input
-                              placeholder="Booking No"
+                            <Select
                               value={row.bookingNumber}
-                              onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, bookingNumber: e.target.value.toUpperCase() } : r)))}
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
-                            />
+                              onValueChange={(v) => {
+                                const selectedBooking = bookingListRows.find((booking) => booking.bookingNumber === v);
+                                setCosRows(
+                                  cosRows.map((r) =>
+                                    r.id === row.id
+                                      ? {
+                                          ...r,
+                                          bookingNumber: v,
+                                          shippingLine: selectedBooking?.shippingLine && selectedBooking.shippingLine !== '--' ? selectedBooking.shippingLine : r.shippingLine,
+                                        }
+                                      : r
+                                  )
+                                );
+                              }}
+                            >
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                                <SelectValue placeholder="Select Booking No" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {bookingNumberOptions.map((bookingNumber) => (
+                                  <SelectItem key={bookingNumber} value={bookingNumber}>
+                                    {bookingNumber}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top">
-                            <Input
-                              placeholder="Container No"
+                            <Select
                               value={row.containerNo}
-                              onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, containerNo: e.target.value.toUpperCase() } : r)))}
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
-                            />
+                              onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, containerNo: v } : r)))}
+                            >
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                                <SelectValue placeholder="Select Container No" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {containerNumberOptions.length > 0 ? (
+                                  containerNumberOptions.map((containerNo) => (
+                                    <SelectItem key={containerNo} value={containerNo}>
+                                      {containerNo}
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <SelectItem value="N/A">N/A</SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top">
                             <Badge
@@ -5241,15 +5412,39 @@ export default function MyProduceDashboard() {
           <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0"><p className="text-sm font-medium">Please ensure all trip details match the physical manifest.</p></div>
           <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
             <div className="flex items-center justify-center max-w-2xl mx-auto mb-8">
-              <div className="flex flex-col items-center">
-                <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold mb-2", tripStep === 1 ? "bg-anflocor-green text-white" : "bg-green-100 text-green-700")}>1</div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-anflocor-green">CONTAINERS</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setTripStep(1)}
+                className="flex flex-col items-center transition-transform duration-150 hover:-translate-y-0.5"
+              >
+                <div className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center font-bold mb-2 border transition-all",
+                  tripStep === 1
+                    ? "bg-anflocor-green text-white border-anflocor-green shadow-md shadow-green-200"
+                    : "bg-green-100 text-green-700 border-green-200 hover:border-green-300"
+                )}>1</div>
+                <span className={cn(
+                  "text-[10px] font-black uppercase tracking-widest",
+                  tripStep === 1 ? "text-anflocor-green" : "text-gray-400"
+                )}>CONTAINERS</span>
+              </button>
               <div className={cn("w-24 h-[2px] mx-4 mb-6", tripStep === 2 ? "bg-anflocor-green" : "bg-gray-100")}></div>
-              <div className="flex flex-col items-center">
-                <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold mb-2", tripStep === 2 ? "bg-anflocor-green text-white" : "bg-gray-200 text-gray-500")}>2</div>
-                <span className={cn("text-[10px] font-black uppercase tracking-widest", tripStep === 2 ? "text-anflocor-green" : "text-gray-500")}>BIND CUTTING ORDER</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setTripStep(2)}
+                className="flex flex-col items-center transition-transform duration-150 hover:-translate-y-0.5"
+              >
+                <div className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center font-bold mb-2 border transition-all",
+                  tripStep === 2
+                    ? "bg-anflocor-green text-white border-anflocor-green shadow-md shadow-green-200"
+                    : "bg-gray-200 text-gray-500 border-gray-200 hover:border-gray-300"
+                )}>2</div>
+                <span className={cn(
+                  "text-[10px] font-black uppercase tracking-widest",
+                  tripStep === 2 ? "text-anflocor-green" : "text-gray-500"
+                )}>BIND CUTTING ORDER</span>
+              </button>
             </div>
 
             {tripStep === 1 ? (
