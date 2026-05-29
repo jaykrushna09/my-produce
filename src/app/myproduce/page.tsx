@@ -1107,6 +1107,24 @@ export default function MyProduceDashboard() {
     });
   }, [contracts]);
 
+  const readyForBookingLoadingAdviceRows = useMemo(() => {
+    return (contracts || [])
+      .filter((contract: any) => {
+        const stage = normalizeLoadingAdviceWorkflowStage(contract.workflowStage);
+        return stage === 'READY_FOR_BOOKING' || stage === 'BOOKINGS_CREATED';
+      })
+      .map((contract: any) => ({
+        id: contract.id,
+        contractId: contract.contractId || contract.id,
+        customerName: contract.customerName || '--',
+        weekNumber: String(contract.weekNumber || '--'),
+        shippingLine: contract.shippingLine || '--',
+        pod: contract.pod || '--',
+        totalVans: String(contract.totalVans ?? '--'),
+        workflowStage: normalizeLoadingAdviceWorkflowStage(contract.workflowStage),
+      }));
+  }, [contracts]);
+
   const selectedCosSourceRows = useMemo(() => {
     if (!selectedContract) return [];
     if (Array.isArray(selectedContract.cuttingOrders) && selectedContract.cuttingOrders.length > 0) {
@@ -4128,6 +4146,70 @@ export default function MyProduceDashboard() {
             New Booking
           </Button>
         </div>
+
+        <Card className="overflow-hidden border-emerald-200 bg-emerald-50/60 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-200 px-4 py-3 md:px-5">
+            <div>
+              <h2 className="text-sm font-bold text-slate-950">Ready for Booking</h2>
+              <p className="text-[11px] text-slate-600">Approved Loading Advice records waiting to be turned into bookings.</p>
+            </div>
+            <Badge variant="outline" className="border-emerald-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+              {readyForBookingLoadingAdviceRows.length} Approved
+            </Badge>
+          </div>
+
+          <Table>
+            <TableHeader className="bg-white/80">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">LA No</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Customer</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POD</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Workflow</TableHead>
+                <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {readyForBookingLoadingAdviceRows.length > 0 ? (
+                readyForBookingLoadingAdviceRows.map((row) => (
+                  <TableRow key={row.id} className="h-14 bg-white hover:bg-emerald-50/70">
+                    <TableCell className="px-3 py-3 font-semibold text-slate-900">{row.contractId}</TableCell>
+                    <TableCell className="px-3 py-3 text-sm text-slate-700">{row.customerName}</TableCell>
+                    <TableCell className="px-3 py-3 text-sm text-slate-700">{row.weekNumber}</TableCell>
+                    <TableCell className="px-3 py-3 text-sm text-slate-700">{row.shippingLine}</TableCell>
+                    <TableCell className="px-3 py-3 text-sm text-slate-700">{row.pod}</TableCell>
+                    <TableCell className="px-3 py-3">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'font-bold uppercase tracking-wider text-[10px]',
+                          getLoadingAdviceWorkflowStageClassName(row.workflowStage)
+                        )}
+                      >
+                        {getLoadingAdviceWorkflowStageLabel(row.workflowStage)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-3 py-3 text-right">
+                      <Button
+                        className="h-8 rounded-sm bg-emerald-700 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800"
+                        onClick={() => openBookingBatchModal((contracts || []).find((contract: any) => contract.id === row.id) || null)}
+                      >
+                        Create Booking
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-sm text-slate-500">
+                    No approved Loading Advice is ready for booking yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Card>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Card className="relative overflow-hidden border-slate-200 bg-white shadow-sm">
