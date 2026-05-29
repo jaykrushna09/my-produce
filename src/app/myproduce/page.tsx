@@ -1176,8 +1176,10 @@ export default function MyProduceDashboard() {
   }, [cosRows]);
 
   const openCosModal = (sourceContract: any = selectedLoadingAdviceRow || selectedContract) => {
+    const sourceContractId = sourceContract?.contractId || sourceContract?.laId || sourceContract?.id || '';
     const resolvedContract =
-      sourceContract ||
+      (sourceContract?.cuttingOrders ? sourceContract : null) ||
+      (sourceContractId ? (contracts || []).find((contract: any) => contract.id === sourceContractId) : null) ||
       selectedLoadingAdviceRow ||
       selectedContract ||
       (filteredLoadingAdviceRows.length === 1 ? filteredLoadingAdviceRows[0] : null);
@@ -1287,7 +1289,7 @@ export default function MyProduceDashboard() {
   const handleFinalizeLoadingAdviceForBooking = async (sourceContract: any = selectedContract || selectedLoadingAdviceRow) => {
     if (!db) return;
 
-    const sourceContractId = sourceContract?.id || sourceContract?.contractId || sourceContract?.laId || '';
+    const sourceContractId = sourceContract?.contractId || sourceContract?.laId || sourceContract?.id || '';
     const resolvedContract =
       (sourceContract?.cuttingOrders ? sourceContract : null) ||
       (sourceContractId ? (contracts || []).find((contract: any) => contract.id === sourceContractId) : null) ||
